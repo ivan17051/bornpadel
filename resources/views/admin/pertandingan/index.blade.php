@@ -1,0 +1,188 @@
+@extends('layouts.admin')
+
+@section('title', 'Pertandingan & Skor')
+@section('page-title', 'Pertandingan & Skor')
+
+@section('breadcrumb')
+    <li class="breadcrumb-item active">Pertandingan</li>
+@endsection
+
+@section('content')
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Ronde</label>
+                <select name="nama_ronde" class="form-select">
+                    <option value="">Semua Ronde</option>
+                    @foreach ($rondeOptions as $ronde)
+                        <option value="{{ $ronde }}" {{ request('nama_ronde') === $ronde ? 'selected' : '' }}>{{ $ronde }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Grup</label>
+                <select name="id_grup" class="form-select">
+                    <option value="">Semua Grup</option>
+                    @foreach ($grupList as $g)
+                        <option value="{{ $g->id }}" {{ request('id_grup') == $g->id ? 'selected' : '' }}>{{ $g->nama }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">Semua Status</option>
+                    <option value="scheduled" {{ request('status') === 'scheduled' ? 'selected' : '' }}>Scheduled</option>
+                    <option value="ongoing" {{ request('status') === 'ongoing' ? 'selected' : '' }}>Ongoing</option>
+                    <option value="completed" {{ request('status') === 'completed' ? 'selected' : '' }}>Completed</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary me-2"><i class="bi bi-funnel me-1"></i> Filter</button>
+                <a href="{{ route('admin.pertandingan.index') }}" class="btn btn-outline-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">Daftar Pertandingan</h5>
+        @if ($turnamen)
+            <span class="badge text-bg-secondary">{{ $turnamen->nama }}</span>
+        @endif
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Ronde</th>
+                        <th>Grup</th>
+                        <th>Pemain 1</th>
+                        <th class="text-center">vs</th>
+                        <th>Pemain 2</th>
+                        <th>Skor</th>
+                        <th>Status</th>
+                        <th class="text-end">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($pertandingan as $match)
+                        <tr>
+                            <td><span class="badge text-bg-info">{{ $match->nama_ronde }}</span></td>
+                            <td>{{ $match->grup->nama ?? '—' }}</td>
+                            <td>{{ $match->pemain1->nama ?? 'TBD' }}</td>
+                            <td class="text-center text-muted">vs</td>
+                            <td>{{ $match->pemain2->nama ?? 'TBD' }}</td>
+                            <td>
+                                @if ($match->skor->isNotEmpty())
+                                    @foreach ($match->skor as $s)
+                                        <span class="badge text-bg-light text-dark border me-1">
+                                            {{ $s->skor_pemain1 }}-{{ $s->skor_pemain2 }}
+                                        </span>
+                                    @endforeach
+                                    @if ($match->pemenang)
+                                        <i class="bi bi-trophy-fill text-warning ms-1" title="{{ $match->pemenang->nama }}"></i>
+                                    @endif
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ $match->status === 'completed' ? 'success' : ($match->status === 'ongoing' ? 'warning' : 'secondary') }}">
+                                    {{ $match->status }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                @if ($match->status !== 'completed' && $match->isReadyForScoring())
+                                    <button type="button"
+                                            class="btn btn-sm btn-primary btn-input-score"
+                                            data-id="{{ $match->id }}"
+                                            data-show-url="{{ route('admin.pertandingan.show', $match) }}"
+                                            data-store-url="{{ route('admin.pertandingan.score', $match) }}">
+                                        <i class="bi bi-pencil-square me-1"></i> Input Skor
+                                    </button>
+                                @elseif ($match->status !== 'completed')
+                                    <span class="badge text-bg-light text-dark border">Menunggu Pemain</span>
+                                @else
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-secondary btn-view-score"
+                                            data-show-url="{{ route('admin.pertandingan.show', $match) }}">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">Belum ada pertandingan.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if ($pertandingan->hasPages())
+        <div class="card-footer">{{ $pertandingan->links() }}</div>
+    @endif
+</div>
+
+{{-- Score Input Modal --}}
+<div class="modal fade" id="scoreModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-trophy me-2"></i>Input Skor Pertandingan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="score-modal-meta" class="mb-3 small text-muted"></div>
+                <div id="score-modal-readonly" class="d-none"></div>
+                <form id="score-form">
+                    <div class="row fw-semibold text-center mb-2">
+                        <div class="col-4">Set</div>
+                        <div class="col-4" id="score-p1-name">Pemain 1</div>
+                        <div class="col-4" id="score-p2-name">Pemain 2</div>
+                    </div>
+                    @for ($i = 1; $i <= 3; $i++)
+                        <div class="row g-2 mb-2 align-items-center set-row" data-set="{{ $i }}">
+                            <div class="col-4 text-center">
+                                <span class="badge text-bg-secondary">Set {{ $i }}</span>
+                            </div>
+                            <div class="col-4">
+                                <input type="number" class="form-control form-control-sm text-center skor-p1"
+                                       min="0" max="99" placeholder="0" {{ $i > 2 ? '' : '' }}>
+                            </div>
+                            <div class="col-4">
+                                <input type="number" class="form-control form-control-sm text-center skor-p2"
+                                       min="0" max="99" placeholder="0">
+                            </div>
+                        </div>
+                    @endfor
+                    <div class="alert alert-info small mt-3 mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Best of 3 — pemenang harus menang 2 set. Set 3 opsional jika sudah 2-0.
+                    </div>
+                    <div id="score-form-error" class="alert alert-danger small mt-2 d-none"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-success" id="btn-save-score">
+                    <i class="bi bi-check-lg me-1"></i> Simpan & Selesaikan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    BornPadelAdmin.initScoreModal();
+});
+</script>
+@endpush
