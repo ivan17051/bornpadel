@@ -22,10 +22,15 @@ class MatchmakingController extends Controller
         $this->knockoutBracketService = $knockoutBracketService;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $turnamen = $this->matchmakingService->getActiveTournament();
-        $approvedCount = $this->matchmakingService->getApprovedPlayers()->count();
+        $turnamenList = $this->matchmakingService->listForFilter();
+        $turnamen = $this->matchmakingService->resolveTournament(
+            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
+        );
+        $approvedCount = $turnamen
+            ? $this->matchmakingService->countApprovedPlayers($turnamen)
+            : 0;
 
         $grup = collect();
         if ($turnamen) {
@@ -36,6 +41,7 @@ class MatchmakingController extends Controller
 
         return view('admin.matchmaking.index', [
             'turnamen' => $turnamen,
+            'turnamenList' => $turnamenList,
             'approvedCount' => $approvedCount,
             'grup' => $grup,
             'canCloseRegistration' => $turnamen ? $this->matchmakingService->canCloseRegistration($turnamen) : false,

@@ -4,6 +4,22 @@
 const BornPadelAdmin = (function () {
     const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
+    const showPageLoader = () => {
+        if (window.BornPadelPageLoader) {
+            window.BornPadelPageLoader.show();
+        }
+    };
+
+    const reloadPage = () => {
+        showPageLoader();
+        window.location.reload();
+    };
+
+    const goTo = (url) => {
+        showPageLoader();
+        window.location.href = url;
+    };
+
     const showToast = (message, type = 'success') => {
         const container = document.getElementById('toast-container');
         if (!container) {
@@ -71,9 +87,12 @@ const BornPadelAdmin = (function () {
                 if (!confirm('Setujui pemain ini?')) return;
 
                 try {
-                    await apiRequest(btn.dataset.url, 'PATCH', { status: 'approved' });
+                    await apiRequest(btn.dataset.url, 'PATCH', {
+                        status: 'approved',
+                        id_turnamen: parseInt(btn.dataset.turnamen, 10),
+                    });
                     showToast('Pemain berhasil disetujui.');
-                    window.location.reload();
+                    reloadPage();
                 } catch (e) {
                     showToast(e.message, 'error');
                 }
@@ -85,9 +104,12 @@ const BornPadelAdmin = (function () {
                 if (!confirm('Tolak pemain ini?')) return;
 
                 try {
-                    await apiRequest(btn.dataset.url, 'PATCH', { status: 'rejected' });
+                    await apiRequest(btn.dataset.url, 'PATCH', {
+                        status: 'rejected',
+                        id_turnamen: parseInt(btn.dataset.turnamen, 10),
+                    });
                     showToast('Pemain ditolak.');
-                    window.location.reload();
+                    reloadPage();
                 } catch (e) {
                     showToast(e.message, 'error');
                 }
@@ -126,7 +148,7 @@ const BornPadelAdmin = (function () {
                         id_turnamen: parseInt(closeBtn.dataset.turnamen, 10),
                     });
                     showToast(data.message);
-                    window.location.reload();
+                    reloadPage();
                 } catch (e) {
                     showToast(e.message, 'error');
                     setButtonLoading(closeBtn, false, original);
@@ -150,7 +172,7 @@ const BornPadelAdmin = (function () {
                         id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
                     });
                     showToast(data.message);
-                    window.location.href = '/admin/bracket';
+                    goTo('/admin/bracket');
                 } catch (e) {
                     showToast(e.message, 'error');
                     setButtonLoading(endGroupBtn, false, original);
@@ -172,7 +194,7 @@ const BornPadelAdmin = (function () {
                         id_turnamen: parseInt(randomBtn.dataset.turnamen, 10),
                     });
                     showToast(data.message);
-                    window.location.reload();
+                    reloadPage();
                 } catch (e) {
                     showToast(e.message, 'error');
                     setButtonLoading(randomBtn, false, original);
@@ -297,7 +319,7 @@ const BornPadelAdmin = (function () {
                 const data = await apiRequest(storeUrl, 'POST', { sets });
                 showToast(data.message);
                 modal.hide();
-                window.location.reload();
+                reloadPage();
             } catch (e) {
                 errorEl.textContent = e.message;
                 errorEl.classList.remove('d-none');

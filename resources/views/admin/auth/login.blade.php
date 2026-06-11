@@ -4,21 +4,45 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login Admin — Born Padel</title>
+    <link rel="icon" type="image/png" href="{{ asset('img/bornpadel.png') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/css/adminlte.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ asset('css/page-loader.css') }}">
     <style>
+        :root {
+            --bp-primary: #cda858;
+            --bp-primary-dark: #a88642;
+            --bs-primary: #cda858;
+            --bs-primary-rgb: 205, 168, 88;
+            --bs-link-color: #a88642;
+            --bs-link-hover-color: #8a7035;
+        }
         body { min-height: 100vh; display: flex; align-items: center; background: #f4f6f9; }
         .login-card { border: none; border-radius: 1rem; box-shadow: 0 8px 32px rgba(0,0,0,.08); }
+        .bp-logo { height: 4rem; width: auto; display: inline-block; }
+        .btn-primary {
+            --bs-btn-color: #1a1a1a;
+            --bs-btn-bg: var(--bp-primary);
+            --bs-btn-border-color: var(--bp-primary);
+            --bs-btn-hover-color: #1a1a1a;
+            --bs-btn-hover-bg: var(--bp-primary-dark);
+            --bs-btn-hover-border-color: var(--bp-primary-dark);
+            --bs-btn-active-color: #1a1a1a;
+            --bs-btn-active-bg: var(--bp-primary-dark);
+            --bs-btn-active-border-color: var(--bp-primary-dark);
+        }
     </style>
 </head>
 <body>
+    @include('components.page-loader')
+
     <div class="container">
         <div class="row justify-content-center">
             <div class="col-md-5 col-lg-4">
                 <div class="text-center mb-4">
-                    <h1 class="h3 fw-bold"><i class="bi bi-dribbble text-success"></i> Born Padel</h1>
-                    <p class="text-muted">Admin Dashboard</p>
+                    <img src="{{ asset('img/bornpadel.png') }}" alt="Born Padel" class="bp-logo mb-2">
+                    <!-- <p class="text-muted mb-0">Admin Dashboard</p> -->
                 </div>
                 <div class="card login-card">
                     <div class="card-body p-4">
@@ -42,7 +66,7 @@
                                 <input type="checkbox" name="remember" id="remember" class="form-check-input">
                                 <label for="remember" class="form-check-label">Ingat saya</label>
                             </div>
-                            <button type="submit" class="btn btn-success w-100">
+                            <button type="submit" class="btn btn-primary w-100">
                                 <i class="bi bi-box-arrow-in-right me-1"></i> Login
                             </button>
                         </form>
@@ -51,5 +75,7 @@
             </div>
         </div>
     </div>
+
+    <script src="{{ asset('js/page-loader.js') }}"></script>
 </body>
 </html>

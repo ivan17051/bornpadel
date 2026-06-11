@@ -24,7 +24,10 @@ class PertandinganController extends Controller
 
     public function index(Request $request)
     {
-        $turnamen = $this->matchmakingService->getActiveTournament();
+        $turnamenList = $this->matchmakingService->listForFilter();
+        $turnamen = $this->matchmakingService->resolveTournament(
+            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
+        );
 
         $query = Pertandingan::with(['pemain1', 'pemain2', 'pemenang', 'grup', 'skor'])
             ->orderBy('nama_ronde')
@@ -59,7 +62,8 @@ class PertandinganController extends Controller
             'pertandingan',
             'grupList',
             'rondeOptions',
-            'turnamen'
+            'turnamen',
+            'turnamenList'
         ));
     }
 

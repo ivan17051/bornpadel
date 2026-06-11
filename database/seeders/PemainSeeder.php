@@ -3,12 +3,16 @@
 namespace Database\Seeders;
 
 use App\Models\Pemain;
+use App\Models\Turnamen;
+use App\Models\TurnamenPeserta;
 use Illuminate\Database\Seeder;
 
 class PemainSeeder extends Seeder
 {
     public function run()
     {
+        $turnamen = Turnamen::query()->orderByDesc('doc')->first();
+
         $pemain = [
             ['nama' => 'Andi Wijaya', 'tgl_lahir' => '1995-03-12', 'usia' => 31, 'gender' => 'male', 'no_hp' => '081234567801', 'rating' => 4.50, 'status' => 'approved'],
             ['nama' => 'Budi Santoso', 'tgl_lahir' => '1992-07-25', 'usia' => 33, 'gender' => 'male', 'no_hp' => '081234567802', 'rating' => 4.20, 'status' => 'approved'],
@@ -21,7 +25,18 @@ class PemainSeeder extends Seeder
         ];
 
         foreach ($pemain as $data) {
-            Pemain::create($data);
+            $status = $data['status'];
+            unset($data['status']);
+
+            $record = Pemain::create($data);
+
+            if ($turnamen) {
+                TurnamenPeserta::create([
+                    'id_turnamen' => $turnamen->id,
+                    'id_pemain' => $record->id,
+                    'status' => $status,
+                ]);
+            }
         }
     }
 }

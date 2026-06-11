@@ -7,11 +7,17 @@
     <div class="col-lg-6 col-xl-5">
         <div class="card guest-card text-center">
             <div class="card-body p-4 p-md-5">
-                <div class="success-icon mb-4">
-                    <i class="bi bi-check-lg"></i>
-                </div>
+                @if ($pemainModel)
+                    <div class="mb-4">
+                        <x-pemain-avatar :pemain="$pemainModel" :size="96" class="mx-auto d-block border" />
+                    </div>
+                @else
+                    <div class="success-icon mb-4">
+                        <i class="bi bi-check-lg"></i>
+                    </div>
+                @endif
 
-                <h1 class="h3 fw-bold text-success mb-2">Pendaftaran Berhasil!</h1>
+                <h1 class="h3 fw-bold text-primary mb-2">Pendaftaran Berhasil!</h1>
                 <p class="text-muted mb-4">
                     Terima kasih telah mendaftar
                     @if ($turnamen)

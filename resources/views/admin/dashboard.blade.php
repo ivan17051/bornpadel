@@ -28,7 +28,7 @@
                 <p>Menunggu Verifikasi</p>
             </div>
             <i class="small-box-icon bi bi-hourglass-split"></i>
-            <a href="{{ route('admin.pemain.index', ['status' => 'pending']) }}" class="small-box-footer link-dark">
+            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'pending', 'id_turnamen' => optional($turnamen)->id])) }}" class="small-box-footer link-dark">
                 Review <i class="bi bi-arrow-right-circle"></i>
             </a>
         </div>
@@ -40,7 +40,7 @@
                 <p>Pemain Disetujui</p>
             </div>
             <i class="small-box-icon bi bi-check-circle"></i>
-            <a href="{{ route('admin.pemain.index', ['status' => 'approved']) }}" class="small-box-footer link-light">
+            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'approved', 'id_turnamen' => optional($turnamen)->id])) }}" class="small-box-footer link-light">
                 Lihat <i class="bi bi-arrow-right-circle"></i>
             </a>
         </div>

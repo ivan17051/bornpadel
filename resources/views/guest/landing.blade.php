@@ -21,10 +21,10 @@
                 <div class="col-md-5">
                     <div class="card guest-card h-100">
                         <div class="card-header py-3">
-                            <i class="bi bi-cash-coin me-2 text-success"></i> Biaya Pendaftaran
+                            <i class="bi bi-cash-coin me-2 text-primary"></i> Biaya Pendaftaran
                         </div>
                         <div class="card-body">
-                            <div class="display-6 fw-bold text-success mb-1">
+                            <div class="display-6 fw-bold text-primary mb-1">
                                 Rp {{ number_format($turnamen->harga, 0, ',', '.') }}
                             </div>
                             <p class="text-muted small mb-0">Per peserta. Pembayaran dilakukan setelah verifikasi pendaftaran.</p>

@@ -8,6 +8,8 @@
 @endsection
 
 @section('content')
+@include('admin.partials.turnamen-filter', ['filterRoute' => route('admin.bracket.index')])
+
 <x-tournament-bracket :bracket="$bracket" :turnamen="$turnamen" :refreshable="true" />
 @endsection
 

@@ -27,7 +27,18 @@ class RegistrationController extends Controller
             ], 422);
         }
 
-        $pemain = $this->registrationService->register($request->validated());
+        try {
+            $pemain = $this->registrationService->register(
+                $turnamen,
+                $request->validated(),
+                $request->file('foto')
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
             'success' => true,
@@ -36,7 +47,7 @@ class RegistrationController extends Controller
                 'id' => $pemain->id,
                 'nama' => $pemain->nama,
                 'no_hp' => $pemain->no_hp,
-                'status' => $pemain->status,
+                'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
                 'turnamen' => [
                     'id' => $turnamen->id,
                     'nama' => $turnamen->nama,

@@ -8,6 +8,8 @@
 @endsection
 
 @section('content')
+@include('admin.partials.turnamen-filter', ['filterRoute' => route('admin.standings.index')])
+
 <x-group-leaderboard :standings="$standings" :turnamen="$turnamen" :refreshable="true" />
 @endsection
 

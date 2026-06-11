@@ -7,6 +7,7 @@ use App\Models\GrupMember;
 use App\Models\Pemain;
 use App\Models\Pertandingan;
 use App\Models\Turnamen;
+use App\Models\TurnamenPeserta;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -20,6 +21,20 @@ class GroupMatchmakingService
         return Turnamen::whereIn('status', ['open', 'ongoing'])
             ->latest('doc')
             ->first();
+    }
+
+    public function resolveTournament(?int $id = null): ?Turnamen
+    {
+        if ($id) {
+            return Turnamen::find($id);
+        }
+
+        return $this->getActiveTournament();
+    }
+
+    public function listForFilter(): Collection
+    {
+        return Turnamen::query()->orderByDesc('doc')->get();
     }
 
     public function canCloseRegistration(Turnamen $turnamen): bool
@@ -44,9 +59,18 @@ class GroupMatchmakingService
             && ! $turnamen->grup()->exists();
     }
 
-    public function getApprovedPlayers(): Collection
+    public function getApprovedPlayers(Turnamen $turnamen): Collection
     {
-        return Pemain::approved()->orderBy('nama')->get();
+        return Pemain::whereHas('turnamenPeserta', function ($query) use ($turnamen) {
+            $query->where('id_turnamen', $turnamen->id)->where('status', 'approved');
+        })->orderBy('nama')->get();
+    }
+
+    public function countApprovedPlayers(Turnamen $turnamen): int
+    {
+        return TurnamenPeserta::where('id_turnamen', $turnamen->id)
+            ->where('status', 'approved')
+            ->count();
     }
 
     public function generateRandomGroups(Turnamen $turnamen, int $playersPerGroup = self::PLAYERS_PER_GROUP): array
@@ -63,7 +87,7 @@ class GroupMatchmakingService
             throw new RuntimeException('Grup sudah dibuat untuk turnamen ini.');
         }
 
-        $players = $this->getApprovedPlayers();
+        $players = $this->getApprovedPlayers($turnamen);
 
         if ($players->count() < 2) {
             throw new RuntimeException('Minimal 2 pemain dengan status approved diperlukan.');

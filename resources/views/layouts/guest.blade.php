@@ -4,24 +4,30 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Born Padel') — Turnamen Padel</title>
+    <title>@yield('title', 'Born Padel') — Turnamen</title>
+    <link rel="icon" type="image/png" href="{{ asset('img/bornpadel.png') }}">
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/css/adminlte.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ asset('css/page-loader.css') }}">
 
     <style>
         :root {
-            --bp-primary: #0d6e4f;
-            --bp-primary-dark: #094d37;
-            --bp-accent: #f4c430;
+            --bp-primary: #cda858;
+            --bp-primary-dark: #a88642;
+            --bp-accent: #e8d49a;
+            --bs-primary: #cda858;
+            --bs-primary-rgb: 205, 168, 88;
+            --bs-link-color: #a88642;
+            --bs-link-hover-color: #8a7035;
         }
 
         body {
             font-family: "Source Sans 3", system-ui, -apple-system, sans-serif;
             min-height: 100vh;
-            background: linear-gradient(160deg, #f0f7f4 0%, #e8f5ee 40%, #ffffff 100%);
+            background: linear-gradient(160deg, #faf6ed 0%, #f5eed8 40%, #ffffff 100%);
         }
 
         .guest-navbar {
@@ -31,14 +37,13 @@
         }
 
         .guest-brand {
-            font-weight: 700;
-            font-size: 1.25rem;
-            color: var(--bp-primary);
             text-decoration: none;
         }
 
-        .guest-brand span {
-            color: #1a1a1a;
+        .bp-logo {
+            height: 2.25rem;
+            width: auto;
+            display: block;
         }
 
         .guest-hero {
@@ -77,7 +82,7 @@
         .btn-bp {
             background: var(--bp-primary);
             border-color: var(--bp-primary);
-            color: #fff;
+            color: #1a1a1a;
             font-weight: 600;
             padding: 0.65rem 1.5rem;
             border-radius: 0.5rem;
@@ -87,7 +92,22 @@
         .btn-bp:focus {
             background: var(--bp-primary-dark);
             border-color: var(--bp-primary-dark);
-            color: #fff;
+            color: #1a1a1a;
+        }
+
+        .btn-primary {
+            --bs-btn-color: #1a1a1a;
+            --bs-btn-bg: var(--bp-primary);
+            --bs-btn-border-color: var(--bp-primary);
+            --bs-btn-hover-color: #1a1a1a;
+            --bs-btn-hover-bg: var(--bp-primary-dark);
+            --bs-btn-hover-border-color: var(--bp-primary-dark);
+            --bs-btn-active-color: #1a1a1a;
+            --bs-btn-active-bg: var(--bp-primary-dark);
+            --bs-btn-active-border-color: var(--bp-primary-dark);
+            --bs-btn-disabled-color: #1a1a1a;
+            --bs-btn-disabled-bg: var(--bp-primary);
+            --bs-btn-disabled-border-color: var(--bp-primary);
         }
 
         .badge-open {
@@ -113,14 +133,14 @@
         .form-control:focus,
         .form-select:focus {
             border-color: var(--bp-primary);
-            box-shadow: 0 0 0 0.2rem rgba(13, 110, 79, 0.15);
+            box-shadow: 0 0 0 0.2rem rgba(205, 168, 88, 0.25);
         }
 
         .success-icon {
             width: 5rem;
             height: 5rem;
-            background: #d1fae5;
-            color: var(--bp-primary);
+            background: #f5ecd4;
+            color: var(--bp-primary-dark);
             border-radius: 50%;
             display: inline-flex;
             align-items: center;
@@ -143,13 +163,15 @@
     @stack('styles')
 </head>
 <body class="layout-fixed">
+    @include('components.page-loader')
+
     <nav class="guest-navbar navbar navbar-expand-lg sticky-top">
         <div class="container py-2">
             <a href="{{ route('guest.landing') }}" class="guest-brand">
-                <i class="bi bi-dribbble me-1"></i> Born <span>Padel</span>
+                <img src="{{ asset('img/bornpadel.png') }}" alt="Born Padel" class="bp-logo">
             </a>
             <div class="d-flex align-items-center gap-2">
-                @if (! in_array(Route::currentRouteName(), ['guest.register', 'guest.register.success']))
+                @if (! in_array(Route::currentRouteName(), ['guest.register', 'guest.register.form', 'guest.register.success']))
                     <a href="{{ route('guest.register') }}" class="btn btn-bp btn-sm d-none d-sm-inline-flex">
                         <i class="bi bi-pencil-square me-1"></i> Daftar
                     </a>
@@ -177,6 +199,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/js/adminlte.min.js" crossorigin="anonymous"></script>
+    <script src="{{ asset('js/page-loader.js') }}"></script>
     @stack('scripts')
 </body>
 </html>

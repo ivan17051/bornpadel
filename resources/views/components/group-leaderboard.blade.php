@@ -1,6 +1,10 @@
 @props(['standings', 'turnamen' => null, 'refreshable' => false])
 
-<div class="group-leaderboard" @if($refreshable) id="live-leaderboard" data-refresh-url="{{ route('api.guest.standings') }}" @endif>
+<div class="group-leaderboard"
+     @if($refreshable)
+         id="live-leaderboard"
+         data-refresh-url="{{ route('api.guest.standings', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+     @endif>
     @if ($turnamen)
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0">

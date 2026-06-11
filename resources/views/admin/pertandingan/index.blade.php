@@ -8,9 +8,14 @@
 @endsection
 
 @section('content')
+@include('admin.partials.turnamen-filter', ['filterRoute' => route('admin.pertandingan.index')])
+
 <div class="card mb-3">
     <div class="card-body">
-        <form method="GET" class="row g-2 align-items-end">
+        <form method="GET" action="{{ route('admin.pertandingan.index') }}" class="row g-2 align-items-end">
+            @if (request('id_turnamen'))
+                <input type="hidden" name="id_turnamen" value="{{ request('id_turnamen') }}">
+            @endif
             <div class="col-md-3">
                 <label class="form-label small text-muted">Ronde</label>
                 <select name="nama_ronde" class="form-select">
@@ -40,7 +45,7 @@
             </div>
             <div class="col-md-3">
                 <button type="submit" class="btn btn-primary me-2"><i class="bi bi-funnel me-1"></i> Filter</button>
-                <a href="{{ route('admin.pertandingan.index') }}" class="btn btn-outline-secondary">Reset</a>
+                <a href="{{ route('admin.pertandingan.index', request()->only('id_turnamen')) }}" class="btn btn-outline-secondary">Reset</a>
             </div>
         </form>
     </div>

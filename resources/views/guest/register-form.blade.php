@@ -1,0 +1,136 @@
+@extends('layouts.guest')
+
+@section('title', 'Pendaftaran')
+
+@section('content')
+@php
+    $photoService = app(\App\Services\PemainPhotoService::class);
+    $previewSrc = $existingPemain && $existingPemain->foto
+        ? $photoService->url($existingPemain->foto)
+        : null;
+@endphp
+
+<div class="row justify-content-center">
+    <div class="col-lg-7 col-xl-6">
+        <div class="text-center mb-4">
+            <h1 class="h3 fw-bold mb-1">Form Pendaftaran</h1>
+            <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
+        </div>
+
+        <div class="card guest-card mb-4">
+            <div class="card-body py-3 px-4">
+                <div class="row text-center g-3">
+                    <div class="col-6">
+                        <div class="info-label">Biaya</div>
+                        <strong class="text-primary">Rp {{ number_format($turnamen->harga, 0, ',', '.') }}</strong>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">No. HP</div>
+                        <strong>{{ $noHp }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if ($isExisting)
+            <div class="alert alert-info guest-card mb-4">
+                <i class="bi bi-person-check me-2"></i>
+                Data pemain ditemukan. Periksa dan perbarui jika ada perubahan, lalu kirim pendaftaran turnamen ini.
+            </div>
+        @else
+            <div class="alert alert-light border guest-card mb-4">
+                <i class="bi bi-person-plus me-2"></i>
+                Nomor HP belum terdaftar. Lengkapi data di bawah untuk mendaftar.
+            </div>
+        @endif
+
+        <div class="card guest-card">
+            <div class="card-header py-3">
+                <i class="bi bi-person-vcard me-2"></i> Data Peserta
+            </div>
+            <div class="card-body p-4">
+                <form action="{{ route('guest.register.store') }}" method="POST" enctype="multipart/form-data" novalidate>
+                    @csrf
+                    <input type="hidden" name="no_hp" value="{{ old('no_hp', $noHp) }}">
+
+                    <x-pemain-photo-input
+                        input-id="guest-foto"
+                        preview-id="guest-foto-preview"
+                        :preview-src="$previewSrc" />
+
+                    <div class="mb-3">
+                        <label for="nama" class="form-label fw-semibold">Nama Lengkap <span class="text-danger">*</span></label>
+                        <input type="text"
+                               name="nama"
+                               id="nama"
+                               class="form-control @error('nama') is-invalid @enderror"
+                               value="{{ old('nama', optional($existingPemain)->nama) }}"
+                               placeholder="Masukkan nama lengkap"
+                               required
+                               autocomplete="name">
+                        @error('nama')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="tgl_lahir" class="form-label fw-semibold">Tanggal Lahir <span class="text-danger">*</span></label>
+                        <input type="date"
+                               name="tgl_lahir"
+                               id="tgl_lahir"
+                               class="form-control @error('tgl_lahir') is-invalid @enderror"
+                               value="{{ old('tgl_lahir', optional(optional($existingPemain)->tgl_lahir)->format('Y-m-d')) }}"
+                               required
+                               max="{{ date('Y-m-d', strtotime('-1 day')) }}">
+                        @error('tgl_lahir')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="gender" class="form-label fw-semibold">Jenis Kelamin <span class="text-danger">*</span></label>
+                        <select name="gender"
+                                id="gender"
+                                class="form-select @error('gender') is-invalid @enderror"
+                                required>
+                            <option value="" disabled {{ old('gender', optional($existingPemain)->gender) ? '' : 'selected' }}>Pilih jenis kelamin</option>
+                            <option value="male" {{ old('gender', optional($existingPemain)->gender) === 'male' ? 'selected' : '' }}>Laki-laki</option>
+                            <option value="female" {{ old('gender', optional($existingPemain)->gender) === 'female' ? 'selected' : '' }}>Perempuan</option>
+                        </select>
+                        @error('gender')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="rating" class="form-label fw-semibold">Rating (opsional)</label>
+                        <input type="number"
+                               name="rating"
+                               id="rating"
+                               class="form-control @error('rating') is-invalid @enderror"
+                               value="{{ old('rating', optional($existingPemain)->rating) }}"
+                               placeholder="Contoh: 3.5"
+                               min="0"
+                               max="10"
+                               step="0.1">
+                        <div class="form-text">Perkiraan level permainan Anda (skala 0–10).</div>
+                        @error('rating')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-bp btn-lg">
+                            <i class="bi bi-send me-2"></i>
+                            {{ $isExisting ? 'Perbarui & Daftar Turnamen' : 'Kirim Pendaftaran' }}
+                        </button>
+                        <a href="{{ route('guest.register') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i> Ganti Nomor HP
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection

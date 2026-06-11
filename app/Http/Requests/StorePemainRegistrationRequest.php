@@ -19,6 +19,7 @@ class StorePemainRegistrationRequest extends FormRequest
             'gender' => ['required', 'in:male,female'],
             'no_hp' => ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'],
             'rating' => ['nullable', 'numeric', 'min:0', 'max:10'],
+            'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ];
     }
 
@@ -34,6 +35,9 @@ class StorePemainRegistrationRequest extends FormRequest
             'no_hp.regex' => 'Format nomor HP tidak valid.',
             'rating.numeric' => 'Rating harus berupa angka.',
             'rating.max' => 'Rating maksimal 10.',
+            'foto.image' => 'Foto harus berupa gambar.',
+            'foto.mimes' => 'Foto harus berformat JPG, PNG, atau WebP.',
+            'foto.max' => 'Ukuran foto maksimal 5 MB.',
         ];
     }
 }

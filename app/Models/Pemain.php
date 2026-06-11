@@ -16,7 +16,6 @@ class Pemain extends Model
         'no_hp',
         'rating',
         'foto',
-        'status',
     ];
 
     protected $casts = [
@@ -24,14 +23,34 @@ class Pemain extends Model
         'rating' => 'decimal:2',
     ];
 
-    public function scopeApproved($query)
+    public function turnamenPeserta()
     {
-        return $query->where('status', 'approved');
+        return $this->hasMany(TurnamenPeserta::class, 'id_pemain');
     }
 
-    public function scopePending($query)
+    public function turnamen()
     {
-        return $query->where('status', 'pending');
+        return $this->belongsToMany(Turnamen::class, 'turnamen_peserta', 'id_pemain', 'id_turnamen')
+            ->withPivot('status')
+            ->withTimestamps();
+    }
+
+    public function getFotoUrlAttribute(): string
+    {
+        return app(\App\Services\PemainPhotoService::class)->url($this->foto);
+    }
+
+    public function pesertaForTurnamen(?Turnamen $turnamen): ?TurnamenPeserta
+    {
+        if (! $turnamen) {
+            return null;
+        }
+
+        if ($this->relationLoaded('turnamenPeserta')) {
+            return $this->turnamenPeserta->firstWhere('id_turnamen', $turnamen->id);
+        }
+
+        return $this->turnamenPeserta()->where('id_turnamen', $turnamen->id)->first();
     }
 
     public function grupMembers()

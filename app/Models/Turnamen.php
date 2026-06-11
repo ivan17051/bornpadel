@@ -39,6 +39,18 @@ class Turnamen extends Model
         return in_array($this->status, ['ongoing', 'completed'], true);
     }
 
+    public function turnamenPeserta()
+    {
+        return $this->hasMany(TurnamenPeserta::class, 'id_turnamen');
+    }
+
+    public function pemain()
+    {
+        return $this->belongsToMany(Pemain::class, 'turnamen_peserta', 'id_turnamen', 'id_pemain')
+            ->withPivot('status')
+            ->withTimestamps();
+    }
+
     public function grup()
     {
         return $this->hasMany(Grup::class, 'id_turnamen');

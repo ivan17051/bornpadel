@@ -8,10 +8,18 @@
 @endsection
 
 @section('content')
+@include('admin.partials.turnamen-filter', ['filterRoute' => route('admin.matchmaking.index')])
+
 @if (! $turnamen)
     <div class="alert alert-warning">
         <i class="bi bi-exclamation-triangle me-2"></i>
-        Tidak ada turnamen aktif (status open/ongoing). Buat atau buka turnamen terlebih dahulu.
+        @if ($turnamenList->isEmpty())
+            Belum ada turnamen.
+            <a href="{{ route('admin.turnamen.create') }}">Buat turnamen</a> terlebih dahulu.
+        @else
+            Pilih turnamen dari filter di atas, atau
+            <a href="{{ route('admin.turnamen.index') }}">buka turnamen aktif</a> (status open/ongoing).
+        @endif
     </div>
 @else
     <div class="card mb-4">
@@ -74,7 +82,7 @@
                             <i class="bi bi-flag me-1"></i> End Group Stage
                         </button>
                         @if ($hasKnockoutBracket)
-                            <a href="{{ route('admin.bracket.index') }}" class="btn btn-outline-success">
+                            <a href="{{ route('admin.bracket.index', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-outline-success">
                                 <i class="bi bi-diagram-2 me-1"></i> Lihat Bracket
                             </a>
                         @endif

@@ -1,6 +1,10 @@
 @props(['bracket', 'turnamen' => null, 'refreshable' => false])
 
-<div class="tournament-bracket-wrapper" @if($refreshable) id="live-bracket" data-refresh-url="{{ route('api.guest.bracket') }}" @endif>
+<div class="tournament-bracket-wrapper"
+     @if($refreshable)
+         id="live-bracket"
+         data-refresh-url="{{ route('api.guest.bracket', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+     @endif>
     @if ($turnamen)
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h5 class="mb-0">
@@ -96,8 +100,8 @@
         position: relative;
         min-width: 200px;
     }
-    .bracket-match.is-completed { border-color: #198754; }
-    .bracket-match.has-winner { box-shadow: 0 4px 12px rgba(25,135,84,.12); }
+    .bracket-match.is-completed { border-color: #cda858; }
+    .bracket-match.has-winner { box-shadow: 0 4px 12px rgba(205, 168, 88, .18); }
     .bracket-player {
         display: flex;
         justify-content: space-between;
@@ -108,7 +112,7 @@
         gap: 0.5rem;
     }
     .bracket-player:last-of-type { border-bottom: none; }
-    .bracket-player.is-winner { background: #d1e7dd; font-weight: 600; }
+    .bracket-player.is-winner { background: #f5ecd4; font-weight: 600; }
     .bracket-player.is-tbd { color: #adb5bd; font-style: italic; }
     .bracket-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bracket-score-badge { font-size: 0.75rem; color: #6c757d; font-weight: 600; flex-shrink: 0; }
