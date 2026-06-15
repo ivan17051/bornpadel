@@ -41,7 +41,7 @@
                         @if ($turnamen->isRegistrationOpen())
                             Pendaftaran masih dibuka. Tutup pendaftaran sebelum melakukan random grup.
                         @elseif ($canRandomGrup)
-                            Pendaftaran ditutup. Anda dapat membuat pembagian grup secara acak.
+                            Pendaftaran ditutup. Buat pembagian grup secara acak atau kelompokkan pemain dengan rating serupa.
                         @elseif ($hasKnockoutBracket)
                             Fase grup selesai. Bracket knockout sudah dibuat.
                         @elseif ($canEndGroupStage)
@@ -64,13 +64,22 @@
                             <i class="bi bi-lock me-1"></i> Tutup Pendaftaran
                         </button>
                         <button type="button"
-                                id="btn-random-grup"
-                                class="btn btn-primary {{ $canRandomGrup ? '' : 'disabled' }}"
+                                class="btn btn-primary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'disabled' }}"
                                 data-url="{{ route('admin.matchmaking.random-grup') }}"
                                 data-turnamen="{{ $turnamen->id }}"
+                                data-mode="random"
                                 {{ $canRandomGrup ? '' : 'disabled' }}
                                 title="{{ $canRandomGrup ? 'Acak pemain approved ke grup' : 'Hanya aktif saat pendaftaran ditutup' }}">
                             <i class="bi bi-shuffle me-1"></i> Random Grup
+                        </button>
+                        <button type="button"
+                                class="btn btn-outline-primary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'disabled' }}"
+                                data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                data-turnamen="{{ $turnamen->id }}"
+                                data-mode="by_rating"
+                                {{ $canRandomGrup ? '' : 'disabled' }}
+                                title="{{ $canRandomGrup ? 'Kelompokkan pemain dengan rating serupa' : 'Hanya aktif saat pendaftaran ditutup' }}">
+                            <i class="bi bi-bar-chart-steps me-1"></i> Grup by Rating
                         </button>
                         <button type="button"
                                 id="btn-end-group-stage"

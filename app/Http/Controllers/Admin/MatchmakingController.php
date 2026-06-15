@@ -89,19 +89,30 @@ class MatchmakingController extends Controller
 
     public function randomGrup(Request $request)
     {
+        $request->validate([
+            'mode' => ['nullable', 'in:random,by_rating'],
+        ]);
+
+        $mode = $request->input('mode', 'random');
+
         try {
             $turnamen = $this->resolveTournament($request);
-            $result = $this->matchmakingService->generateRandomGroups($turnamen);
+            $result = $this->matchmakingService->generateRandomGroups($turnamen, GroupMatchmakingService::PLAYERS_PER_GROUP, $mode);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
 
+        $modeLabel = $mode === 'by_rating'
+            ? 'berdasarkan rating (pemain dengan rating serupa dalam satu grup)'
+            : 'secara acak';
+
         return response()->json([
             'success' => true,
             'message' => sprintf(
-                'Berhasil membuat %d grup dan %d pertandingan fase grup.',
+                'Berhasil membuat %d grup dan %d pertandingan fase grup (%s).',
                 count($result['groups']),
-                $result['matches']
+                $result['matches'],
+                $modeLabel
             ),
             'data' => $result,
         ]);

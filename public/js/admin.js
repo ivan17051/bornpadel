@@ -134,7 +134,6 @@ const BornPadelAdmin = (function () {
 
     const initMatchmakingActions = () => {
         const closeBtn = document.getElementById('btn-close-registration');
-        const randomBtn = document.getElementById('btn-random-grup');
 
         if (closeBtn && !closeBtn.disabled) {
             closeBtn.addEventListener('click', async () => {
@@ -180,27 +179,37 @@ const BornPadelAdmin = (function () {
             });
         }
 
-        if (randomBtn && !randomBtn.disabled) {
-            randomBtn.addEventListener('click', async () => {
-                if (!confirm(
-                    'Acak pemain approved ke grup (4 pemain/grup) dan buat jadwal round-robin?\n\nTindakan ini tidak dapat diulang.'
-                )) return;
+        document.querySelectorAll('.btn-matchmaking-grup').forEach((btn) => {
+            if (btn.disabled) {
+                return;
+            }
 
-                const original = randomBtn.innerHTML;
-                setButtonLoading(randomBtn, true);
+            btn.addEventListener('click', async () => {
+                const mode = btn.dataset.mode || 'random';
+                const confirmMessage = mode === 'by_rating'
+                    ? 'Kelompokkan pemain approved berdasarkan rating?\n\nPemain dengan rating serupa akan ditempatkan dalam grup yang sama (4 pemain/grup) dan jadwal round-robin dibuat.\n\nTindakan ini tidak dapat diulang.'
+                    : 'Acak pemain approved ke grup (4 pemain/grup) dan buat jadwal round-robin?\n\nTindakan ini tidak dapat diulang.';
+
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+
+                const original = btn.innerHTML;
+                setButtonLoading(btn, true);
 
                 try {
-                    const data = await apiRequest(randomBtn.dataset.url, 'POST', {
-                        id_turnamen: parseInt(randomBtn.dataset.turnamen, 10),
+                    const data = await apiRequest(btn.dataset.url, 'POST', {
+                        id_turnamen: parseInt(btn.dataset.turnamen, 10),
+                        mode,
                     });
                     showToast(data.message);
                     reloadPage();
                 } catch (e) {
                     showToast(e.message, 'error');
-                    setButtonLoading(randomBtn, false, original);
+                    setButtonLoading(btn, false, original);
                 }
             });
-        }
+        });
     };
 
     const initScoreModal = () => {

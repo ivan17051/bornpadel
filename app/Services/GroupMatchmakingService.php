@@ -73,8 +73,11 @@ class GroupMatchmakingService
             ->count();
     }
 
-    public function generateRandomGroups(Turnamen $turnamen, int $playersPerGroup = self::PLAYERS_PER_GROUP): array
-    {
+    public function generateRandomGroups(
+        Turnamen $turnamen,
+        int $playersPerGroup = self::PLAYERS_PER_GROUP,
+        string $mode = 'random'
+    ): array {
         if ($turnamen->status === 'open') {
             throw new RuntimeException('Pendaftaran masih dibuka. Tutup pendaftaran terlebih dahulu.');
         }
@@ -87,16 +90,19 @@ class GroupMatchmakingService
             throw new RuntimeException('Grup sudah dibuat untuk turnamen ini.');
         }
 
+        if (! in_array($mode, ['random', 'by_rating'], true)) {
+            throw new RuntimeException('Mode pembagian grup tidak valid.');
+        }
+
         $players = $this->getApprovedPlayers($turnamen);
 
         if ($players->count() < 2) {
             throw new RuntimeException('Minimal 2 pemain dengan status approved diperlukan.');
         }
 
-        return DB::transaction(function () use ($turnamen, $players, $playersPerGroup) {
-            $shuffled = $players->shuffle()->values();
-            $chunks = $shuffled->chunk($playersPerGroup);
-            $result = ['groups' => [], 'matches' => 0];
+        return DB::transaction(function () use ($turnamen, $players, $playersPerGroup, $mode) {
+            $chunks = $this->partitionPlayersIntoGroups($players, $playersPerGroup, $mode);
+            $result = ['groups' => [], 'matches' => 0, 'mode' => $mode];
 
             foreach ($chunks as $index => $groupPlayers) {
                 $grup = Grup::create([
@@ -145,6 +151,19 @@ class GroupMatchmakingService
         }
 
         return $count;
+    }
+
+    protected function partitionPlayersIntoGroups(Collection $players, int $playersPerGroup, string $mode): Collection
+    {
+        if ($mode === 'by_rating') {
+            $sorted = $players->sortByDesc(function (Pemain $pemain) {
+                return (float) $pemain->rating;
+            })->values();
+
+            return $sorted->chunk($playersPerGroup);
+        }
+
+        return $players->shuffle()->values()->chunk($playersPerGroup);
     }
 
     protected function groupLabel(int $index): string
