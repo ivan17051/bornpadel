@@ -27,18 +27,28 @@
                 </li>
                 
                 <div class="nav-header">DATA MASTER</div>
+                @if (auth()->user()->isAdmin())
                 <li class="nav-item">
                     <a href="{{ route('admin.turnamen.index') }}" class="nav-link {{ request()->routeIs('admin.turnamen.*') ? 'active' : '' }}">
                         <i class="nav-icon bi bi-calendar-event"></i>
                         <p>Turnamen</p>
                     </a>
                 </li>
+                @endif
                 <li class="nav-item">
                     <a href="{{ route('admin.pemain.index') }}" class="nav-link {{ request()->routeIs('admin.pemain.*') ? 'active' : '' }}">
                         <i class="nav-icon bi bi-people"></i>
                         <p>Pemain</p>
                     </a>
                 </li>
+                @if (auth()->user()->isAdmin())
+                <li class="nav-item">
+                    <a href="{{ route('admin.pengguna.index') }}" class="nav-link {{ request()->routeIs('admin.pengguna.*') ? 'active' : '' }}">
+                        <i class="nav-icon bi bi-person-gear"></i>
+                        <p>Pengguna</p>
+                    </a>
+                </li>
+                @endif
 
                 <div class="nav-header">TURNAMEN</div>
                 <li class="nav-item">

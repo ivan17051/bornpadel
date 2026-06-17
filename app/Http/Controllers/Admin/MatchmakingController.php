@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Turnamen;
 use App\Services\GroupMatchmakingService;
 use App\Services\KnockoutBracketService;
+use App\Services\TournamentAccessService;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -13,13 +14,16 @@ class MatchmakingController extends Controller
 {
     protected $matchmakingService;
     protected $knockoutBracketService;
+    protected $tournamentAccess;
 
     public function __construct(
         GroupMatchmakingService $matchmakingService,
-        KnockoutBracketService $knockoutBracketService
+        KnockoutBracketService $knockoutBracketService,
+        TournamentAccessService $tournamentAccess
     ) {
         $this->matchmakingService = $matchmakingService;
         $this->knockoutBracketService = $knockoutBracketService;
+        $this->tournamentAccess = $tournamentAccess;
     }
 
     public function index(Request $request)
@@ -123,6 +127,16 @@ class MatchmakingController extends Controller
         $request->validate([
             'id_turnamen' => ['nullable', 'exists:turnamen,id'],
         ]);
+
+        if ($this->tournamentAccess->isPanitia()) {
+            $turnamen = $this->tournamentAccess->assignedTurnamen();
+
+            if (! $turnamen) {
+                throw new RuntimeException('Akun panitia belum ditugaskan ke turnamen.');
+            }
+
+            return $turnamen;
+        }
 
         if ($request->filled('id_turnamen')) {
             return Turnamen::findOrFail($request->id_turnamen);

@@ -8,6 +8,7 @@ use App\Models\Grup;
 use App\Models\Pertandingan;
 use App\Services\GroupMatchmakingService;
 use App\Services\MatchScoringService;
+use App\Services\TournamentAccessService;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -15,11 +16,16 @@ class PertandinganController extends Controller
 {
     protected $scoringService;
     protected $matchmakingService;
+    protected $tournamentAccess;
 
-    public function __construct(MatchScoringService $scoringService, GroupMatchmakingService $matchmakingService)
-    {
+    public function __construct(
+        MatchScoringService $scoringService,
+        GroupMatchmakingService $matchmakingService,
+        TournamentAccessService $tournamentAccess
+    ) {
         $this->scoringService = $scoringService;
         $this->matchmakingService = $matchmakingService;
+        $this->tournamentAccess = $tournamentAccess;
     }
 
     public function index(Request $request)
@@ -69,6 +75,8 @@ class PertandinganController extends Controller
 
     public function show(Pertandingan $pertandingan)
     {
+        $this->tournamentAccess->assertPertandinganAccess($pertandingan);
+
         $pertandingan->load(['pemain1', 'pemain2', 'pemenang', 'grup', 'skor']);
 
         return response()->json([
@@ -101,6 +109,8 @@ class PertandinganController extends Controller
 
     public function storeScore(StoreMatchScoreRequest $request, Pertandingan $pertandingan)
     {
+        $this->tournamentAccess->assertPertandinganAccess($pertandingan);
+
         try {
             $pertandingan = $this->scoringService->recordScore($pertandingan, $request->validated()['sets']);
         } catch (RuntimeException $e) {

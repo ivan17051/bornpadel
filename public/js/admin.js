@@ -81,17 +81,47 @@ const BornPadelAdmin = (function () {
         }
     };
 
-    const confirmAction = async ({ title, text, confirmText = 'Ya, lanjutkan' }) => {
+    const showAlert = (message, type = 'info') => {
+        if (!window.Swal) {
+            alert(message);
+            return;
+        }
+
+        const iconMap = {
+            success: 'success',
+            error: 'error',
+            warning: 'warning',
+            info: 'info',
+        };
+
+        window.Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: iconMap[type] || 'info',
+            title: message,
+            showConfirmButton: false,
+            timer: 4500,
+            timerProgressBar: true,
+        });
+    };
+
+    const confirmAction = async ({
+        title,
+        text,
+        confirmText = 'Ya, lanjutkan',
+        icon = 'warning',
+        confirmButtonColor = '#cda858',
+    }) => {
         if (window.Swal) {
             const result = await window.Swal.fire({
                 title,
                 text,
-                icon: 'warning',
+                icon,
                 showCancelButton: true,
                 confirmButtonText: confirmText,
                 cancelButtonText: 'Batal',
                 reverseButtons: true,
-                confirmButtonColor: '#cda858',
+                confirmButtonColor,
             });
 
             return result.isConfirmed;
@@ -103,34 +133,46 @@ const BornPadelAdmin = (function () {
     const initPemainActions = () => {
         document.querySelectorAll('.btn-approve').forEach((btn) => {
             btn.addEventListener('click', async () => {
-                if (!confirm('Setujui pemain ini?')) return;
+                const confirmed = await confirmAction({
+                    title: 'Setujui pemain ini?',
+                    confirmText: 'Ya, setujui',
+                    icon: 'question',
+                    confirmButtonColor: '#198754',
+                });
+                if (!confirmed) return;
 
                 try {
                     await apiRequest(btn.dataset.url, 'PATCH', {
                         status: 'approved',
                         id_turnamen: parseInt(btn.dataset.turnamen, 10),
                     });
-                    showToast('Pemain berhasil disetujui.');
+                    showAlert('Pemain berhasil disetujui.', 'success');
                     reloadPage();
                 } catch (e) {
-                    showToast(e.message, 'error');
+                    showAlert(e.message, 'error');
                 }
             });
         });
 
         document.querySelectorAll('.btn-reject').forEach((btn) => {
             btn.addEventListener('click', async () => {
-                if (!confirm('Tolak pemain ini?')) return;
+                const confirmed = await confirmAction({
+                    title: 'Tolak pemain ini?',
+                    confirmText: 'Ya, tolak',
+                    icon: 'warning',
+                    confirmButtonColor: '#ffc107',
+                });
+                if (!confirmed) return;
 
                 try {
                     await apiRequest(btn.dataset.url, 'PATCH', {
                         status: 'rejected',
                         id_turnamen: parseInt(btn.dataset.turnamen, 10),
                     });
-                    showToast('Pemain ditolak.');
+                    showAlert('Pemain ditolak.', 'warning');
                     reloadPage();
                 } catch (e) {
-                    showToast(e.message, 'error');
+                    showAlert(e.message, 'error');
                 }
             });
         });
@@ -138,14 +180,21 @@ const BornPadelAdmin = (function () {
         document.querySelectorAll('.btn-delete-pemain').forEach((btn) => {
             btn.addEventListener('click', async () => {
                 const name = btn.dataset.name || 'pemain ini';
-                if (!confirm(`Hapus profil ${name}? Tindakan ini tidak dapat dibatalkan.`)) return;
+                const confirmed = await confirmAction({
+                    title: `Hapus profil ${name}?`,
+                    text: 'Tindakan ini tidak dapat dibatalkan.',
+                    confirmText: 'Ya, hapus',
+                    icon: 'warning',
+                    confirmButtonColor: '#dc3545',
+                });
+                if (!confirmed) return;
 
                 try {
                     await apiRequest(btn.dataset.url, 'DELETE');
-                    showToast('Profil pemain berhasil dihapus.');
+                    showAlert('Profil pemain berhasil dihapus.', 'success');
                     btn.closest('tr')?.remove();
                 } catch (e) {
-                    showToast(e.message, 'error');
+                    showAlert(e.message, 'error');
                 }
             });
         });
@@ -468,6 +517,7 @@ const BornPadelAdmin = (function () {
         initScoreModal,
         initPasswordModal,
         showToast,
+        showAlert,
         apiRequest,
     };
 })();

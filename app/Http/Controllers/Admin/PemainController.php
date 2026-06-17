@@ -10,6 +10,7 @@ use App\Models\Pertandingan;
 use App\Models\TurnamenPeserta;
 use App\Services\GroupMatchmakingService;
 use App\Services\PemainPhotoService;
+use App\Services\TournamentAccessService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -17,11 +18,16 @@ class PemainController extends Controller
 {
     protected $matchmakingService;
     protected $photoService;
+    protected $tournamentAccess;
 
-    public function __construct(GroupMatchmakingService $matchmakingService, PemainPhotoService $photoService)
-    {
+    public function __construct(
+        GroupMatchmakingService $matchmakingService,
+        PemainPhotoService $photoService,
+        TournamentAccessService $tournamentAccess
+    ) {
         $this->matchmakingService = $matchmakingService;
         $this->photoService = $photoService;
+        $this->tournamentAccess = $tournamentAccess;
     }
 
     public function index(Request $request)
@@ -81,6 +87,7 @@ class PemainController extends Controller
     {
         $data = $request->validated();
         $turnamenId = $data['id_turnamen'];
+        $this->tournamentAccess->assertTurnamenId((int) $turnamenId);
         $status = $data['status'];
         $foto = $request->file('foto');
         unset($data['id_turnamen'], $data['status'], $data['foto']);
@@ -111,6 +118,8 @@ class PemainController extends Controller
 
     public function edit(Pemain $pemain)
     {
+        $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
+
         $turnamenList = $this->matchmakingService->listForFilter();
         $pemain->load('turnamenPeserta.turnamen');
 
@@ -119,10 +128,31 @@ class PemainController extends Controller
 
     public function update(UpdatePemainRequest $request, Pemain $pemain)
     {
+        $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
+
         $data = $request->validated();
 
         if (isset($data['tgl_lahir'])) {
             $data['usia'] = Carbon::parse($data['tgl_lahir'])->age;
+        }
+
+        $foto = $request->file('foto');
+        unset($data['foto']);
+
+        if ($foto) {
+            try {
+                $this->photoService->delete($pemain->foto);
+                $data['foto'] = $this->photoService->storeAsWebp($foto);
+            } catch (\RuntimeException $e) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $e->getMessage(),
+                    ], 422);
+                }
+
+                return back()->withInput()->withErrors(['foto' => $e->getMessage()]);
+            }
         }
 
         $pemain->update($data);
@@ -146,6 +176,9 @@ class PemainController extends Controller
             'status' => ['required', 'in:approved,rejected,pending'],
             'id_turnamen' => ['required', 'exists:turnamen,id'],
         ]);
+
+        $this->tournamentAccess->assertTurnamenId((int) $request->id_turnamen);
+        $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
 
         $peserta = TurnamenPeserta::where('id_turnamen', $request->id_turnamen)
             ->where('id_pemain', $pemain->id)
@@ -175,10 +208,19 @@ class PemainController extends Controller
 
     public function destroy(Pemain $pemain)
     {
-        $inMatches = Pertandingan::where('id_pemain1', $pemain->id)
-            ->orWhere('id_pemain2', $pemain->id)
-            ->orWhere('id_pemenang', $pemain->id)
-            ->exists();
+        $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
+
+        $matchQuery = Pertandingan::where(function ($q) use ($pemain) {
+            $q->where('id_pemain1', $pemain->id)
+                ->orWhere('id_pemain2', $pemain->id)
+                ->orWhere('id_pemenang', $pemain->id);
+        });
+
+        if ($this->tournamentAccess->isPanitia()) {
+            $matchQuery->where('id_turnamen', $this->tournamentAccess->assignedTurnamenId());
+        }
+
+        $inMatches = $matchQuery->exists();
 
         if ($inMatches) {
             if (request()->expectsJson()) {

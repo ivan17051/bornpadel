@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\PemainController;
 use App\Http\Controllers\Admin\PertandinganController;
 use App\Http\Controllers\Admin\StandingsController as AdminStandingsController;
 use App\Http\Controllers\Admin\TurnamenController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Guest\BracketController;
 use App\Http\Controllers\Guest\LandingController;
 use App\Http\Controllers\Guest\RegistrationController;
@@ -32,18 +33,27 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/login', [LoginController::class, 'login'])->name('login.submit');
     });
 
-    Route::middleware('auth')->group(function () {
+    Route::middleware(['auth', 'scope.turnamen'])->group(function () {
         Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
         Route::put('/password', [PasswordController::class, 'update'])->name('password.update');
 
-        Route::get('/turnamen', [TurnamenController::class, 'index'])->name('turnamen.index');
-        Route::get('/turnamen/create', [TurnamenController::class, 'create'])->name('turnamen.create');
-        Route::post('/turnamen', [TurnamenController::class, 'store'])->name('turnamen.store');
-        Route::get('/turnamen/{turnamen}/edit', [TurnamenController::class, 'edit'])->name('turnamen.edit');
-        Route::put('/turnamen/{turnamen}', [TurnamenController::class, 'update'])->name('turnamen.update');
-        Route::delete('/turnamen/{turnamen}', [TurnamenController::class, 'destroy'])->name('turnamen.destroy');
+        Route::middleware('admin')->group(function () {
+            Route::get('/turnamen', [TurnamenController::class, 'index'])->name('turnamen.index');
+            Route::get('/turnamen/create', [TurnamenController::class, 'create'])->name('turnamen.create');
+            Route::post('/turnamen', [TurnamenController::class, 'store'])->name('turnamen.store');
+            Route::get('/turnamen/{turnamen}/edit', [TurnamenController::class, 'edit'])->name('turnamen.edit');
+            Route::put('/turnamen/{turnamen}', [TurnamenController::class, 'update'])->name('turnamen.update');
+            Route::delete('/turnamen/{turnamen}', [TurnamenController::class, 'destroy'])->name('turnamen.destroy');
+
+            Route::get('/pengguna', [UserController::class, 'index'])->name('pengguna.index');
+            Route::get('/pengguna/create', [UserController::class, 'create'])->name('pengguna.create');
+            Route::post('/pengguna', [UserController::class, 'store'])->name('pengguna.store');
+            Route::get('/pengguna/{user}/edit', [UserController::class, 'edit'])->name('pengguna.edit');
+            Route::put('/pengguna/{user}', [UserController::class, 'update'])->name('pengguna.update');
+            Route::delete('/pengguna/{user}', [UserController::class, 'destroy'])->name('pengguna.destroy');
+        });
 
         Route::get('/pemain', [PemainController::class, 'index'])->name('pemain.index');
         Route::get('/pemain/create', [PemainController::class, 'create'])->name('pemain.create');

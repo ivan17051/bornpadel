@@ -22,6 +22,8 @@ class User extends Authenticatable
         'username',
         'email',
         'password',
+        'role',
+        'id_turnamen',
     ];
 
     /**
@@ -42,4 +44,19 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
+
+    public function turnamen()
+    {
+        return $this->belongsTo(Turnamen::class, 'id_turnamen');
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isPanitia(): bool
+    {
+        return $this->role === 'panitia';
+    }
 }

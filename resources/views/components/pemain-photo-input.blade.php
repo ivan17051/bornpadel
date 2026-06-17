@@ -4,6 +4,7 @@
     'label' => 'Foto Pemain',
     'optional' => true,
     'previewSrc' => null,
+    'showPreview' => true,
 ])
 
 @php
@@ -22,6 +23,7 @@
         @endif
     </label>
 
+    @if ($showPreview)
     <div class="d-flex align-items-center gap-3 mb-2">
         <img id="{{ $previewId }}"
              src="{{ $initialPreview }}"
@@ -36,6 +38,7 @@
             Format: JPG, PNG, atau WebP. Maks. 5 MB.
         </div>
     </div>
+    @endif
 
     <input type="file"
            name="foto"

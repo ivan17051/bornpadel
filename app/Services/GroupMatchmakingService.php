@@ -25,16 +25,12 @@ class GroupMatchmakingService
 
     public function resolveTournament(?int $id = null): ?Turnamen
     {
-        if ($id) {
-            return Turnamen::find($id);
-        }
-
-        return $this->getActiveTournament();
+        return app(TournamentAccessService::class)->resolveTurnamen($id, $this);
     }
 
     public function listForFilter(): Collection
     {
-        return Turnamen::query()->orderByDesc('doc')->get();
+        return app(TournamentAccessService::class)->listForFilter();
     }
 
     public function canCloseRegistration(Turnamen $turnamen): bool

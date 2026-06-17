@@ -7,15 +7,13 @@
     <li class="breadcrumb-item active">Pemain</li>
 @endsection
 
-@section('content')
-@include('admin.partials.turnamen-filter', ['filterRoute' => route('admin.pemain.index')])
+@section('sweetalert-flash', true)
 
-@if (! $turnamen)
-    <div class="alert alert-info mb-3">
-        <i class="bi bi-info-circle me-2"></i>
-        Pilih turnamen untuk melihat dan mengelola status pendaftaran peserta.
-    </div>
-@endif
+@section('content')
+@include('admin.partials.turnamen-filter', [
+    'filterRoute' => route('admin.pemain.index'),
+    'sweetAlert' => true,
+])
 
 <div class="card mb-3">
     <div class="card-body">
@@ -82,6 +80,9 @@
                     </tr>
                 </thead>
                 <tbody>
+                    @php
+                        $turnamenOngoing = $turnamen && $turnamen->status === 'ongoing';
+                    @endphp
                     @forelse ($pemain as $item)
                         @php
                             $peserta = $item->pesertaForTurnamen($turnamen);
@@ -121,12 +122,14 @@
                                             title="Setujui">
                                         <i class="bi bi-check-lg"></i>
                                     </button>
+                                    @unless ($turnamenOngoing)
                                     <button type="button" class="btn btn-sm btn-warning btn-reject"
                                             data-url="{{ route('admin.pemain.status', $item) }}"
                                             data-turnamen="{{ $turnamen->id }}"
                                             title="Tolak">
                                         <i class="bi bi-x-lg"></i>
                                     </button>
+                                    @endunless
                                 @elseif ($turnamen && $registrationStatus === 'rejected')
                                     <button type="button" class="btn btn-sm btn-outline-success btn-approve"
                                             data-url="{{ route('admin.pemain.status', $item) }}"
@@ -135,19 +138,23 @@
                                         <i class="bi bi-check-lg"></i>
                                     </button>
                                 @elseif ($turnamen && $registrationStatus === 'approved')
+                                    @unless ($turnamenOngoing)
                                     <button type="button" class="btn btn-sm btn-outline-warning btn-reject"
                                             data-url="{{ route('admin.pemain.status', $item) }}"
                                             data-turnamen="{{ $turnamen->id }}"
                                             title="Tolak">
                                         <i class="bi bi-x-lg"></i>
                                     </button>
+                                    @endunless
                                 @endif
+                                @unless ($turnamenOngoing)
                                 <button type="button" class="btn btn-sm btn-outline-danger btn-delete-pemain"
                                         data-url="{{ route('admin.pemain.destroy', $item) }}"
                                         data-name="{{ $item->nama }}"
                                         title="Hapus">
                                     <i class="bi bi-trash"></i>
                                 </button>
+                                @endunless
                             </td>
                         </tr>
                     @empty
@@ -177,6 +184,26 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     BornPadelAdmin.initPemainActions();
+
+    @if (session('success'))
+        BornPadelAdmin.showAlert(@json(session('success')), 'success');
+    @endif
+
+    @if (session('error'))
+        BornPadelAdmin.showAlert(@json(session('error')), 'error');
+    @endif
+
+    @if (request('id_turnamen') && ! $turnamen)
+        BornPadelAdmin.showAlert('Turnamen tidak ditemukan.', 'error');
+    @endif
+
+    @if (auth()->user()->isPanitia() && $turnamenList->isEmpty())
+        BornPadelAdmin.showAlert('Akun panitia belum ditugaskan ke turnamen.', 'warning');
+    @endif
+
+    @if (! $turnamen && ! auth()->user()->isPanitia())
+        BornPadelAdmin.showAlert('Pilih turnamen untuk melihat dan mengelola status pendaftaran peserta.', 'info');
+    @endif
 });
 </script>
 @endpush

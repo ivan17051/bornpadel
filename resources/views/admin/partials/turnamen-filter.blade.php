@@ -2,14 +2,39 @@
     $filterRoute = $filterRoute ?? url()->current();
     $preserveParams = $preserveParams ?? [];
     $turnamenList = $turnamenList ?? collect();
+    $user = auth()->user();
+    $isPanitia = $user && $user->isPanitia();
+    $lockedTurnamen = $isPanitia ? $turnamenList->first() : null;
 @endphp
 
-@if (request('id_turnamen') && ! $turnamen)
-    <div class="alert alert-danger mb-3">
-        <i class="bi bi-exclamation-triangle me-2"></i>Turnamen tidak ditemukan.
-    </div>
+@if (empty($sweetAlert))
+    @if (request('id_turnamen') && ! $turnamen)
+        <div class="alert alert-danger mb-3">
+            <i class="bi bi-exclamation-triangle me-2"></i>Turnamen tidak ditemukan.
+        </div>
+    @endif
+
+    @if ($isPanitia && ! $lockedTurnamen)
+        <div class="alert alert-warning mb-3">
+            <i class="bi bi-exclamation-triangle me-2"></i>Akun panitia belum ditugaskan ke turnamen.
+        </div>
+    @endif
 @endif
 
+@if ($isPanitia && $lockedTurnamen)
+    <div class="card mb-3">
+        <div class="card-body py-3">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-lock text-muted"></i>
+                <div>
+                    <div class="small text-muted mb-0">Turnamen Anda</div>
+                    <strong>{{ $lockedTurnamen->nama }}</strong>
+                    <span class="badge bg-secondary ms-1">{{ ucfirst($lockedTurnamen->status) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+@elseif (! $isPanitia)
 <div class="card mb-3">
     <div class="card-body py-3">
         <form method="GET" action="{{ $filterRoute }}" class="row g-2 align-items-end">
@@ -48,3 +73,4 @@
         </form>
     </div>
 </div>
+@endif

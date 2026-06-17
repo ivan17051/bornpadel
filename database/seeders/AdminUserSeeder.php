@@ -19,6 +19,8 @@ class AdminUserSeeder extends Seeder
             'username' => 'admin',
             'email' => 'admin@bornpadel.com',
             'password' => Hash::make('password'),
+            'role' => 'admin',
+            'id_turnamen' => null,
         ];
 
         if ($user) {

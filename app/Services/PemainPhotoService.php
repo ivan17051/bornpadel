@@ -180,16 +180,7 @@ class PemainPhotoService
 
     protected function toPublicUrl(string $publicRelativePath): string
     {
-        $path = '/' . $this->normalizePath($publicRelativePath);
-
-        if (! app()->runningInConsole() && request()) {
-            $base = request()->getBaseUrl();
-            if ($base && $base !== '/') {
-                return rtrim($base, '/') . $path;
-            }
-        }
-
-        return $path;
+        return asset('public/' . $this->normalizePath($publicRelativePath));
     }
 
     protected function createImageResource(UploadedFile $file)
