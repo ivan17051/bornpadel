@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Born Padel') — Turnamen</title>
-    <link rel="icon" type="image/png" href="{{ asset('img/bornpadel.png') }}">
+    <link rel="icon" type="image/png" href="{{ asset('public/img/bornpadel.png') }}">
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/css/adminlte.min.css" crossorigin="anonymous">
-    <link rel="stylesheet" href="{{ asset('css/page-loader.css') }}">
+    <link rel="stylesheet" href="{{ asset('public/css/page-loader.css') }}">
 
     <style>
         :root {
@@ -168,7 +168,7 @@
     <nav class="guest-navbar navbar navbar-expand-lg sticky-top">
         <div class="container py-2">
             <a href="{{ route('guest.landing') }}" class="guest-brand">
-                <img src="{{ asset('img/bornpadel.png') }}" alt="Born Padel" class="bp-logo">
+                <img src="{{ asset('public/img/bornpadel.png') }}" alt="Born Padel" class="bp-logo">
             </a>
             <div class="d-flex align-items-center gap-2">
                 @if (! in_array(Route::currentRouteName(), ['guest.register', 'guest.register.form', 'guest.register.success']))
@@ -199,7 +199,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/js/adminlte.min.js" crossorigin="anonymous"></script>
-    <script src="{{ asset('js/page-loader.js') }}"></script>
+    <script src="{{ asset('public/js/page-loader.js') }}"></script>
     @stack('scripts')
 </body>
 </html>

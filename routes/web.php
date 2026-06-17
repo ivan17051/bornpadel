@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\BracketController as AdminBracketController;
 use App\Http\Controllers\Admin\MatchmakingController;
+use App\Http\Controllers\Admin\PasswordController;
 use App\Http\Controllers\Admin\PemainController;
 use App\Http\Controllers\Admin\PertandinganController;
 use App\Http\Controllers\Admin\StandingsController as AdminStandingsController;
@@ -34,6 +35,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('auth')->group(function () {
         Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+        Route::put('/password', [PasswordController::class, 'update'])->name('password.update');
 
         Route::get('/turnamen', [TurnamenController::class, 'index'])->name('turnamen.index');
         Route::get('/turnamen/create', [TurnamenController::class, 'create'])->name('turnamen.create');

@@ -14,5 +14,5 @@
 @endsection
 
 @push('scripts')
-<script src="{{ asset('js/bracket.js') }}"></script>
+<script src="{{ asset('public/js/bracket.js') }}"></script>
 @endpush

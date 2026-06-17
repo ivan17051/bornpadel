@@ -4,11 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login Admin — Born Padel</title>
-    <link rel="icon" type="image/png" href="{{ asset('img/bornpadel.png') }}">
+    <link rel="icon" type="image/png" href="{{ asset('public/img/bornpadel.png') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/css/adminlte.min.css" crossorigin="anonymous">
-    <link rel="stylesheet" href="{{ asset('css/page-loader.css') }}">
+    <link rel="stylesheet" href="{{ asset('public/css/page-loader.css') }}">
     <style>
         :root {
             --bp-primary: #cda858;
@@ -41,7 +41,7 @@
         <div class="row justify-content-center">
             <div class="col-md-5 col-lg-4">
                 <div class="text-center mb-4">
-                    <img src="{{ asset('img/bornpadel.png') }}" alt="Born Padel" class="bp-logo mb-2">
+                    <img src="{{ asset('public/img/bornpadel.png') }}" alt="Born Padel" class="bp-logo mb-2">
                     <!-- <p class="text-muted mb-0">Admin Dashboard</p> -->
                 </div>
                 <div class="card login-card">
@@ -76,6 +76,6 @@
         </div>
     </div>
 
-    <script src="{{ asset('js/page-loader.js') }}"></script>
+    <script src="{{ asset('public/js/page-loader.js') }}"></script>
 </body>
 </html>

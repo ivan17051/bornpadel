@@ -57,38 +57,38 @@
                     <div class="d-grid gap-2">
                         <button type="button"
                                 id="btn-close-registration"
-                                class="btn btn-warning {{ $canCloseRegistration ? '' : 'disabled' }}"
+                                class="btn btn-warning {{ $canCloseRegistration ? '' : 'd-none' }}"
                                 data-url="{{ route('admin.matchmaking.close-registration') }}"
                                 data-turnamen="{{ $turnamen->id }}"
-                                {{ $canCloseRegistration ? '' : 'disabled' }}>
+                                {{ $canCloseRegistration ? '' : 'd-none' }}>
                             <i class="bi bi-lock me-1"></i> Tutup Pendaftaran
                         </button>
                         <button type="button"
-                                class="btn btn-primary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'disabled' }}"
+                                class="btn btn-primary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'd-none' }}"
                                 data-url="{{ route('admin.matchmaking.random-grup') }}"
                                 data-turnamen="{{ $turnamen->id }}"
                                 data-mode="random"
-                                {{ $canRandomGrup ? '' : 'disabled' }}
-                                title="{{ $canRandomGrup ? 'Acak pemain approved ke grup' : 'Hanya aktif saat pendaftaran ditutup' }}">
+                                {{ $canRandomGrup ? '' : 'd-none' }}
+                                title="{{ $canRandomGrup ? 'Acak pemain ke grup' : 'Hanya aktif saat pendaftaran ditutup' }}">
                             <i class="bi bi-shuffle me-1"></i> Random Grup
                         </button>
                         <button type="button"
-                                class="btn btn-outline-primary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'disabled' }}"
+                                class="btn btn-secondary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'd-none' }}"
                                 data-url="{{ route('admin.matchmaking.random-grup') }}"
                                 data-turnamen="{{ $turnamen->id }}"
                                 data-mode="by_rating"
-                                {{ $canRandomGrup ? '' : 'disabled' }}
+                                {{ $canRandomGrup ? '' : 'd-none' }}
                                 title="{{ $canRandomGrup ? 'Kelompokkan pemain dengan rating serupa' : 'Hanya aktif saat pendaftaran ditutup' }}">
                             <i class="bi bi-bar-chart-steps me-1"></i> Grup by Rating
                         </button>
                         <button type="button"
                                 id="btn-end-group-stage"
-                                class="btn btn-success {{ $canEndGroupStage ? '' : 'disabled' }}"
+                                class="btn btn-success {{ $canEndGroupStage ? '' : 'd-none' }}"
                                 data-url="{{ route('admin.matchmaking.end-group-stage') }}"
                                 data-turnamen="{{ $turnamen->id }}"
-                                {{ $canEndGroupStage ? '' : 'disabled' }}
+                                {{ $canEndGroupStage ? '' : 'd-none' }}
                                 title="{{ $canEndGroupStage ? 'Buat bracket knockout dari top 2 tiap grup' : 'Semua pertandingan fase grup harus selesai' }}">
-                            <i class="bi bi-flag me-1"></i> End Group Stage
+                            <i class="bi bi-flag me-1"></i> Akhiri Fase Grup
                         </button>
                         @if ($hasKnockoutBracket)
                             <a href="{{ route('admin.bracket.index', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-outline-success">
@@ -104,9 +104,15 @@
     @if ($grup->isNotEmpty())
         @foreach ($grup as $g)
             <div class="card mb-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0"><i class="bi bi-diagram-3 me-2"></i>{{ $g->nama }}</h5>
-                    <span class="badge text-bg-info">{{ $g->pemain->count() }} pemain · {{ $g->pertandingan->count() }} pertandingan</span>
+                <div class="card-header d-flex justify-content-between align-items-center row">
+                    
+                        <div class="col-md-6">
+                            <h5 class="card-title mb-0"><i class="bi bi-diagram-3 me-2"></i>{{ $g->nama }}</h5>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <span class="badge text-bg-info">{{ $g->pemain->count() }} pemain · {{ $g->pertandingan->count() }} pertandingan</span>
+                        </div>
+                    
                 </div>
                 <div class="card-body">
                     <div class="row">

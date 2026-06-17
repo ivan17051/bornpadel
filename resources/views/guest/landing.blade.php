@@ -93,9 +93,9 @@
 
 @push('scripts')
 @if (isset($standings) && $standings->isNotEmpty())
-<script src="{{ asset('js/leaderboard.js') }}"></script>
+<script src="{{ asset('public/js/leaderboard.js') }}"></script>
 @endif
 @if (! empty($bracket))
-<script src="{{ asset('js/bracket.js') }}"></script>
+<script src="{{ asset('public/js/bracket.js') }}"></script>
 @endif
 @endpush

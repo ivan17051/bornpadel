@@ -64,6 +64,6 @@
     </style>
     @endpush
     @push('scripts')
-    <script src="{{ asset('js/pemain-photo-preview.js') }}"></script>
+    <script src="{{ asset('public/js/pemain-photo-preview.js') }}"></script>
     @endpush
 @endonce

@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Dashboard') — Born Padel Admin</title>
-    <link rel="icon" type="image/png" href="{{ asset('img/bornpadel.png') }}">
+    <link rel="icon" type="image/png" href="{{ asset('public/img/bornpadel.png') }}">
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.11.0/styles/overlayscrollbars.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/css/adminlte.min.css" crossorigin="anonymous">
-    <link rel="stylesheet" href="{{ asset('css/page-loader.css') }}">
+    <link rel="stylesheet" href="{{ asset('public/css/page-loader.css') }}">
 
     <style>
         :root {
@@ -72,6 +72,12 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li>
+                                <button type="button" class="dropdown-item" id="btn-open-password-modal">
+                                    <i class="bi bi-key me-2"></i> Ubah Password
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
                                 <form action="{{ route('admin.logout') }}" method="POST">
                                     @csrf
                                     <button type="submit" class="dropdown-item">
@@ -85,61 +91,7 @@
             </div>
         </nav>
 
-        <aside class="app-sidebar bg-dark shadow" data-bs-theme="dark">
-            <div class="sidebar-brand">
-                <a href="{{ route('admin.dashboard') }}" class="brand-link text-decoration-none px-3 py-3 d-block">
-                    <img src="{{ asset('img/bornpadel.png') }}" alt="Born Padel" class="bp-logo">
-                </a>
-            </div>
-            <div class="sidebar-wrapper">
-                <nav class="mt-2">
-                    <ul class="nav sidebar-menu flex-column" role="menu">
-                        <li class="nav-item">
-                            <a href="{{ route('admin.dashboard') }}" class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
-                                <i class="nav-icon bi bi-speedometer2"></i>
-                                <p>Dashboard</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('admin.turnamen.index') }}" class="nav-link {{ request()->routeIs('admin.turnamen.*') ? 'active' : '' }}">
-                                <i class="nav-icon bi bi-calendar-event"></i>
-                                <p>Manajemen Turnamen</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('admin.pemain.index') }}" class="nav-link {{ request()->routeIs('admin.pemain.*') ? 'active' : '' }}">
-                                <i class="nav-icon bi bi-people"></i>
-                                <p>Manajemen Pemain</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('admin.matchmaking.index') }}" class="nav-link {{ request()->routeIs('admin.matchmaking.*') ? 'active' : '' }}">
-                                <i class="nav-icon bi bi-shuffle"></i>
-                                <p>Matchmaking Grup</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('admin.pertandingan.index') }}" class="nav-link {{ request()->routeIs('admin.pertandingan.*') ? 'active' : '' }}">
-                                <i class="nav-icon bi bi-trophy"></i>
-                                <p>Pertandingan & Skor</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('admin.standings.index') }}" class="nav-link {{ request()->routeIs('admin.standings.*') ? 'active' : '' }}">
-                                <i class="nav-icon bi bi-bar-chart-steps"></i>
-                                <p>Klasemen Grup</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('admin.bracket.index') }}" class="nav-link {{ request()->routeIs('admin.bracket.*') ? 'active' : '' }}">
-                                <i class="nav-icon bi bi-diagram-2"></i>
-                                <p>Bracket Knockout</p>
-                            </a>
-                        </li>
-                    </ul>
-                </nav>
-            </div>
-        </aside>
+        @include('layouts.partials.admin-sidebar')
 
         <main class="app-main">
             <div class="app-content-header">
@@ -184,11 +136,64 @@
 
     <div class="toast-container position-fixed top-0 end-0 p-3" id="toast-container"></div>
 
+    <div class="modal fade" id="passwordModal" tabindex="-1" aria-labelledby="passwordModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="passwordModalLabel">
+                        <i class="bi bi-key me-2"></i>Ubah Password
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Masukkan password saat ini, lalu tentukan password baru untuk akun
+                        <strong>{{ Auth::user()->name }}</strong>.
+                    </p>
+                    <form id="password-form" novalidate>
+                        <div class="mb-3">
+                            <label for="current_password" class="form-label">Password Saat Ini</label>
+                            <input type="password" name="current_password" id="current_password"
+                                   class="form-control" autocomplete="current-password" required>
+                            <div class="invalid-feedback" data-feedback="current_password"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password Baru</label>
+                            <input type="password" name="password" id="password"
+                                   class="form-control" autocomplete="new-password" required>
+                            <div class="form-text">Minimal 8 karakter.</div>
+                            <div class="invalid-feedback" data-feedback="password"></div>
+                        </div>
+                        <div class="mb-0">
+                            <label for="password_confirmation" class="form-label">Konfirmasi Password Baru</label>
+                            <input type="password" name="password_confirmation" id="password_confirmation"
+                                   class="form-control" autocomplete="new-password" required>
+                            <div class="invalid-feedback" data-feedback="password_confirmation"></div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" id="btn-save-password"
+                            data-url="{{ route('admin.password.update') }}">
+                        <i class="bi bi-check-lg me-1"></i> Simpan Password
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.11.0/browser/overlayscrollbars.browser.es6.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/js/adminlte.min.js" crossorigin="anonymous"></script>
-    <script src="{{ asset('js/admin.js') }}"></script>
-    <script src="{{ asset('js/page-loader.js') }}"></script>
+    <script src="{{ asset('public/js/admin.js') }}"></script>
+    <script src="{{ asset('public/js/page-loader.js') }}"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        BornPadelAdmin.initPasswordModal();
+    });
+    </script>
     @stack('scripts')
 </body>
 </html>

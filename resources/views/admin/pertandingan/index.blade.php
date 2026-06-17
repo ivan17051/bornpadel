@@ -52,11 +52,15 @@
 </div>
 
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center row">
+        <div class="col-md-6">
         <h5 class="card-title mb-0">Daftar Pertandingan</h5>
+        </div>
+        <div class="col-md-6 text-end">
         @if ($turnamen)
             <span class="badge text-bg-secondary">{{ $turnamen->nama }}</span>
         @endif
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">

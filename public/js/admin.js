@@ -81,6 +81,25 @@ const BornPadelAdmin = (function () {
         }
     };
 
+    const confirmAction = async ({ title, text, confirmText = 'Ya, lanjutkan' }) => {
+        if (window.Swal) {
+            const result = await window.Swal.fire({
+                title,
+                text,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: confirmText,
+                cancelButtonText: 'Batal',
+                reverseButtons: true,
+                confirmButtonColor: '#cda858',
+            });
+
+            return result.isConfirmed;
+        }
+
+        return confirm(text ? `${title}\n\n${text}` : title);
+    };
+
     const initPemainActions = () => {
         document.querySelectorAll('.btn-approve').forEach((btn) => {
             btn.addEventListener('click', async () => {
@@ -137,7 +156,12 @@ const BornPadelAdmin = (function () {
 
         if (closeBtn && !closeBtn.disabled) {
             closeBtn.addEventListener('click', async () => {
-                if (!confirm('Tutup pendaftaran turnamen ini? Pemain tidak bisa mendaftar lagi.')) return;
+                const confirmed = await confirmAction({
+                    title: 'Tutup pendaftaran turnamen ini?',
+                    text: 'Pemain tidak bisa mendaftar lagi.',
+                    confirmText: 'Ya, tutup pendaftaran',
+                });
+                if (!confirmed) return;
 
                 const original = closeBtn.innerHTML;
                 setButtonLoading(closeBtn, true);
@@ -159,9 +183,12 @@ const BornPadelAdmin = (function () {
 
         if (endGroupBtn && !endGroupBtn.disabled) {
             endGroupBtn.addEventListener('click', async () => {
-                if (!confirm(
-                    'Akhiri fase grup dan buat bracket knockout?\n\nTop 2 pemain dari setiap grup akan lolos ke babak gugur.'
-                )) return;
+                const confirmed = await confirmAction({
+                    title: 'Akhiri fase grup dan buat bracket knockout?',
+                    text: '2 pemain teratas dari setiap grup akan lolos ke babak gugur.',
+                    confirmText: 'Ya, buat bracket',
+                });
+                if (!confirmed) return;
 
                 const original = endGroupBtn.innerHTML;
                 setButtonLoading(endGroupBtn, true);
@@ -186,13 +213,18 @@ const BornPadelAdmin = (function () {
 
             btn.addEventListener('click', async () => {
                 const mode = btn.dataset.mode || 'random';
-                const confirmMessage = mode === 'by_rating'
-                    ? 'Kelompokkan pemain approved berdasarkan rating?\n\nPemain dengan rating serupa akan ditempatkan dalam grup yang sama (4 pemain/grup) dan jadwal round-robin dibuat.\n\nTindakan ini tidak dapat diulang.'
-                    : 'Acak pemain approved ke grup (4 pemain/grup) dan buat jadwal round-robin?\n\nTindakan ini tidak dapat diulang.';
-
-                if (!confirm(confirmMessage)) {
-                    return;
-                }
+                const confirmed = await confirmAction(mode === 'by_rating'
+                    ? {
+                        title: 'Kelompokkan pemain berdasarkan rating?',
+                        text: 'Pemain dengan rating serupa akan ditempatkan dalam grup yang sama (4 pemain/grup) dan jadwal pertandingan dibuat. Tindakan ini tidak dapat diulang.',
+                        confirmText: 'Ya, buat grup rating',
+                    }
+                    : {
+                        title: 'Acak pemain ke grup?',
+                        text: 'Pembagian 4 pemain/grup akan dibuat beserta jadwal pertandingan. Tindakan ini tidak dapat diulang.',
+                        confirmText: 'Ya, random grup',
+                    });
+                if (!confirmed) return;
 
                 const original = btn.innerHTML;
                 setButtonLoading(btn, true);
@@ -337,10 +369,104 @@ const BornPadelAdmin = (function () {
         });
     };
 
+    const initPasswordModal = () => {
+        const modalEl = document.getElementById('passwordModal');
+        const openBtn = document.getElementById('btn-open-password-modal');
+        const saveBtn = document.getElementById('btn-save-password');
+        const form = document.getElementById('password-form');
+
+        if (!modalEl || !openBtn || !saveBtn || !form) {
+            return;
+        }
+
+        const modal = new bootstrap.Modal(modalEl);
+        const updateUrl = saveBtn.dataset.url;
+
+        const clearErrors = () => {
+            form.querySelectorAll('.is-invalid').forEach((el) => el.classList.remove('is-invalid'));
+            form.querySelectorAll('[data-feedback]').forEach((el) => {
+                el.textContent = '';
+            });
+        };
+
+        const showErrors = (errors) => {
+            if (!errors) {
+                return;
+            }
+
+            Object.entries(errors).forEach(([field, messages]) => {
+                const input = form.querySelector(`[name="${field}"]`);
+                const feedback = form.querySelector(`[data-feedback="${field}"]`);
+
+                if (input) {
+                    input.classList.add('is-invalid');
+                }
+                if (feedback) {
+                    feedback.textContent = messages[0] || '';
+                }
+            });
+        };
+
+        const resetForm = () => {
+            form.reset();
+            clearErrors();
+        };
+
+        openBtn.addEventListener('click', () => {
+            resetForm();
+            modal.show();
+        });
+
+        modalEl.addEventListener('hidden.bs.modal', resetForm);
+
+        saveBtn.addEventListener('click', async () => {
+            clearErrors();
+
+            const original = saveBtn.innerHTML;
+            setButtonLoading(saveBtn, true);
+
+            try {
+                const response = await fetch(updateUrl, {
+                    method: 'PUT',
+                    headers: {
+                        'X-CSRF-TOKEN': csrfToken(),
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        current_password: form.current_password.value,
+                        password: form.password.value,
+                        password_confirmation: form.password_confirmation.value,
+                    }),
+                });
+
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    if (data.errors) {
+                        showErrors(data.errors);
+                    } else {
+                        showToast(data.message || 'Terjadi kesalahan.', 'error');
+                    }
+                    return;
+                }
+
+                showToast(data.message);
+                modal.hide();
+            } catch (e) {
+                showToast(e.message || 'Terjadi kesalahan.', 'error');
+            } finally {
+                setButtonLoading(saveBtn, false, original);
+            }
+        });
+    };
+
     return {
         initPemainActions,
         initMatchmakingActions,
         initScoreModal,
+        initPasswordModal,
         showToast,
         apiRequest,
     };

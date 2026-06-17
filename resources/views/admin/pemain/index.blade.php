@@ -48,18 +48,22 @@
 </div>
 
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="card-title mb-0">
-            Daftar Pemain
-            @if ($turnamen)
-                <small class="text-muted fw-normal">— {{ $turnamen->nama }}</small>
-            @endif
-        </h5>
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge text-bg-secondary">{{ $pemain->total() }} pemain</span>
-            <a href="{{ route('admin.pemain.create', request()->only('id_turnamen')) }}" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-lg me-1"></i> Tambah Pemain
-            </a>
+    <div class="card-header d-flex justify-content-between align-items-center row">
+        <div class="col-md-6">
+            <h5 class="card-title mb-0">
+                Daftar Pemain
+                @if ($turnamen)
+                    <small class="text-muted fw-normal">— {{ $turnamen->nama }}</small>
+                @endif
+            </h5>
+        </div>
+        <div class="col-md-6 text-end">
+            <div class="align-items-center gap-2">
+                <span class="badge text-bg-secondary">{{ $pemain->total() }} pemain</span>
+                <a href="{{ route('admin.pemain.create', request()->only('id_turnamen')) }}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i> Tambah Pemain
+                </a>
+            </div>
         </div>
     </div>
     <div class="card-body p-0">

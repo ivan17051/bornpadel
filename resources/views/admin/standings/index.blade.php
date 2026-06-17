@@ -14,5 +14,5 @@
 @endsection
 
 @push('scripts')
-<script src="{{ asset('js/leaderboard.js') }}"></script>
+<script src="{{ asset('public/js/leaderboard.js') }}"></script>
 @endpush

@@ -38,11 +38,15 @@
 </div>
 
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="card-title mb-0">Daftar Turnamen</h5>
-        <a href="{{ route('admin.turnamen.create') }}" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-lg me-1"></i> Tambah Turnamen
-        </a>
+    <div class="card-header d-flex justify-content-between align-items-center row">
+        <div class="col-md-6">
+            <h5 class="card-title mb-0">Daftar Turnamen</h5>
+        </div>
+        <div class="col-md-6 text-end">
+            <a href="{{ route('admin.turnamen.create') }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-lg me-1"></i> Tambah Turnamen
+            </a>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
