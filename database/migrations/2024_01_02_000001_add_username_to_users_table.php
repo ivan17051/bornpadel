@@ -8,14 +8,14 @@ class AddUsernameToUsersTable extends Migration
 {
     public function up()
     {
-        Schema::table('users', function (Blueprint $table) {
+        Schema::table('m_users', function (Blueprint $table) {
             $table->string('username')->unique()->after('name');
         });
     }
 
     public function down()
     {
-        Schema::table('users', function (Blueprint $table) {
+        Schema::table('m_users', function (Blueprint $table) {
             $table->dropColumn('username');
         });
     }

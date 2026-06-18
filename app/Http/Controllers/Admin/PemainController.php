@@ -174,7 +174,7 @@ class PemainController extends Controller
     {
         $request->validate([
             'status' => ['required', 'in:approved,rejected,pending'],
-            'id_turnamen' => ['required', 'exists:turnamen,id'],
+            'id_turnamen' => ['required', 'exists:m_turnamen,id'],
         ]);
 
         $this->tournamentAccess->assertTurnamenId((int) $request->id_turnamen);

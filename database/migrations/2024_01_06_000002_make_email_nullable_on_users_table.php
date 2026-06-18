@@ -7,11 +7,11 @@ class MakeEmailNullableOnUsersTable extends Migration
 {
     public function up()
     {
-        DB::statement('ALTER TABLE users MODIFY email VARCHAR(255) NULL');
+        DB::statement('ALTER TABLE m_users MODIFY email VARCHAR(255) NULL');
     }
 
     public function down()
     {
-        DB::statement('ALTER TABLE users MODIFY email VARCHAR(255) NOT NULL');
+        DB::statement('ALTER TABLE m_users MODIFY email VARCHAR(255) NOT NULL');
     }
 }

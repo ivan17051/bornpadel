@@ -18,11 +18,11 @@ class UpdateUserRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:255', 'alpha_dash', Rule::unique('users', 'username')->ignore($userId)],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
+            'username' => ['required', 'string', 'max:255', 'alpha_dash', Rule::unique('m_users', 'username')->ignore($userId)],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('m_users', 'email')->ignore($userId)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
             'role' => ['required', 'in:admin,panitia'],
-            'id_turnamen' => ['nullable', 'required_if:role,panitia', 'exists:turnamen,id'],
+            'id_turnamen' => ['nullable', 'required_if:role,panitia', 'exists:m_turnamen,id'],
         ];
     }
 

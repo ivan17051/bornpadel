@@ -171,10 +171,14 @@
                 <img src="{{ asset('public/img/bornpadel.png') }}" alt="Born Padel" class="bp-logo">
             </a>
             <div class="d-flex align-items-center gap-2">
+                <a href="{{ auth()->check() ? route('admin.dashboard') : route('admin.login') }}"
+                   class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-shield-lock me-1"></i> Admin
+                </a>
                 @if (! in_array(Route::currentRouteName(), ['guest.register', 'guest.register.form', 'guest.register.success']))
-                    <a href="{{ route('guest.register') }}" class="btn btn-bp btn-sm d-none d-sm-inline-flex">
+                    <!-- <a href="{{ route('guest.register') }}" class="btn btn-bp btn-sm d-none d-sm-inline-flex">
                         <i class="bi bi-pencil-square me-1"></i> Daftar
-                    </a>
+                    </a> -->
                 @endif
             </div>
         </div>

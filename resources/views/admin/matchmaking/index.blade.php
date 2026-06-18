@@ -41,7 +41,7 @@
                         @if ($turnamen->isRegistrationOpen())
                             Pendaftaran masih dibuka. Tutup pendaftaran sebelum melakukan random grup.
                         @elseif ($canRandomGrup)
-                            Pendaftaran ditutup. Buat pembagian grup secara acak atau kelompokkan pemain dengan rating serupa.
+                            Pendaftaran ditutup. Atur min/max pemain per grup, lalu buat pembagian grup secara acak atau berdasarkan rating.
                         @elseif ($hasKnockoutBracket)
                             Fase grup selesai. Bracket knockout sudah dibuat.
                         @elseif ($canEndGroupStage)
@@ -54,6 +54,42 @@
                     </p>
                 </div>
                 <div class="col-md-4">
+                    @if ($canRandomGrup)
+                        <div class="card bg-light border-0 mb-3">
+                            <div class="card-body py-3">
+                                <h6 class="text-muted text-uppercase small mb-3">Pengaturan Grup</h6>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-6">
+                                        <label for="min-pemain-grup" class="form-label small mb-1">Min / grup</label>
+                                        <input type="number"
+                                               id="min-pemain-grup"
+                                               class="form-control form-control-sm"
+                                               min="2"
+                                               max="12"
+                                               value="{{ $defaultMinPerGroup }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="max-pemain-grup" class="form-label small mb-1">Max / grup</label>
+                                        <input type="number"
+                                               id="max-pemain-grup"
+                                               class="form-control form-control-sm"
+                                               min="2"
+                                               max="12"
+                                               value="{{ $defaultMaxPerGroup }}">
+                                    </div>
+                                </div>
+                                <div id="group-split-preview"
+                                     class="small text-muted"
+                                     data-approved="{{ $approvedCount }}">
+                                    @if ($groupSplitPreview)
+                                        {{ $approvedCount }} pemain → {{ $groupSplitPreview['group_count'] }} grup ({{ $groupSplitPreview['label'] }})
+                                    @else
+                                        Pemain tidak cukup untuk pembagian grup dengan batas ini.
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    @endif
                     <div class="d-grid gap-2">
                         <button type="button"
                                 id="btn-close-registration"

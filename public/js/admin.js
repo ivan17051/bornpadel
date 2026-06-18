@@ -201,6 +201,63 @@ const BornPadelAdmin = (function () {
     };
 
     const initMatchmakingActions = () => {
+        const minInput = document.getElementById('min-pemain-grup');
+        const maxInput = document.getElementById('max-pemain-grup');
+        const previewEl = document.getElementById('group-split-preview');
+
+        const calculateGroupSizes = (total, min, max) => {
+            if (total < min || min > max) {
+                return null;
+            }
+
+            const minGroups = Math.ceil(total / max);
+            const maxGroups = Math.floor(total / min);
+
+            for (let groupCount = minGroups; groupCount <= maxGroups; groupCount++) {
+                const base = Math.floor(total / groupCount);
+                const remainder = total % groupCount;
+                const sizes = [];
+
+                for (let i = 0; i < groupCount; i++) {
+                    sizes.push(base + (i < remainder ? 1 : 0));
+                }
+
+                if (Math.min(...sizes) >= min && Math.max(...sizes) <= max) {
+                    return sizes;
+                }
+            }
+
+            return null;
+        };
+
+        const updateGroupSplitPreview = () => {
+            if (!previewEl || !minInput || !maxInput) {
+                return;
+            }
+
+            const total = parseInt(previewEl.dataset.approved, 10) || 0;
+            const min = parseInt(minInput.value, 10);
+            const max = parseInt(maxInput.value, 10);
+            const sizes = calculateGroupSizes(total, min, max);
+
+            if (!sizes) {
+                previewEl.textContent = 'Pemain tidak cukup untuk pembagian grup dengan batas ini.';
+                return;
+            }
+
+            previewEl.textContent = `${total} pemain → ${sizes.length} grup (${sizes.join(' + ')})`;
+        };
+
+        if (minInput && maxInput) {
+            minInput.addEventListener('input', updateGroupSplitPreview);
+            maxInput.addEventListener('input', updateGroupSplitPreview);
+        }
+
+        const getGroupSettings = () => ({
+            min_pemain_grup: parseInt(minInput?.value || '3', 10),
+            max_pemain_grup: parseInt(maxInput?.value || '4', 10),
+        });
+
         const closeBtn = document.getElementById('btn-close-registration');
 
         if (closeBtn && !closeBtn.disabled) {
@@ -262,15 +319,29 @@ const BornPadelAdmin = (function () {
 
             btn.addEventListener('click', async () => {
                 const mode = btn.dataset.mode || 'random';
+                const groupSettings = getGroupSettings();
+                const total = parseInt(previewEl?.dataset.approved || '0', 10);
+                const sizes = calculateGroupSizes(
+                    total,
+                    groupSettings.min_pemain_grup,
+                    groupSettings.max_pemain_grup
+                );
+
+                if (!sizes) {
+                    showAlert('Pemain tidak cukup atau batas min/max grup tidak valid.', 'error');
+                    return;
+                }
+
+                const previewText = `${total} pemain → ${sizes.length} grup (${sizes.join(' + ')})`;
                 const confirmed = await confirmAction(mode === 'by_rating'
                     ? {
                         title: 'Kelompokkan pemain berdasarkan rating?',
-                        text: 'Pemain dengan rating serupa akan ditempatkan dalam grup yang sama (4 pemain/grup) dan jadwal pertandingan dibuat. Tindakan ini tidak dapat diulang.',
+                        text: `${previewText}. Jadwal pertandingan akan dibuat. Tindakan ini tidak dapat diulang.`,
                         confirmText: 'Ya, buat grup rating',
                     }
                     : {
                         title: 'Acak pemain ke grup?',
-                        text: 'Pembagian 4 pemain/grup akan dibuat beserta jadwal pertandingan. Tindakan ini tidak dapat diulang.',
+                        text: `${previewText}. Jadwal pertandingan akan dibuat. Tindakan ini tidak dapat diulang.`,
                         confirmText: 'Ya, random grup',
                     });
                 if (!confirmed) return;
@@ -282,6 +353,7 @@ const BornPadelAdmin = (function () {
                     const data = await apiRequest(btn.dataset.url, 'POST', {
                         id_turnamen: parseInt(btn.dataset.turnamen, 10),
                         mode,
+                        ...groupSettings,
                     });
                     showToast(data.message);
                     reloadPage();
@@ -299,24 +371,117 @@ const BornPadelAdmin = (function () {
 
         const modal = new bootstrap.Modal(modalEl);
         const form = document.getElementById('score-form');
+        const setsContainer = document.getElementById('score-sets-container');
+        const addSetBtn = document.getElementById('btn-add-set');
         const errorEl = document.getElementById('score-form-error');
         const saveBtn = document.getElementById('btn-save-score');
         const metaEl = document.getElementById('score-modal-meta');
         const readonlyEl = document.getElementById('score-modal-readonly');
+        const MIN_SETS = 3;
+        const MAX_SETS = 5;
         let storeUrl = null;
         let isReadonly = false;
 
-        const resetForm = () => {
-            form.querySelectorAll('input').forEach((input) => {
-                input.value = '';
-                input.disabled = false;
+        const buildSetRow = (setNumber, values = {}) => {
+            const row = document.createElement('div');
+            row.className = 'row g-2 mb-2 align-items-center set-row';
+            row.dataset.set = String(setNumber);
+
+            const p1 = values.p1 ?? '';
+            const p2 = values.p2 ?? '';
+
+            row.innerHTML = `
+                <div class="col-4 text-center">
+                    <span class="badge text-bg-secondary set-label">Set ${setNumber}</span>
+                    <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1 btn-remove-set d-none" title="Hapus set">
+                        <i class="bi bi-x-circle"></i>
+                    </button>
+                </div>
+                <div class="col-4">
+                    <input type="number" class="form-control form-control-sm text-center skor-p1"
+                           min="0" max="99" placeholder="0" value="${p1}">
+                </div>
+                <div class="col-4">
+                    <input type="number" class="form-control form-control-sm text-center skor-p2"
+                           min="0" max="99" placeholder="0" value="${p2}">
+                </div>
+            `;
+
+            return row;
+        };
+
+        const updateSetControls = () => {
+            const rows = setsContainer.querySelectorAll('.set-row');
+            const count = rows.length;
+
+            rows.forEach((row, index) => {
+                row.dataset.set = String(index + 1);
+                const label = row.querySelector('.set-label');
+                if (label) {
+                    label.textContent = `Set ${index + 1}`;
+                }
+
+                const removeBtn = row.querySelector('.btn-remove-set');
+                if (removeBtn) {
+                    removeBtn.classList.toggle('d-none', count <= MIN_SETS);
+                }
             });
+
+            if (addSetBtn) {
+                addSetBtn.disabled = count >= MAX_SETS;
+                addSetBtn.classList.toggle('d-none', count >= MAX_SETS);
+            }
+        };
+
+        const renderSets = (existingScores = []) => {
+            setsContainer.innerHTML = '';
+
+            const rowCount = Math.min(
+                MAX_SETS,
+                Math.max(MIN_SETS, existingScores.length || MIN_SETS)
+            );
+
+            for (let i = 0; i < rowCount; i++) {
+                const score = existingScores[i];
+                const values = score
+                    ? { p1: score.skor_pemain1, p2: score.skor_pemain2 }
+                    : {};
+                setsContainer.appendChild(buildSetRow(i + 1, values));
+            }
+
+            updateSetControls();
+        };
+
+        const resetForm = () => {
+            renderSets();
+            if (addSetBtn) addSetBtn.classList.remove('d-none');
             errorEl.classList.add('d-none');
             form.classList.remove('d-none');
             readonlyEl.classList.add('d-none');
             saveBtn.classList.remove('d-none');
             isReadonly = false;
         };
+
+        if (addSetBtn) {
+            addSetBtn.addEventListener('click', () => {
+                const count = setsContainer.querySelectorAll('.set-row').length;
+                if (count >= MAX_SETS) return;
+
+                setsContainer.appendChild(buildSetRow(count + 1));
+                updateSetControls();
+            });
+        }
+
+        setsContainer.addEventListener('click', (event) => {
+            const removeBtn = event.target.closest('.btn-remove-set');
+            if (!removeBtn) return;
+
+            const rows = setsContainer.querySelectorAll('.set-row');
+            if (rows.length <= MIN_SETS) return;
+
+            removeBtn.closest('.set-row')?.remove();
+            updateSetControls();
+        });
 
         const openModal = async (showUrl, saveUrl, readonly) => {
             resetForm();
@@ -337,12 +502,14 @@ const BornPadelAdmin = (function () {
                 if (!match.ready_for_scoring && match.status !== 'completed') {
                     form.classList.add('d-none');
                     saveBtn.classList.add('d-none');
+                    if (addSetBtn) addSetBtn.classList.add('d-none');
                     readonlyEl.classList.remove('d-none');
                     readonlyEl.innerHTML = '<p class="text-muted mb-0">Menunggu kedua pemain ditentukan dari pertandingan sebelumnya.</p>';
                 } else if (readonly || match.status === 'completed') {
                     isReadonly = true;
                     form.classList.add('d-none');
                     saveBtn.classList.add('d-none');
+                    if (addSetBtn) addSetBtn.classList.add('d-none');
                     readonlyEl.classList.remove('d-none');
                     readonlyEl.innerHTML = match.skor.length
                         ? match.skor.map((s) =>
@@ -353,13 +520,7 @@ const BornPadelAdmin = (function () {
                           ).join('')
                         : '<p class="text-muted mb-0">Belum ada skor.</p>';
                 } else if (match.skor.length) {
-                    match.skor.forEach((s, idx) => {
-                        const row = form.querySelectorAll('.set-row')[idx];
-                        if (row) {
-                            row.querySelector('.skor-p1').value = s.skor_pemain1;
-                            row.querySelector('.skor-p2').value = s.skor_pemain2;
-                        }
-                    });
+                    renderSets(match.skor);
                 }
 
                 modal.show();
@@ -395,8 +556,8 @@ const BornPadelAdmin = (function () {
                 }
             });
 
-            if (sets.length < 2) {
-                errorEl.textContent = 'Minimal 2 set harus diisi.';
+            if (sets.length < MIN_SETS) {
+                errorEl.textContent = `Minimal ${MIN_SETS} set harus diisi.`;
                 errorEl.classList.remove('d-none');
                 return;
             }

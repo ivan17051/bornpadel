@@ -10,12 +10,12 @@ class CreatePertandinganTable extends Migration
     {
         Schema::create('pertandingan', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('id_turnamen')->constrained('turnamen')->cascadeOnDelete();
+            $table->foreignId('id_turnamen')->constrained('m_turnamen')->cascadeOnDelete();
             $table->foreignId('id_grup')->nullable()->constrained('grup')->nullOnDelete();
             $table->enum('nama_ronde', ['Fase Grup', 'Perempatfinal', 'Semifinal', 'Final']);
-            $table->foreignId('id_pemain1')->constrained('pemain')->restrictOnDelete();
-            $table->foreignId('id_pemain2')->constrained('pemain')->restrictOnDelete();
-            $table->foreignId('id_pemenang')->nullable()->constrained('pemain')->nullOnDelete();
+            $table->foreignId('id_pemain1')->constrained('m_pemain')->restrictOnDelete();
+            $table->foreignId('id_pemain2')->constrained('m_pemain')->restrictOnDelete();
+            $table->foreignId('id_pemenang')->nullable()->constrained('m_pemain')->nullOnDelete();
             $table->enum('status', ['scheduled', 'ongoing', 'completed'])->default('scheduled');
             $table->unsignedBigInteger('id_next_pertandingan')->nullable();
             $table->timestamps();

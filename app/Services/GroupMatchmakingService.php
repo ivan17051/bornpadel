@@ -14,7 +14,71 @@ use RuntimeException;
 
 class GroupMatchmakingService
 {
-    const PLAYERS_PER_GROUP = 4;
+    const DEFAULT_MIN_PER_GROUP = 3;
+    const DEFAULT_MAX_PER_GROUP = 4;
+
+    public function getDefaultMinPerGroup(): int
+    {
+        return self::DEFAULT_MIN_PER_GROUP;
+    }
+
+    public function getDefaultMaxPerGroup(): int
+    {
+        return self::DEFAULT_MAX_PER_GROUP;
+    }
+
+    public function previewGroupSplit(int $totalPlayers, int $minPerGroup, int $maxPerGroup): ?array
+    {
+        if ($totalPlayers < $minPerGroup) {
+            return null;
+        }
+
+        try {
+            $sizes = $this->calculateGroupSizes($totalPlayers, $minPerGroup, $maxPerGroup);
+
+            return [
+                'group_count' => count($sizes),
+                'sizes' => $sizes,
+                'label' => implode(' + ', $sizes),
+            ];
+        } catch (RuntimeException $e) {
+            return null;
+        }
+    }
+
+    public function calculateGroupSizes(int $totalPlayers, int $minPerGroup, int $maxPerGroup): array
+    {
+        if ($minPerGroup > $maxPerGroup) {
+            throw new RuntimeException('Minimum pemain per grup tidak boleh lebih besar dari maksimum.');
+        }
+
+        if ($totalPlayers < $minPerGroup) {
+            throw new RuntimeException("Minimal {$minPerGroup} pemain approved diperlukan.");
+        }
+
+        $minGroups = (int) ceil($totalPlayers / $maxPerGroup);
+        $maxGroups = (int) floor($totalPlayers / $minPerGroup);
+
+        if ($minGroups > $maxGroups) {
+            throw new RuntimeException('Tidak dapat membagi pemain secara merata dengan batas min/max grup ini.');
+        }
+
+        for ($groupCount = $minGroups; $groupCount <= $maxGroups; $groupCount++) {
+            $base = intdiv($totalPlayers, $groupCount);
+            $remainder = $totalPlayers % $groupCount;
+            $sizes = [];
+
+            for ($i = 0; $i < $groupCount; $i++) {
+                $sizes[] = $base + ($i < $remainder ? 1 : 0);
+            }
+
+            if (min($sizes) >= $minPerGroup && max($sizes) <= $maxPerGroup) {
+                return $sizes;
+            }
+        }
+
+        throw new RuntimeException('Tidak dapat membagi pemain secara merata dengan batas min/max grup ini.');
+    }
 
     public function getActiveTournament(): ?Turnamen
     {
@@ -71,7 +135,8 @@ class GroupMatchmakingService
 
     public function generateRandomGroups(
         Turnamen $turnamen,
-        int $playersPerGroup = self::PLAYERS_PER_GROUP,
+        int $minPerGroup,
+        int $maxPerGroup,
         string $mode = 'random'
     ): array {
         if ($turnamen->status === 'open') {
@@ -91,14 +156,11 @@ class GroupMatchmakingService
         }
 
         $players = $this->getApprovedPlayers($turnamen);
+        $groupSizes = $this->calculateGroupSizes($players->count(), $minPerGroup, $maxPerGroup);
 
-        if ($players->count() < 2) {
-            throw new RuntimeException('Minimal 2 pemain dengan status approved diperlukan.');
-        }
-
-        return DB::transaction(function () use ($turnamen, $players, $playersPerGroup, $mode) {
-            $chunks = $this->partitionPlayersIntoGroups($players, $playersPerGroup, $mode);
-            $result = ['groups' => [], 'matches' => 0, 'mode' => $mode];
+        return DB::transaction(function () use ($turnamen, $players, $groupSizes, $mode) {
+            $chunks = $this->distributePlayersIntoGroups($players, $groupSizes, $mode);
+            $result = ['groups' => [], 'matches' => 0, 'mode' => $mode, 'group_sizes' => $groupSizes];
 
             foreach ($chunks as $index => $groupPlayers) {
                 $grup = Grup::create([
@@ -149,17 +211,25 @@ class GroupMatchmakingService
         return $count;
     }
 
-    protected function partitionPlayersIntoGroups(Collection $players, int $playersPerGroup, string $mode): Collection
+    protected function distributePlayersIntoGroups(Collection $players, array $groupSizes, string $mode): array
     {
         if ($mode === 'by_rating') {
-            $sorted = $players->sortByDesc(function (Pemain $pemain) {
+            $ordered = $players->sortByDesc(function (Pemain $pemain) {
                 return (float) $pemain->rating;
             })->values();
-
-            return $sorted->chunk($playersPerGroup);
+        } else {
+            $ordered = $players->shuffle()->values();
         }
 
-        return $players->shuffle()->values()->chunk($playersPerGroup);
+        $groups = [];
+        $offset = 0;
+
+        foreach ($groupSizes as $size) {
+            $groups[] = $ordered->slice($offset, $size)->values();
+            $offset += $size;
+        }
+
+        return $groups;
     }
 
     protected function groupLabel(int $index): string

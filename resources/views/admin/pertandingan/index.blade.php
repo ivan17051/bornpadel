@@ -51,20 +51,22 @@
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center row">
-        <div class="col-md-6">
-        <h5 class="card-title mb-0">Daftar Pertandingan</h5>
-        </div>
-        <div class="col-md-6 text-end">
-        @if ($turnamen)
-            <span class="badge text-bg-secondary">{{ $turnamen->nama }}</span>
-        @endif
+<div class="card overflow-hidden">
+    <div class="card-header">
+        <div class="row align-items-center g-2">
+            <div class="col-md-6">
+                <h5 class="card-title mb-0">Daftar Pertandingan</h5>
+            </div>
+            <div class="col-md-6 text-md-end">
+                @if ($turnamen)
+                    <span class="badge text-bg-secondary">{{ $turnamen->nama }}</span>
+                @endif
+            </div>
         </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover table-striped mb-0 align-middle">
+            <table class="table table-hover table-striped mb-0 align-middle w-100">
                 <thead class="table-light">
                     <tr>
                         <th>Ronde</th>
@@ -134,7 +136,17 @@
         </div>
     </div>
     @if ($pertandingan->hasPages())
-        <div class="card-footer">{{ $pertandingan->links() }}</div>
+        <div class="card-footer d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2 py-3">
+            @if ($pertandingan->total() > 0)
+                <div class="small text-muted">
+                    Menampilkan {{ $pertandingan->firstItem() }}–{{ $pertandingan->lastItem() }}
+                    dari {{ $pertandingan->total() }} pertandingan
+                </div>
+            @endif
+            <div class="ms-sm-auto">
+                {{ $pertandingan->links() }}
+            </div>
+        </div>
     @endif
 </div>
 
@@ -155,24 +167,15 @@
                         <div class="col-4" id="score-p1-name">Pemain 1</div>
                         <div class="col-4" id="score-p2-name">Pemain 2</div>
                     </div>
-                    @for ($i = 1; $i <= 3; $i++)
-                        <div class="row g-2 mb-2 align-items-center set-row" data-set="{{ $i }}">
-                            <div class="col-4 text-center">
-                                <span class="badge text-bg-secondary">Set {{ $i }}</span>
-                            </div>
-                            <div class="col-4">
-                                <input type="number" class="form-control form-control-sm text-center skor-p1"
-                                       min="0" max="99" placeholder="0" {{ $i > 2 ? '' : '' }}>
-                            </div>
-                            <div class="col-4">
-                                <input type="number" class="form-control form-control-sm text-center skor-p2"
-                                       min="0" max="99" placeholder="0">
-                            </div>
-                        </div>
-                    @endfor
+                    <div id="score-sets-container"></div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-set">
+                            <i class="bi bi-plus-lg me-1"></i> Tambah Set
+                        </button>
+                    </div>
                     <div class="alert alert-info small mt-3 mb-0">
                         <i class="bi bi-info-circle me-1"></i>
-                        Best of 3 — pemenang harus menang 2 set. Set 3 opsional jika sudah 2-0.
+                        Best of 5 — pemenang harus menang 3 set. Tambah set hingga maksimal 5 jika diperlukan.
                     </div>
                     <div id="score-form-error" class="alert alert-danger small mt-2 d-none"></div>
                 </form>

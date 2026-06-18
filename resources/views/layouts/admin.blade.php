@@ -41,6 +41,8 @@
         .status-badge-approved { background: #198754; }
         .status-badge-rejected { background: #dc3545; }
         .toast-container { z-index: 1090; }
+        .card-footer .pagination { margin-bottom: 0; }
+        .card-footer nav { max-width: 100%; overflow-x: auto; }
     </style>
     @stack('styles')
 </head>

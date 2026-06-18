@@ -8,7 +8,7 @@ class CreateTurnamenTable extends Migration
 {
     public function up()
     {
-        Schema::create('turnamen', function (Blueprint $table) {
+        Schema::create('m_turnamen', function (Blueprint $table) {
             $table->id();
             $table->string('nama');
             $table->decimal('harga', 12, 2)->default(0);
@@ -21,6 +21,6 @@ class CreateTurnamenTable extends Migration
 
     public function down()
     {
-        Schema::dropIfExists('turnamen');
+        Schema::dropIfExists('m_turnamen');
     }
 }

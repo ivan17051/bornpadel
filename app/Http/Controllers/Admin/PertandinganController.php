@@ -56,7 +56,7 @@ class PertandinganController extends Controller
             $query->where('status', $request->status);
         }
 
-        $pertandingan = $query->paginate(20)->withQueryString();
+        $pertandingan = $query->paginate(15)->withQueryString();
 
         $grupList = $turnamen
             ? Grup::where('id_turnamen', $turnamen->id)->orderBy('nama')->get()

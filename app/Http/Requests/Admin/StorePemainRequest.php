@@ -14,7 +14,7 @@ class StorePemainRequest extends FormRequest
     public function rules()
     {
         return [
-            'id_turnamen' => ['required', 'exists:turnamen,id'],
+            'id_turnamen' => ['required', 'exists:m_turnamen,id'],
             'nama' => ['required', 'string', 'max:255'],
             'tgl_lahir' => ['required', 'date', 'before:today'],
             'gender' => ['required', 'in:male,female'],

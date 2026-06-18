@@ -70,6 +70,11 @@
                                 <i class="bi bi-box-arrow-in-right me-1"></i> Login
                             </button>
                         </form>
+                        <div class="text-center mt-3">
+                            <a href="{{ route('guest.landing') }}" class="btn btn-outline-secondary btn-sm w-100">
+                                <i class="bi bi-house me-1"></i> Kembali ke Situs Publik
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>

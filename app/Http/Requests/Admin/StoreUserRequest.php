@@ -16,11 +16,11 @@ class StoreUserRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:255', 'alpha_dash', Rule::unique('users', 'username')],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')],
+            'username' => ['required', 'string', 'max:255', 'alpha_dash', Rule::unique('m_users', 'username')],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('m_users', 'email')],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'role' => ['required', 'in:admin,panitia'],
-            'id_turnamen' => ['nullable', 'required_if:role,panitia', 'exists:turnamen,id'],
+            'id_turnamen' => ['nullable', 'required_if:role,panitia', 'exists:m_turnamen,id'],
         ];
     }
 

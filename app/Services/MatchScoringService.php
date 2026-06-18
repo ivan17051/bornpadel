@@ -89,15 +89,17 @@ class MatchScoringService
             }
         }
 
-        if ($setsWonP1 < 2 && $setsWonP2 < 2) {
-            throw new RuntimeException('Pemenang harus memenangkan minimal 2 set (Best of 3).');
+        $setsToWin = 3;
+
+        if ($setsWonP1 < $setsToWin && $setsWonP2 < $setsToWin) {
+            throw new RuntimeException('Pemenang harus memenangkan minimal 3 set (Best of 5).');
         }
 
-        if ($setsWonP1 >= 2 && $setsWonP2 >= 2) {
-            throw new RuntimeException('Skor tidak valid. Hanya satu pemain yang boleh memenangkan 2 set.');
+        if ($setsWonP1 >= $setsToWin && $setsWonP2 >= $setsToWin) {
+            throw new RuntimeException('Skor tidak valid. Hanya satu pemain yang boleh memenangkan 3 set.');
         }
 
-        $p1Won = $setsWonP1 >= 2;
+        $p1Won = $setsWonP1 >= $setsToWin;
 
         return [
             'winner_id' => $p1Won ? $pemain1Id : $pemain2Id,

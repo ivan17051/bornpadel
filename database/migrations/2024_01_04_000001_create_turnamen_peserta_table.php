@@ -13,8 +13,8 @@ class CreateTurnamenPesertaTable extends Migration
     {
         Schema::create('turnamen_peserta', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('id_turnamen')->constrained('turnamen')->cascadeOnDelete();
-            $table->foreignId('id_pemain')->constrained('pemain')->cascadeOnDelete();
+            $table->foreignId('id_turnamen')->constrained('m_turnamen')->cascadeOnDelete();
+            $table->foreignId('id_pemain')->constrained('m_pemain')->cascadeOnDelete();
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
             $table->timestamps();
 
@@ -33,14 +33,14 @@ class CreateTurnamenPesertaTable extends Migration
             }
         }
 
-        Schema::table('pemain', function (Blueprint $table) {
+        Schema::table('m_pemain', function (Blueprint $table) {
             $table->dropColumn('status');
         });
     }
 
     public function down()
     {
-        Schema::table('pemain', function (Blueprint $table) {
+        Schema::table('m_pemain', function (Blueprint $table) {
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending')->after('foto');
         });
 

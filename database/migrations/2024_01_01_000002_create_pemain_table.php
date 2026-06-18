@@ -8,7 +8,7 @@ class CreatePemainTable extends Migration
 {
     public function up()
     {
-        Schema::create('pemain', function (Blueprint $table) {
+        Schema::create('m_pemain', function (Blueprint $table) {
             $table->id();
             $table->string('nama');
             $table->date('tgl_lahir');
@@ -24,6 +24,6 @@ class CreatePemainTable extends Migration
 
     public function down()
     {
-        Schema::dropIfExists('pemain');
+        Schema::dropIfExists('m_pemain');
     }
 }

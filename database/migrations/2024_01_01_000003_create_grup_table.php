@@ -10,7 +10,7 @@ class CreateGrupTable extends Migration
     {
         Schema::create('grup', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('id_turnamen')->constrained('turnamen')->cascadeOnDelete();
+            $table->foreignId('id_turnamen')->constrained('m_turnamen')->cascadeOnDelete();
             $table->string('nama');
             $table->timestamps();
         });

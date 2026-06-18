@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Turnamen extends Model
 {
-    protected $table = 'turnamen';
+    protected $table = 'm_turnamen';
 
     const CREATED_AT = 'doc';
     const UPDATED_AT = 'dom';
