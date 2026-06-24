@@ -71,11 +71,23 @@ class RegistrationController extends Controller
                 ->withErrors(['no_hp' => 'Nomor HP sudah terdaftar pada turnamen ini.']);
         }
 
+        $existingPartner = null;
+        $partnerNoHp = trim((string) old('partner_no_hp', ''));
+
+        if ($turnamen->isDouble() && $partnerNoHp !== '') {
+            $existingPartner = $this->registrationService->findPemainByPhone($partnerNoHp);
+
+            if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $turnamen)) {
+                $existingPartner = null;
+            }
+        }
+
         return view('guest.register-form', [
             'turnamen' => $turnamen,
             'noHp' => $noHp,
             'existingPemain' => $existingPemain,
             'isExisting' => (bool) $existingPemain,
+            'existingPartner' => $existingPartner,
         ]);
     }
 
@@ -88,16 +100,56 @@ class RegistrationController extends Controller
                 ->with('warning', 'Pendaftaran ditutup. Tidak ada turnamen aktif.');
         }
 
+        $validated = $request->validated();
+
         try {
+            if ($turnamen->isDouble()) {
+                $result = $this->registrationService->registerPair(
+                    $turnamen,
+                    $validated,
+                    $request->file('foto'),
+                    [
+                        'no_hp' => $validated['partner_no_hp'],
+                        'nama' => $validated['partner_nama'],
+                        'tgl_lahir' => $validated['partner_tgl_lahir'],
+                        'gender' => $validated['partner_gender'],
+                        'rating' => $validated['partner_rating'] ?? null,
+                    ],
+                    $request->file('partner_foto')
+                );
+
+                $pemain = $result['pemain'];
+                $partner = $result['partner'];
+
+                return redirect()
+                    ->route('guest.register.success', ['pemain' => $pemain->id])
+                    ->with('registered_pemain', [
+                        'id' => $pemain->id,
+                        'nama' => $pemain->nama,
+                        'no_hp' => $pemain->no_hp,
+                        'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
+                        'partner' => [
+                            'id' => $partner->id,
+                            'nama' => $partner->nama,
+                            'no_hp' => $partner->no_hp,
+                            'status' => $this->registrationService->getRegistrationStatus($partner, $turnamen),
+                        ],
+                    ]);
+            }
+
             $pemain = $this->registrationService->register(
                 $turnamen,
-                $request->validated(),
+                $validated,
                 $request->file('foto')
             );
         } catch (\RuntimeException $e) {
-            $field = str_contains($e->getMessage(), 'gambar') || str_contains($e->getMessage(), 'WebP') || str_contains($e->getMessage(), 'Foto')
-                ? 'foto'
-                : 'no_hp';
+            $field = 'no_hp';
+
+            if (str_contains($e->getMessage(), 'pemain 2')) {
+                $field = 'partner_no_hp';
+            } elseif (str_contains($e->getMessage(), 'gambar') || str_contains($e->getMessage(), 'WebP') || str_contains($e->getMessage(), 'Foto')) {
+                $field = str_contains($e->getMessage(), 'pemain 2') ? 'partner_foto' : 'foto';
+            }
 
             return redirect()
                 ->route('guest.register.form', ['no_hp' => $request->input('no_hp')])
@@ -125,7 +177,9 @@ class RegistrationController extends Controller
 
         $turnamen = $this->registrationService->getActiveTournament();
         $pemainModel = isset($pemain['id']) ? \App\Models\Pemain::find($pemain['id']) : null;
+        $partnerModel = isset($pemain['partner']['id']) ? \App\Models\Pemain::find($pemain['partner']['id']) : null;
+        $partner = $pemain['partner'] ?? null;
 
-        return view('guest.register-success', compact('pemain', 'turnamen', 'pemainModel'));
+        return view('guest.register-success', compact('pemain', 'partner', 'turnamen', 'pemainModel', 'partnerModel'));
     }
 }

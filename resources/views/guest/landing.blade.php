@@ -13,7 +13,8 @@
                         {{ $turnamen->isRegistrationOpen() ? 'Pendaftaran Dibuka' : 'Turnamen Berlangsung' }}
                     </span>
                     <h1 class="display-6 fw-bold mb-2">{{ $turnamen->nama }}</h1>
-                    <p class="mb-0 opacity-75">Bergabunglah dalam turnamen padel terbaik di kota ini.</p>
+                    <p class="mb-2 opacity-75">Bergabunglah dalam turnamen padel terbaik di kota ini.</p>
+                    <span class="badge text-bg-light text-dark border">{{ $turnamen->jenis_label }}</span>
                 </div>
             </div>
 
@@ -27,7 +28,13 @@
                             <div class="display-6 fw-bold text-primary mb-1">
                                 Rp {{ number_format($turnamen->harga, 0, ',', '.') }}
                             </div>
-                            <p class="text-muted small mb-0">Per peserta. Pembayaran dilakukan setelah verifikasi pendaftaran.</p>
+                            <p class="text-muted small mb-0">
+                                @if ($turnamen->isDouble())
+                                    Per pasang. Pembayaran dilakukan setelah verifikasi pendaftaran.
+                                @else
+                                    Per peserta. Pembayaran dilakukan setelah verifikasi pendaftaran.
+                                @endif
+                            </p>
                         </div>
                     </div>
                 </div>

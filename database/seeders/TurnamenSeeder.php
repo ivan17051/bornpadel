@@ -13,6 +13,7 @@ class TurnamenSeeder extends Seeder
             'nama' => 'Born Padel Open 2026',
             'harga' => 250000,
             'syarat' => 'Minimal usia 18 tahun, rating WPT minimal 2.0, membawa raket sendiri.',
+            'jenis' => 'double',
             'status' => 'open',
         ]);
 
@@ -20,6 +21,7 @@ class TurnamenSeeder extends Seeder
             'nama' => 'Born Padel Club Championship',
             'harga' => 150000,
             'syarat' => 'Terbuka untuk member aktif Born Padel Club.',
+            'jenis' => 'single',
             'status' => 'draft',
         ]);
     }

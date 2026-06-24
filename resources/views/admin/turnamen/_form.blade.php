@@ -43,6 +43,21 @@
 </div>
 
 <div class="mb-3">
+    <label for="jenis" class="form-label">Jenis Turnamen <span class="text-danger">*</span></label>
+    <select name="jenis" id="jenis" class="form-select @error('jenis') is-invalid @enderror" required>
+        @foreach (['single' => 'Single', 'double' => 'Double'] as $value => $label)
+            <option value="{{ $value }}" {{ old('jenis', optional($turnamenModel)->jenis ?? 'single') === $value ? 'selected' : '' }}>
+                {{ $label }}
+            </option>
+        @endforeach
+    </select>
+    <div class="form-text">Double: pendaftaran guest memerlukan data 2 pemain.</div>
+    @error('jenis')
+        <div class="invalid-feedback">{{ $message }}</div>
+    @enderror
+</div>
+
+<div class="mb-3">
     <label for="status" class="form-label">Status <span class="text-danger">*</span></label>
     <select name="status" id="status" class="form-select @error('status') is-invalid @enderror" required>
         @foreach (['draft' => 'Draft', 'open' => 'Open (Pendaftaran Dibuka)', 'ongoing' => 'Ongoing (Berlangsung)', 'completed' => 'Completed (Selesai)'] as $value => $label)

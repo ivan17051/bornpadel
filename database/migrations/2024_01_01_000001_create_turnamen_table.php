@@ -13,6 +13,7 @@ class CreateTurnamenTable extends Migration
             $table->string('nama');
             $table->decimal('harga', 12, 2)->default(0);
             $table->text('syarat')->nullable();
+            $table->enum('jenis', ['single', 'double'])->default('single');
             $table->enum('status', ['draft', 'open', 'ongoing', 'completed'])->default('draft');
             $table->timestamp('doc')->useCurrent();
             $table->timestamp('dom')->useCurrent()->useCurrentOnUpdate();

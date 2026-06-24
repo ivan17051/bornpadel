@@ -15,6 +15,7 @@ class Turnamen extends Model
         'nama',
         'harga',
         'syarat',
+        'jenis',
         'status',
     ];
 
@@ -37,6 +38,21 @@ class Turnamen extends Model
     public function isRegistrationClosed(): bool
     {
         return in_array($this->status, ['ongoing', 'completed'], true);
+    }
+
+    public function isSingle(): bool
+    {
+        return $this->jenis === 'single';
+    }
+
+    public function isDouble(): bool
+    {
+        return $this->jenis === 'double';
+    }
+
+    public function getJenisLabelAttribute(): string
+    {
+        return $this->jenis === 'double' ? 'Double' : 'Single';
     }
 
     public function turnamenPeserta()

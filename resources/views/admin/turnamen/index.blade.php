@@ -56,6 +56,7 @@
                         <th>#</th>
                         <th>Nama</th>
                         <th class="d-none d-md-table-cell">Biaya</th>
+                        <th class="d-none d-lg-table-cell">Jenis</th>
                         <th>Status</th>
                         <th class="d-none d-lg-table-cell">Dibuat</th>
                         <th class="text-end">Aksi</th>
@@ -73,6 +74,9 @@
                             </td>
                             <td class="d-none d-md-table-cell">
                                 Rp {{ number_format($item->harga, 0, ',', '.') }}
+                            </td>
+                            <td class="d-none d-lg-table-cell">
+                                <span class="badge text-bg-light text-dark border">{{ $item->jenis_label }}</span>
                             </td>
                             <td>
                                 @php
@@ -110,7 +114,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4">
+                            <td colspan="7" class="text-center text-muted py-4">
                                 Belum ada turnamen. <a href="{{ route('admin.turnamen.create') }}">Buat turnamen pertama</a>.
                             </td>
                         </tr>

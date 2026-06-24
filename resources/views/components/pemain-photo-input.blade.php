@@ -1,6 +1,7 @@
 @props([
     'inputId' => 'foto',
     'previewId' => 'foto-preview',
+    'inputName' => 'foto',
     'label' => 'Foto Pemain',
     'optional' => true,
     'previewSrc' => null,
@@ -41,14 +42,14 @@
     @endif
 
     <input type="file"
-           name="foto"
+           name="{{ $inputName }}"
            id="{{ $inputId }}"
-           class="form-control @error('foto') is-invalid @enderror"
+           class="form-control @error($inputName) is-invalid @enderror"
            accept="image/jpeg,image/png,image/webp"
            data-pemain-photo-input
            data-preview-target="{{ $previewId }}"
            data-placeholder="{{ $placeholder }}">
-    @error('foto')
+    @error($inputName)
         <div class="invalid-feedback">{{ $message }}</div>
     @enderror
 </div>

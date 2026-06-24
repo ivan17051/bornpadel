@@ -35,6 +35,8 @@ class TournamentController extends Controller
                 'harga' => $turnamen->harga,
                 'harga_formatted' => 'Rp ' . number_format($turnamen->harga, 0, ',', '.'),
                 'syarat' => $turnamen->syarat,
+                'jenis' => $turnamen->jenis,
+                'jenis_label' => $turnamen->jenis_label,
                 'status' => $turnamen->status,
                 'doc' => optional($turnamen->doc)->toIso8601String(),
             ],

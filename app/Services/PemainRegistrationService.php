@@ -45,10 +45,42 @@ class PemainRegistrationService
 
     public function register(Turnamen $turnamen, array $data, ?UploadedFile $foto = null): Pemain
     {
+        return $this->upsertAndEnroll($turnamen, $data, $foto);
+    }
+
+    /**
+     * @return array{pemain: Pemain, partner: Pemain}
+     */
+    public function registerPair(
+        Turnamen $turnamen,
+        array $player1,
+        ?UploadedFile $foto1,
+        array $player2,
+        ?UploadedFile $foto2
+    ): array {
+        if (trim($player1['no_hp']) === trim($player2['no_hp'])) {
+            throw new RuntimeException('Nomor HP pemain 1 dan pemain 2 tidak boleh sama.');
+        }
+
+        $pemain = $this->upsertAndEnroll($turnamen, $player1, $foto1, 1);
+        $partner = $this->upsertAndEnroll($turnamen, $player2, $foto2, 2);
+
+        return [
+            'pemain' => $pemain,
+            'partner' => $partner,
+        ];
+    }
+
+    protected function upsertAndEnroll(Turnamen $turnamen, array $data, ?UploadedFile $foto = null, int $playerNumber = 1): Pemain
+    {
         $existing = $this->findPemainByPhone($data['no_hp']);
 
         if ($existing) {
             if ($this->isRegisteredForTournament($existing, $turnamen)) {
+                if ($playerNumber === 2) {
+                    throw new RuntimeException('Nomor HP pemain 2 sudah terdaftar pada turnamen ini.');
+                }
+
                 throw new RuntimeException('Nomor HP sudah terdaftar pada turnamen ini.');
             }
 
