@@ -23,9 +23,7 @@
     <div class="mb-3">
         <label class="form-label">Nomor HP / WhatsApp</label>
         <input type="text" class="form-control" value="{{ $phoneValue ?? '' }}" readonly>
-        @if ($prefix === '')
-            <input type="hidden" name="no_hp" value="{{ $phoneValue ?? '' }}">
-        @endif
+        <input type="hidden" name="{{ $field('no_hp') }}" value="{{ $phoneValue ?? '' }}">
     </div>
 @else
     <div class="mb-3">

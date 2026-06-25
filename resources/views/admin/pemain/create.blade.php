@@ -12,6 +12,7 @@
 @php
     $photoService = app(\App\Services\PemainPhotoService::class);
     $placeholderAvatar = $photoService->placeholderUrl();
+    $isDoubleForm = $showForm && $selectedTurnamen && $selectedTurnamen->isDouble();
 @endphp
 
 <div class="row justify-content-center">
@@ -31,6 +32,12 @@
                         <div class="text-muted small text-uppercase">No. HP Pemain 1</div>
                         <strong>{{ $noHp }}</strong>
                     </div>
+                    @if ($isDoubleForm)
+                        <div class="mb-2">
+                            <div class="text-muted small text-uppercase">No. HP Pemain 2</div>
+                            <strong>{{ $partnerNoHp }}</strong>
+                        </div>
+                    @endif
                     <div>
                         <div class="text-muted small text-uppercase">Status Pendaftaran</div>
                         <strong>{{ ucfirst(old('status', request('status', 'approved'))) }}</strong>
@@ -69,8 +76,10 @@
                             'selectedTurnamen' => $selectedTurnamen,
                             'showForm' => true,
                             'noHp' => $noHp,
+                            'partnerNoHp' => $partnerNoHp,
                             'existingPemain' => $existingPemain,
                             'existingPartner' => $existingPartner,
+                            'isPartnerExisting' => $isPartnerExisting ?? false,
                         ])
                         <div class="d-flex gap-2 mt-4">
                             <button type="submit" class="btn btn-primary">

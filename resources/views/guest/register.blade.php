@@ -36,7 +36,8 @@
             <div class="card-body p-4">
                 <p class="text-muted small mb-4">
                     @if ($turnamen->isDouble())
-                        Masukkan nomor HP / WhatsApp <strong>pemain 1</strong> terlebih dahulu. Setelah itu Anda akan mengisi data pemain 1 dan pemain 2.
+                        Masukkan nomor HP / WhatsApp untuk <strong>pemain 1</strong> dan <strong>pemain 2</strong>.
+                        Pada langkah berikutnya, data yang sudah ada akan ditampilkan; jika belum terdaftar, Anda akan mengisi form untuk masing-masing pemain.
                     @else
                         Masukkan nomor HP / WhatsApp Anda terlebih dahulu. Jika sudah pernah terdaftar,
                         data Anda akan ditampilkan untuk diperiksa dan diperbarui.
@@ -48,10 +49,7 @@
 
                     <div class="mb-4">
                         <label for="no_hp" class="form-label fw-semibold">
-                            Nomor HP / WhatsApp
-                            @if ($turnamen->isDouble())
-                                Pemain 1
-                            @endif
+                            Nomor HP / WhatsApp Pemain 1
                             <span class="text-danger">*</span>
                         </label>
                         <input type="tel"
@@ -68,6 +66,27 @@
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
+
+                    @if ($turnamen->isDouble())
+                        <div class="mb-4">
+                            <label for="partner_no_hp" class="form-label fw-semibold">
+                                Nomor HP / WhatsApp Pemain 2
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="tel"
+                                   name="partner_no_hp"
+                                   id="partner_no_hp"
+                                   class="form-control form-control-lg @error('partner_no_hp') is-invalid @enderror"
+                                   value="{{ old('partner_no_hp') }}"
+                                   placeholder="08xxxxxxxxxx"
+                                   required
+                                   inputmode="tel"
+                                   autocomplete="tel">
+                            @error('partner_no_hp')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    @endif
 
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-bp btn-lg">

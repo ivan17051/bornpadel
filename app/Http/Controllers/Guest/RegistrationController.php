@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Guest;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LookupPemainRegistrationRequest;
 use App\Http\Requests\StorePemainRegistrationRequest;
+use App\Models\Pemain;
+use App\Models\TurnamenPeserta;
 use App\Services\PemainRegistrationService;
 
 class RegistrationController extends Controller
@@ -37,13 +39,30 @@ class RegistrationController extends Controller
                 ->with('warning', 'Pendaftaran ditutup. Tidak ada turnamen aktif.');
         }
 
-        $noHp = trim($request->validated()['no_hp']);
+        $validated = $request->validated();
+        $noHp = trim($validated['no_hp']);
         $existingPemain = $this->registrationService->findPemainByPhone($noHp);
 
         if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $turnamen)) {
             return back()
                 ->withInput()
-                ->withErrors(['no_hp' => 'Nomor HP sudah terdaftar pada turnamen ini.']);
+                ->withErrors(['no_hp' => 'Nomor HP pemain 1 sudah terdaftar pada turnamen ini.']);
+        }
+
+        if ($turnamen->isDouble()) {
+            $partnerNoHp = trim($validated['partner_no_hp']);
+            $existingPartner = $this->registrationService->findPemainByPhone($partnerNoHp);
+
+            if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $turnamen)) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['partner_no_hp' => 'Nomor HP pemain 2 sudah terdaftar pada turnamen ini.']);
+            }
+
+            return redirect()->route('guest.register.form', [
+                'no_hp' => $noHp,
+                'partner_no_hp' => $partnerNoHp,
+            ]);
         }
 
         return redirect()->route('guest.register.form', ['no_hp' => $noHp]);
@@ -68,26 +87,42 @@ class RegistrationController extends Controller
 
         if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $turnamen)) {
             return redirect()->route('guest.register')
-                ->withErrors(['no_hp' => 'Nomor HP sudah terdaftar pada turnamen ini.']);
+                ->withErrors(['no_hp' => 'Nomor HP pemain 1 sudah terdaftar pada turnamen ini.']);
         }
 
+        $partnerNoHp = '';
         $existingPartner = null;
-        $partnerNoHp = trim((string) old('partner_no_hp', ''));
+        $isPartnerExisting = false;
 
-        if ($turnamen->isDouble() && $partnerNoHp !== '') {
+        if ($turnamen->isDouble()) {
+            $partnerNoHp = trim((string) request('partner_no_hp', old('partner_no_hp', '')));
+
+            if ($partnerNoHp === '') {
+                return redirect()->route('guest.register');
+            }
+
+            if ($noHp === $partnerNoHp) {
+                return redirect()->route('guest.register')
+                    ->withErrors(['partner_no_hp' => 'Nomor HP pemain 2 harus berbeda dari pemain 1.']);
+            }
+
             $existingPartner = $this->registrationService->findPemainByPhone($partnerNoHp);
+            $isPartnerExisting = (bool) $existingPartner;
 
             if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $turnamen)) {
-                $existingPartner = null;
+                return redirect()->route('guest.register')
+                    ->withErrors(['partner_no_hp' => 'Nomor HP pemain 2 sudah terdaftar pada turnamen ini.']);
             }
         }
 
         return view('guest.register-form', [
             'turnamen' => $turnamen,
             'noHp' => $noHp,
+            'partnerNoHp' => $partnerNoHp,
             'existingPemain' => $existingPemain,
             'isExisting' => (bool) $existingPemain,
             'existingPartner' => $existingPartner,
+            'isPartnerExisting' => $isPartnerExisting,
         ]);
     }
 
@@ -122,17 +157,13 @@ class RegistrationController extends Controller
                 $partner = $result['partner'];
 
                 return redirect()
-                    ->route('guest.register.success', ['pemain' => $pemain->id])
-                    ->with('registered_pemain', [
-                        'id' => $pemain->id,
-                        'nama' => $pemain->nama,
-                        'no_hp' => $pemain->no_hp,
-                        'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
-                        'partner' => [
-                            'id' => $partner->id,
-                            'nama' => $partner->nama,
-                            'no_hp' => $partner->no_hp,
-                            'status' => $this->registrationService->getRegistrationStatus($partner, $turnamen),
+                    ->route('guest.register.success')
+                    ->with('registration_success', [
+                        'is_double' => true,
+                        'turnamen_id' => $turnamen->id,
+                        'players' => [
+                            $this->playerPayload($pemain, $turnamen),
+                            $this->playerPayload($partner, $turnamen),
                         ],
                     ]);
             }
@@ -151,35 +182,107 @@ class RegistrationController extends Controller
                 $field = str_contains($e->getMessage(), 'pemain 2') ? 'partner_foto' : 'foto';
             }
 
+            $formParams = ['no_hp' => $request->input('no_hp')];
+
+            if ($turnamen->isDouble()) {
+                $formParams['partner_no_hp'] = $request->input('partner_no_hp');
+            }
+
             return redirect()
-                ->route('guest.register.form', ['no_hp' => $request->input('no_hp')])
+                ->route('guest.register.form', $formParams)
                 ->withInput()
                 ->withErrors([$field => $e->getMessage()]);
         }
 
         return redirect()
-            ->route('guest.register.success', ['pemain' => $pemain->id])
-            ->with('registered_pemain', [
-                'id' => $pemain->id,
-                'nama' => $pemain->nama,
-                'no_hp' => $pemain->no_hp,
-                'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
+            ->route('guest.register.success')
+            ->with('registration_success', [
+                'is_double' => false,
+                'turnamen_id' => $turnamen->id,
+                'players' => [
+                    $this->playerPayload($pemain, $turnamen),
+                ],
             ]);
     }
 
     public function success()
     {
-        $pemain = session('registered_pemain');
+        $players = $this->resolveRegistrationPlayers();
 
-        if (! $pemain) {
+        if (empty($players)) {
             return redirect()->route('guest.landing');
         }
 
         $turnamen = $this->registrationService->getActiveTournament();
-        $pemainModel = isset($pemain['id']) ? \App\Models\Pemain::find($pemain['id']) : null;
-        $partnerModel = isset($pemain['partner']['id']) ? \App\Models\Pemain::find($pemain['partner']['id']) : null;
-        $partner = $pemain['partner'] ?? null;
+        $playerModels = collect($players)
+            ->map(function (array $player) {
+                return Pemain::find($player['id'] ?? null);
+            })
+            ->filter()
+            ->values();
 
-        return view('guest.register-success', compact('pemain', 'partner', 'turnamen', 'pemainModel', 'partnerModel'));
+        return view('guest.register-success', compact('players', 'playerModels', 'turnamen'));
+    }
+
+    protected function playerPayload(Pemain $pemain, $turnamen): array
+    {
+        return [
+            'id' => $pemain->id,
+            'nama' => $pemain->nama,
+            'no_hp' => $pemain->no_hp,
+            'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
+        ];
+    }
+
+    protected function resolveRegistrationPlayers(): array
+    {
+        $registration = session('registration_success');
+
+        if (! $registration) {
+            $legacy = session('registered_pemain');
+
+            if (! $legacy || ! isset($legacy['id'])) {
+                return [];
+            }
+
+            $players = [[
+                'id' => $legacy['id'],
+                'nama' => $legacy['nama'],
+                'no_hp' => $legacy['no_hp'],
+                'status' => $legacy['status'] ?? null,
+            ]];
+
+            if (! empty($legacy['partner'])) {
+                $players[] = $legacy['partner'];
+            }
+
+            $registration = [
+                'is_double' => ! empty($legacy['partner']),
+                'players' => $players,
+            ];
+        }
+
+        $players = $registration['players'] ?? [];
+        $turnamen = $this->registrationService->getActiveTournament();
+
+        if ($turnamen && $turnamen->isDouble() && count($players) < 2 && ! empty($players[0]['id'])) {
+            $peserta = TurnamenPeserta::query()
+                ->forTurnamen($turnamen->id)
+                ->where('id_pemain1', $players[0]['id'])
+                ->with('pemain2')
+                ->latest('id')
+                ->first();
+
+            if ($peserta && $peserta->pemain2) {
+                $players[] = [
+                    'id' => $peserta->pemain2->id,
+                    'nama' => $peserta->pemain2->nama,
+                    'no_hp' => $peserta->pemain2->no_hp,
+                    'status' => $peserta->status,
+                ];
+            }
+        }
+
+        return $players;
     }
 }

@@ -39,7 +39,7 @@
     :input-id="$inputId"
     :preview-id="$previewId"
     :input-name="$inputName ?? 'foto'"
-    :label="'Foto ' . $labelPrefix . ' (opsional)'"
+    :label="'Foto ' . $labelPrefix "
     :preview-src="$previewSrc" />
 
 <div class="mb-3">
@@ -87,7 +87,7 @@
 </div>
 
 <div class="mb-0">
-    <label for="{{ $field('rating') }}" class="form-label fw-semibold">Rating (opsional)</label>
+    <label for="{{ $field('rating') }}" class="form-label fw-semibold">Rating</label>
     <input type="number"
            name="{{ $field('rating') }}"
            id="{{ $field('rating') }}"

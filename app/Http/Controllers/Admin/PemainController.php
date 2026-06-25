@@ -135,19 +135,47 @@ class PemainController extends Controller
     {
         $turnamenList = $this->matchmakingService->listForFilter();
         $noHp = trim((string) $request->get('no_hp', old('no_hp', '')));
+        $partnerNoHp = trim((string) $request->get('partner_no_hp', old('partner_no_hp', '')));
         $selectedTurnamen = $request->filled('id_turnamen')
             ? Turnamen::find($request->id_turnamen)
             : null;
         $showForm = $noHp !== '' && $selectedTurnamen;
 
+        if ($showForm && $selectedTurnamen->isDouble() && $partnerNoHp === '') {
+            return redirect()->route('admin.pemain.create', $request->only('id_turnamen'));
+        }
+
         $existingPemain = null;
         $existingPartner = null;
+        $isPartnerExisting = false;
 
         if ($showForm) {
             $existingPemain = Pemain::where('no_hp', $noHp)->first();
-            $partnerNoHp = trim((string) old('partner_no_hp', ''));
-            if ($partnerNoHp !== '') {
+
+            if ($selectedTurnamen->isDouble()) {
+                if ($noHp === $partnerNoHp) {
+                    return redirect()->route('admin.pemain.create', $request->only('id_turnamen'))
+                        ->withErrors(['partner_no_hp' => 'Nomor HP pemain 2 harus berbeda dari pemain 1.']);
+                }
+
                 $existingPartner = Pemain::where('no_hp', $partnerNoHp)->first();
+                $isPartnerExisting = (bool) $existingPartner;
+
+                if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $selectedTurnamen)) {
+                    return redirect()->route('admin.pemain.create', $request->only('id_turnamen'))
+                        ->withInput()
+                        ->withErrors(['no_hp' => 'Pemain 1 sudah terdaftar pada turnamen ini.']);
+                }
+
+                if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $selectedTurnamen)) {
+                    return redirect()->route('admin.pemain.create', $request->only('id_turnamen'))
+                        ->withInput()
+                        ->withErrors(['partner_no_hp' => 'Pemain 2 sudah terdaftar pada turnamen ini.']);
+                }
+            } elseif ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $selectedTurnamen)) {
+                return redirect()->route('admin.pemain.create', $request->only('id_turnamen'))
+                    ->withInput()
+                    ->withErrors(['no_hp' => 'Pemain sudah terdaftar pada turnamen ini.']);
             }
         }
 
@@ -156,20 +184,49 @@ class PemainController extends Controller
             'selectedTurnamen',
             'showForm',
             'noHp',
+            'partnerNoHp',
             'existingPemain',
-            'existingPartner'
+            'existingPartner',
+            'isPartnerExisting'
         ));
     }
 
     public function lookup(LookupPemainRequest $request)
     {
-        $this->tournamentAccess->assertTurnamenId((int) $request->id_turnamen);
+        $turnamen = Turnamen::findOrFail($request->id_turnamen);
+        $this->tournamentAccess->assertTurnamenId((int) $turnamen->id);
 
-        return redirect()->route('admin.pemain.create', [
-            'id_turnamen' => $request->id_turnamen,
-            'no_hp' => trim($request->no_hp),
+        $noHp = trim($request->no_hp);
+        $params = [
+            'id_turnamen' => $turnamen->id,
+            'no_hp' => $noHp,
             'status' => $request->input('status', 'approved'),
-        ]);
+        ];
+
+        $existingPemain = Pemain::where('no_hp', $noHp)->first();
+
+        if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $turnamen)) {
+            return back()
+                ->withInput()
+                ->withErrors(['no_hp' => $turnamen->isDouble()
+                    ? 'Pemain 1 sudah terdaftar pada turnamen ini.'
+                    : 'Pemain sudah terdaftar pada turnamen ini.']);
+        }
+
+        if ($turnamen->isDouble()) {
+            $partnerNoHp = trim($request->partner_no_hp);
+            $existingPartner = Pemain::where('no_hp', $partnerNoHp)->first();
+
+            if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $turnamen)) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['partner_no_hp' => 'Pemain 2 sudah terdaftar pada turnamen ini.']);
+            }
+
+            $params['partner_no_hp'] = $partnerNoHp;
+        }
+
+        return redirect()->route('admin.pemain.create', $params);
     }
 
     public function store(StorePemainRequest $request)
@@ -228,7 +285,9 @@ class PemainController extends Controller
                 ]);
             }
         } catch (\RuntimeException $e) {
-            return back()->withInput()->withErrors(['no_hp' => $e->getMessage()]);
+            $field = str_contains($e->getMessage(), 'pemain 2') ? 'partner_no_hp' : 'no_hp';
+
+            return back()->withInput()->withErrors([$field => $e->getMessage()]);
         }
 
         return redirect()
@@ -247,11 +306,10 @@ class PemainController extends Controller
                 ->with('error', 'Pasangan tidak memerlukan pemain 2.');
         }
 
-        $noHp = trim((string) $request->get('no_hp', old('no_hp', '')));
-        $showForm = $noHp !== '';
-        $existingPemain = $showForm ? Pemain::where('no_hp', $noHp)->first() : null;
-
-        return view('admin.pemain.add-partner', compact('peserta', 'showForm', 'noHp', 'existingPemain'));
+        return redirect()->route('admin.pemain.edit', [
+            'pemain' => $peserta->id_pemain1,
+            'id_turnamen' => $peserta->id_turnamen,
+        ]);
     }
 
     public function partnerLookup(LookupPartnerPemainRequest $request, TurnamenPeserta $peserta)
@@ -259,15 +317,30 @@ class PemainController extends Controller
         $peserta->load(['turnamen', 'pemain1']);
         $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
 
+        if (! $peserta->turnamen->isDouble() || $peserta->id_pemain2) {
+            return redirect()
+                ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
+                ->with('error', 'Pasangan tidak memerlukan pemain 2.');
+        }
+
         $noHp = trim($request->no_hp);
 
         if ($peserta->pemain1 && $peserta->pemain1->no_hp === $noHp) {
             return back()->withInput()->withErrors(['no_hp' => 'Nomor HP pemain 2 harus berbeda dari pemain 1.']);
         }
 
-        return redirect()->route('admin.pemain.peserta.partner.create', [
-            'peserta' => $peserta->id,
-            'no_hp' => $noHp,
+        $existingPartner = Pemain::where('no_hp', $noHp)->first();
+
+        if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $peserta->turnamen)) {
+            return back()
+                ->withInput()
+                ->withErrors(['no_hp' => 'Pemain 2 sudah terdaftar pada turnamen ini.']);
+        }
+
+        return redirect()->route('admin.pemain.edit', [
+            'pemain' => $peserta->id_pemain1,
+            'id_turnamen' => $peserta->id_turnamen,
+            'partner_no_hp' => $noHp,
         ]);
     }
 
@@ -307,7 +380,10 @@ class PemainController extends Controller
         }
 
         return redirect()
-            ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
+            ->route('admin.pemain.edit', [
+                'pemain' => $peserta->id_pemain1,
+                'id_turnamen' => $peserta->id_turnamen,
+            ])
             ->with('success', 'Pemain 2 berhasil ditambahkan ke pasangan.');
     }
 
@@ -317,10 +393,37 @@ class PemainController extends Controller
 
         $turnamenList = $this->matchmakingService->listForFilter();
         $turnamenPesertaEntries = TurnamenPeserta::involvingPemain($pemain->id)
-            ->with('turnamen', 'pemain2')
+            ->with('turnamen', 'pemain1', 'pemain2')
             ->get();
 
-        return view('admin.pemain.edit', compact('pemain', 'turnamenList', 'turnamenPesertaEntries'));
+        $partnerPesertaQuery = TurnamenPeserta::query()
+            ->where('id_pemain1', $pemain->id)
+            ->whereNull('id_pemain2')
+            ->whereHas('turnamen', function ($query) {
+                $query->where('jenis', 'double');
+            })
+            ->with(['turnamen', 'pemain1']);
+
+        if (request()->filled('id_turnamen')) {
+            $partnerPesertaQuery->where('id_turnamen', (int) request('id_turnamen'));
+        }
+
+        $partnerPeserta = $partnerPesertaQuery->first();
+        $partnerNoHp = trim((string) request('partner_no_hp', old('partner_no_hp', '')));
+        $showPartnerForm = $partnerPeserta && $partnerNoHp !== '';
+        $existingPartner = $showPartnerForm ? Pemain::where('no_hp', $partnerNoHp)->first() : null;
+        $isPartnerExisting = (bool) $existingPartner;
+
+        return view('admin.pemain.edit', compact(
+            'pemain',
+            'turnamenList',
+            'turnamenPesertaEntries',
+            'partnerPeserta',
+            'partnerNoHp',
+            'showPartnerForm',
+            'existingPartner',
+            'isPartnerExisting'
+        ));
     }
 
     public function update(UpdatePemainRequest $request, Pemain $pemain)

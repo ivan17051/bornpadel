@@ -34,7 +34,7 @@
         @elseif ($peserta ?? null)
             <li>
                 <a class="dropdown-item"
-                   href="{{ route('admin.pemain.peserta.partner.create', ['peserta' => $peserta->id]) }}">
+                   href="{{ route('admin.pemain.edit', array_merge([$pemain1], request()->only('id_turnamen'))) }}">
                     <i class="bi bi-person-plus me-2"></i> Tambah Pemain 2
                 </a>
             </li>

@@ -8,7 +8,7 @@
     $previewSrc = $existingPemain && $existingPemain->foto
         ? $photoService->url($existingPemain->foto)
         : null;
-    $partnerPreviewSrc = isset($existingPartner) && $existingPartner && $existingPartner->foto
+    $partnerPreviewSrc = $existingPartner && $existingPartner->foto
         ? $photoService->url($existingPartner->foto)
         : null;
     $isDouble = $turnamen->isDouble();
@@ -27,47 +27,61 @@
 
         <div class="card guest-card mb-4">
             <div class="card-body py-3 px-4">
-                <div class="row text-center g-3">
-                    <div class="col-6">
-                        <div class="info-label">Biaya</div>
-                        <strong class="text-primary">Rp {{ number_format($turnamen->harga, 0, ',', '.') }}</strong>
+                @if ($isDouble)
+                    <div class="row text-center g-3">
+                        <div class="col-4">
+                            <div class="info-label">Biaya</div>
+                            <strong class="text-primary">Rp {{ number_format($turnamen->harga, 0, ',', '.') }}</strong>
+                        </div>
+                        <div class="col-4">
+                            <div class="info-label">HP Pemain 1</div>
+                            <strong>{{ $noHp }}</strong>
+                        </div>
+                        <div class="col-4">
+                            <div class="info-label">HP Pemain 2</div>
+                            <strong>{{ $partnerNoHp }}</strong>
+                        </div>
                     </div>
-                    <div class="col-6">
-                        <div class="info-label">No. HP Pemain 1</div>
-                        <strong>{{ $noHp }}</strong>
+                @else
+                    <div class="row text-center g-3">
+                        <div class="col-6">
+                            <div class="info-label">Biaya</div>
+                            <strong class="text-primary">Rp {{ number_format($turnamen->harga, 0, ',', '.') }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <div class="info-label">No. HP</div>
+                            <strong>{{ $noHp }}</strong>
+                        </div>
                     </div>
-                </div>
+                @endif
             </div>
         </div>
 
-        @if ($isExisting)
-            <div class="alert alert-info guest-card mb-4">
-                <i class="bi bi-person-check me-2"></i>
-                Data pemain 1 ditemukan. Periksa dan perbarui jika ada perubahan, lalu kirim pendaftaran turnamen ini.
-            </div>
-        @else
-            <div class="alert alert-light border guest-card mb-4">
-                <i class="bi bi-person-plus me-2"></i>
-                Nomor HP pemain 1 belum terdaftar. Lengkapi data di bawah untuk mendaftar.
-            </div>
-        @endif
-
-        @if ($isDouble)
-            <div class="alert alert-light border guest-card mb-4">
-                <i class="bi bi-people me-2"></i>
-                Turnamen <strong>double</strong> memerlukan data lengkap untuk 2 pemain. Gunakan tab di bawah untuk mengisi data masing-masing pemain.
-            </div>
+        @if (! $isDouble)
+            @if ($isExisting)
+                <div class="alert alert-info guest-card mb-4">
+                    <i class="bi bi-person-check me-2"></i>
+                    Data pemain ditemukan. Periksa dan perbarui jika ada perubahan, lalu kirim pendaftaran turnamen ini.
+                </div>
+            @else
+                <div class="alert alert-light border guest-card mb-4">
+                    <i class="bi bi-person-plus me-2"></i>
+                    Nomor HP belum terdaftar. Lengkapi data di bawah untuk mendaftar.
+                </div>
+            @endif
         @endif
 
         <div class="card guest-card">
             <div class="card-header py-3">
-                <i class="bi bi-person-vcard me-2"></i>
-                {{ $isDouble ? 'Data Peserta' : 'Data Peserta' }}
+                <i class="bi bi-person-vcard me-2"></i> Data Peserta
             </div>
             <div class="card-body p-4">
                 <form action="{{ route('guest.register.store') }}" method="POST" enctype="multipart/form-data" novalidate>
                     @csrf
                     <input type="hidden" name="no_hp" value="{{ old('no_hp', $noHp) }}">
+                    @if ($isDouble)
+                        <input type="hidden" name="partner_no_hp" value="{{ old('partner_no_hp', $partnerNoHp) }}">
+                    @endif
 
                     @if ($isDouble)
                         <ul class="nav nav-tabs mb-4" id="register-player-tabs" role="tablist">
@@ -103,6 +117,18 @@
                                  role="tabpanel"
                                  aria-labelledby="player1-tab-btn"
                                  tabindex="0">
+                                @if ($isExisting)
+                                    <div class="alert alert-info py-2 small mb-3">
+                                        <i class="bi bi-person-check me-1"></i>
+                                        Data pemain 1 ditemukan. Periksa dan perbarui jika perlu.
+                                    </div>
+                                @else
+                                    <div class="alert alert-light border py-2 small mb-3">
+                                        <i class="bi bi-person-plus me-1"></i>
+                                        Pemain 1 belum terdaftar. Lengkapi data di bawah.
+                                    </div>
+                                @endif
+
                                 @include('guest.partials.register-player-fields', [
                                     'prefix' => '',
                                     'labelPrefix' => 'Pemain 1',
@@ -120,16 +146,28 @@
                                  role="tabpanel"
                                  aria-labelledby="player2-tab-btn"
                                  tabindex="0">
+                                @if ($isPartnerExisting)
+                                    <div class="alert alert-info py-2 small mb-3">
+                                        <i class="bi bi-person-check me-1"></i>
+                                        Data pemain 2 ditemukan. Periksa dan perbarui jika perlu.
+                                    </div>
+                                @else
+                                    <div class="alert alert-light border py-2 small mb-3">
+                                        <i class="bi bi-person-plus me-1"></i>
+                                        Pemain 2 belum terdaftar. Lengkapi data di bawah.
+                                    </div>
+                                @endif
+
                                 @include('guest.partials.register-player-fields', [
                                     'prefix' => 'partner_',
                                     'labelPrefix' => 'Pemain 2',
-                                    'existingPemain' => $existingPartner ?? null,
+                                    'existingPemain' => $existingPartner,
                                     'previewSrc' => $partnerPreviewSrc,
                                     'inputId' => 'partner-foto',
                                     'previewId' => 'partner-foto-preview',
                                     'inputName' => 'partner_foto',
-                                    'phoneReadonly' => false,
-                                    'phoneValue' => old('partner_no_hp', optional($existingPartner)->no_hp),
+                                    'phoneReadonly' => true,
+                                    'phoneValue' => $partnerNoHp,
                                 ])
                             </div>
                         </div>
@@ -148,8 +186,7 @@
 
                     <div class="d-grid gap-2 mt-2">
                         <button type="submit" class="btn btn-bp btn-lg">
-                            <i class="bi bi-send me-2"></i>
-                            {{ $isExisting ? 'Perbarui & Daftar Turnamen' : 'Kirim Pendaftaran' }}
+                            <i class="bi bi-send me-2"></i> Kirim Pendaftaran
                         </button>
                         <a href="{{ route('guest.register') }}" class="btn btn-outline-secondary">
                             <i class="bi bi-arrow-left me-1"></i> Ganti Nomor HP
