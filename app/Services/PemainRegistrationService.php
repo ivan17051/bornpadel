@@ -38,14 +38,27 @@ class PemainRegistrationService
 
     public function isRegisteredForTournament(Pemain $pemain, Turnamen $turnamen): bool
     {
-        return TurnamenPeserta::where('id_turnamen', $turnamen->id)
-            ->where('id_pemain', $pemain->id)
+        return TurnamenPeserta::query()
+            ->forTurnamen($turnamen->id)
+            ->involvingPemain($pemain->id)
             ->exists();
     }
 
     public function register(Turnamen $turnamen, array $data, ?UploadedFile $foto = null): Pemain
     {
-        return $this->upsertAndEnroll($turnamen, $data, $foto);
+        $pemain = $this->upsertPemain($data, $foto);
+
+        if ($this->isRegisteredForTournament($pemain, $turnamen)) {
+            throw new RuntimeException('Nomor HP sudah terdaftar pada turnamen ini.');
+        }
+
+        TurnamenPeserta::create([
+            'id_turnamen' => $turnamen->id,
+            'id_pemain1' => $pemain->id,
+            'status' => 'pending',
+        ]);
+
+        return $pemain->fresh();
     }
 
     /**
@@ -62,8 +75,23 @@ class PemainRegistrationService
             throw new RuntimeException('Nomor HP pemain 1 dan pemain 2 tidak boleh sama.');
         }
 
-        $pemain = $this->upsertAndEnroll($turnamen, $player1, $foto1, 1);
-        $partner = $this->upsertAndEnroll($turnamen, $player2, $foto2, 2);
+        $pemain = $this->upsertPemain($player1, $foto1);
+        $partner = $this->upsertPemain($player2, $foto2);
+
+        if ($this->isRegisteredForTournament($pemain, $turnamen)) {
+            throw new RuntimeException('Nomor HP pemain 1 sudah terdaftar pada turnamen ini.');
+        }
+
+        if ($this->isRegisteredForTournament($partner, $turnamen)) {
+            throw new RuntimeException('Nomor HP pemain 2 sudah terdaftar pada turnamen ini.');
+        }
+
+        TurnamenPeserta::create([
+            'id_turnamen' => $turnamen->id,
+            'id_pemain1' => $pemain->id,
+            'id_pemain2' => $partner->id,
+            'status' => 'pending',
+        ]);
 
         return [
             'pemain' => $pemain,
@@ -71,19 +99,11 @@ class PemainRegistrationService
         ];
     }
 
-    protected function upsertAndEnroll(Turnamen $turnamen, array $data, ?UploadedFile $foto = null, int $playerNumber = 1): Pemain
+    public function upsertPemain(array $data, ?UploadedFile $foto = null): Pemain
     {
         $existing = $this->findPemainByPhone($data['no_hp']);
 
         if ($existing) {
-            if ($this->isRegisteredForTournament($existing, $turnamen)) {
-                if ($playerNumber === 2) {
-                    throw new RuntimeException('Nomor HP pemain 2 sudah terdaftar pada turnamen ini.');
-                }
-
-                throw new RuntimeException('Nomor HP sudah terdaftar pada turnamen ini.');
-            }
-
             $updatePayload = [
                 'nama' => $data['nama'],
                 'tgl_lahir' => $data['tgl_lahir'],
@@ -99,18 +119,12 @@ class PemainRegistrationService
 
             $existing->update($updatePayload);
 
-            TurnamenPeserta::create([
-                'id_turnamen' => $turnamen->id,
-                'id_pemain' => $existing->id,
-                'status' => 'pending',
-            ]);
-
             return $existing->fresh();
         }
 
         $fotoPath = $foto ? $this->photoService->storeAsWebp($foto) : null;
 
-        $pemain = Pemain::create([
+        return Pemain::create([
             'nama' => $data['nama'],
             'tgl_lahir' => $data['tgl_lahir'],
             'usia' => Carbon::parse($data['tgl_lahir'])->age,
@@ -119,14 +133,6 @@ class PemainRegistrationService
             'rating' => $data['rating'] ?? 0,
             'foto' => $fotoPath,
         ]);
-
-        TurnamenPeserta::create([
-            'id_turnamen' => $turnamen->id,
-            'id_pemain' => $pemain->id,
-            'status' => 'pending',
-        ]);
-
-        return $pemain;
     }
 
     public function getRegistrationStatus(Pemain $pemain, Turnamen $turnamen): ?string

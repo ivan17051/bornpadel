@@ -57,7 +57,13 @@
         </div>
         <div class="col-md-6 text-end">
             <div class="align-items-center gap-2">
-                <span class="badge text-bg-secondary">{{ $pemain->total() }} pemain</span>
+                <span class="badge text-bg-secondary">
+                    @if (! empty($isDoubleView))
+                        {{ $peserta->total() }} pasangan
+                    @else
+                        {{ $pemain->total() }} pemain
+                    @endif
+                </span>
                 <a href="{{ route('admin.pemain.create', request()->only('id_turnamen')) }}" class="btn btn-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i> Tambah Pemain
                 </a>
@@ -69,20 +75,82 @@
             <table class="table table-hover table-striped mb-0 align-middle" id="pemain-table">
                 <thead class="table-light">
                     <tr>
-                        <th style="width: 3.5rem;"></th>
-                        <th>#</th>
-                        <th>Nama</th>
-                        <th class="d-none d-md-table-cell">No. HP</th>
-                        <th class="d-none d-lg-table-cell">Gender</th>
-                        <th class="d-none d-lg-table-cell">Rating</th>
-                        <th>Status</th>
-                        <th class="text-end">Aksi</th>
+                        @if (! empty($isDoubleView))
+                            <th>#</th>
+                            <th>Pemain 1</th>
+                            <th class="d-none d-lg-table-cell">Gender</th>
+                            <th class="d-none d-lg-table-cell">Rating</th>
+                            <th>Pemain 2</th>
+                            <th class="d-none d-lg-table-cell">Gender</th>
+                            <th class="d-none d-lg-table-cell">Rating</th>
+                            <th>Status</th>
+                            <th class="text-end">Aksi</th>
+                        @else
+                            <th style="width: 3.5rem;"></th>
+                            <th>#</th>
+                            <th>Nama</th>
+                            <th class="d-none d-md-table-cell">No. HP</th>
+                            <th class="d-none d-lg-table-cell">Gender</th>
+                            <th class="d-none d-lg-table-cell">Rating</th>
+                            <th>Status</th>
+                            <th class="text-end">Aksi</th>
+                        @endif
                     </tr>
                 </thead>
                 <tbody>
                     @php
                         $turnamenOngoing = $turnamen && $turnamen->status === 'ongoing';
                     @endphp
+                    @if (! empty($isDoubleView))
+                        @forelse ($peserta as $entry)
+                            @php
+                                $pemain1 = $entry->pemain1;
+                                $pemain2 = $entry->pemain2;
+                            @endphp
+                            <tr data-peserta-id="{{ $entry->id }}">
+                                <td>{{ $peserta->firstItem() + $loop->index }}</td>
+                                <td>
+                                    @include('admin.pemain.partials.pemain-cell', ['pemain' => $pemain1])
+                                </td>
+                                <td class="d-none d-lg-table-cell">
+                                    {{ $pemain1 && $pemain1->gender === 'male' ? 'Laki-laki' : ($pemain1 ? 'Perempuan' : '—') }}
+                                </td>
+                                <td class="d-none d-lg-table-cell">
+                                    {{ $pemain1 ? number_format($pemain1->rating, 1) : '—' }}
+                                </td>
+                                <td>
+                                    @include('admin.pemain.partials.pemain-cell', ['pemain' => $pemain2])
+                                </td>
+                                <td class="d-none d-lg-table-cell">
+                                    {{ $pemain2 && $pemain2->gender === 'male' ? 'Laki-laki' : ($pemain2 ? 'Perempuan' : '—') }}
+                                </td>
+                                <td class="d-none d-lg-table-cell">
+                                    {{ $pemain2 ? number_format($pemain2->rating, 1) : '—' }}
+                                </td>
+                                <td>
+                                    <span class="badge status-badge-{{ $entry->status }}" data-status-cell>
+                                        {{ ucfirst($entry->status) }}
+                                    </span>
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    @include('admin.pemain.partials.pemain-pair-row-actions', [
+                                        'peserta' => $entry,
+                                        'pemain1' => $pemain1,
+                                        'pemain2' => $pemain2,
+                                        'turnamen' => $turnamen,
+                                        'registrationStatus' => $entry->status,
+                                        'turnamenOngoing' => $turnamenOngoing,
+                                    ])
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="9" class="text-center text-muted py-4">
+                                    Belum ada pasangan terdaftar pada turnamen ini.
+                                </td>
+                            </tr>
+                        @endforelse
+                    @else
                     @forelse ($pemain as $item)
                         @php
                             $peserta = $item->pesertaForTurnamen($turnamen);
@@ -110,51 +178,12 @@
                                 @endif
                             </td>
                             <td class="text-end text-nowrap">
-                                <a href="{{ route('admin.pemain.edit', array_merge([$item], request()->only('id_turnamen'))) }}"
-                                   class="btn btn-sm btn-outline-primary"
-                                   title="Edit">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                @if ($turnamen && $registrationStatus === 'pending')
-                                    <button type="button" class="btn btn-sm btn-success btn-approve"
-                                            data-url="{{ route('admin.pemain.status', $item) }}"
-                                            data-turnamen="{{ $turnamen->id }}"
-                                            title="Setujui">
-                                        <i class="bi bi-check-lg"></i>
-                                    </button>
-                                    @unless ($turnamenOngoing)
-                                    <button type="button" class="btn btn-sm btn-warning btn-reject"
-                                            data-url="{{ route('admin.pemain.status', $item) }}"
-                                            data-turnamen="{{ $turnamen->id }}"
-                                            title="Tolak">
-                                        <i class="bi bi-x-lg"></i>
-                                    </button>
-                                    @endunless
-                                @elseif ($turnamen && $registrationStatus === 'rejected')
-                                    <button type="button" class="btn btn-sm btn-outline-success btn-approve"
-                                            data-url="{{ route('admin.pemain.status', $item) }}"
-                                            data-turnamen="{{ $turnamen->id }}"
-                                            title="Setujui">
-                                        <i class="bi bi-check-lg"></i>
-                                    </button>
-                                @elseif ($turnamen && $registrationStatus === 'approved')
-                                    @unless ($turnamenOngoing)
-                                    <button type="button" class="btn btn-sm btn-outline-warning btn-reject"
-                                            data-url="{{ route('admin.pemain.status', $item) }}"
-                                            data-turnamen="{{ $turnamen->id }}"
-                                            title="Tolak">
-                                        <i class="bi bi-x-lg"></i>
-                                    </button>
-                                    @endunless
-                                @endif
-                                @unless ($turnamenOngoing)
-                                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-pemain"
-                                        data-url="{{ route('admin.pemain.destroy', $item) }}"
-                                        data-name="{{ $item->nama }}"
-                                        title="Hapus">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                                @endunless
+                                @include('admin.pemain.partials.pemain-row-actions', [
+                                    'pemain' => $item,
+                                    'turnamen' => $turnamen,
+                                    'registrationStatus' => $registrationStatus,
+                                    'turnamenOngoing' => $turnamenOngoing,
+                                ])
                             </td>
                         </tr>
                     @empty
@@ -168,13 +197,14 @@
                             </td>
                         </tr>
                     @endforelse
+                    @endif
                 </tbody>
             </table>
         </div>
     </div>
-    @if ($pemain->hasPages())
+    @if ((! empty($isDoubleView) && $peserta->hasPages()) || (empty($isDoubleView) && $pemain->hasPages()))
         <div class="card-footer">
-            {{ $pemain->links() }}
+            {{ ! empty($isDoubleView) ? $peserta->links() : $pemain->links() }}
         </div>
     @endif
 </div>

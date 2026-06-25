@@ -3,13 +3,18 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\LookupPartnerPemainRequest;
+use App\Http\Requests\Admin\LookupPemainRequest;
+use App\Http\Requests\Admin\StorePartnerPemainRequest;
 use App\Http\Requests\Admin\StorePemainRequest;
 use App\Http\Requests\Admin\UpdatePemainRequest;
 use App\Models\Pemain;
 use App\Models\Pertandingan;
+use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
 use App\Services\GroupMatchmakingService;
 use App\Services\PemainPhotoService;
+use App\Services\PemainRegistrationService;
 use App\Services\TournamentAccessService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -19,15 +24,18 @@ class PemainController extends Controller
     protected $matchmakingService;
     protected $photoService;
     protected $tournamentAccess;
+    protected $registrationService;
 
     public function __construct(
         GroupMatchmakingService $matchmakingService,
         PemainPhotoService $photoService,
-        TournamentAccessService $tournamentAccess
+        TournamentAccessService $tournamentAccess,
+        PemainRegistrationService $registrationService
     ) {
         $this->matchmakingService = $matchmakingService;
         $this->photoService = $photoService;
         $this->tournamentAccess = $tournamentAccess;
+        $this->registrationService = $registrationService;
     }
 
     public function index(Request $request)
@@ -37,23 +45,68 @@ class PemainController extends Controller
             $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
         );
 
+        $isDoubleView = $turnamen && $turnamen->isDouble();
+
+        if ($isDoubleView) {
+            $pesertaQuery = TurnamenPeserta::query()
+                ->forTurnamen($turnamen->id)
+                ->with(['pemain1', 'pemain2'])
+                ->latest();
+
+            if ($request->filled('status')) {
+                $pesertaQuery->where('status', $request->status);
+            }
+
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $pesertaQuery->where(function ($builder) use ($search) {
+                    $builder->whereHas('pemain1', function ($q) use ($search) {
+                        $q->where('nama', 'like', "%{$search}%")
+                            ->orWhere('no_hp', 'like', "%{$search}%");
+                    })->orWhereHas('pemain2', function ($q) use ($search) {
+                        $q->where('nama', 'like', "%{$search}%")
+                            ->orWhere('no_hp', 'like', "%{$search}%");
+                    });
+                });
+            }
+
+            $peserta = $pesertaQuery->paginate(15)->withQueryString();
+            $pemain = null;
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $peserta,
+                ]);
+            }
+
+            return view('admin.pemain.index', compact('peserta', 'pemain', 'turnamen', 'turnamenList', 'isDoubleView'));
+        }
+
         $query = Pemain::query()->latest();
 
         if ($turnamen) {
-            $query->whereHas('turnamenPeserta', function ($q) use ($turnamen, $request) {
-                $q->where('id_turnamen', $turnamen->id);
-                if ($request->filled('status')) {
-                    $q->where('status', $request->status);
-                }
-            })->with(['turnamenPeserta' => function ($q) use ($turnamen) {
-                $q->where('id_turnamen', $turnamen->id);
-            }]);
+            $query->where(function ($builder) use ($turnamen, $request) {
+                $builder->whereHas('turnamenPesertaAsPemain1', function ($q) use ($turnamen, $request) {
+                    $q->where('id_turnamen', $turnamen->id);
+                    if ($request->filled('status')) {
+                        $q->where('status', $request->status);
+                    }
+                })->orWhereHas('turnamenPesertaAsPemain2', function ($q) use ($turnamen, $request) {
+                    $q->where('id_turnamen', $turnamen->id);
+                    if ($request->filled('status')) {
+                        $q->where('status', $request->status);
+                    }
+                });
+            });
         } elseif ($request->filled('status')) {
-            $query->whereHas('turnamenPeserta', function ($q) use ($request) {
-                $q->where('status', $request->status);
-            })->with('turnamenPeserta');
-        } else {
-            $query->with('turnamenPeserta');
+            $query->where(function ($builder) use ($request) {
+                $builder->whereHas('turnamenPesertaAsPemain1', function ($q) use ($request) {
+                    $q->where('status', $request->status);
+                })->orWhereHas('turnamenPesertaAsPemain2', function ($q) use ($request) {
+                    $q->where('status', $request->status);
+                });
+            });
         }
 
         if ($request->filled('search')) {
@@ -65,6 +118,8 @@ class PemainController extends Controller
         }
 
         $pemain = $query->paginate(15)->withQueryString();
+        $peserta = null;
+        $isDoubleView = false;
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -73,47 +128,187 @@ class PemainController extends Controller
             ]);
         }
 
-        return view('admin.pemain.index', compact('pemain', 'turnamen', 'turnamenList'));
+        return view('admin.pemain.index', compact('pemain', 'peserta', 'turnamen', 'turnamenList', 'isDoubleView'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $turnamenList = $this->matchmakingService->listForFilter();
+        $noHp = trim((string) $request->get('no_hp', old('no_hp', '')));
+        $selectedTurnamen = $request->filled('id_turnamen')
+            ? Turnamen::find($request->id_turnamen)
+            : null;
+        $showForm = $noHp !== '' && $selectedTurnamen;
 
-        return view('admin.pemain.create', compact('turnamenList'));
+        $existingPemain = null;
+        $existingPartner = null;
+
+        if ($showForm) {
+            $existingPemain = Pemain::where('no_hp', $noHp)->first();
+            $partnerNoHp = trim((string) old('partner_no_hp', ''));
+            if ($partnerNoHp !== '') {
+                $existingPartner = Pemain::where('no_hp', $partnerNoHp)->first();
+            }
+        }
+
+        return view('admin.pemain.create', compact(
+            'turnamenList',
+            'selectedTurnamen',
+            'showForm',
+            'noHp',
+            'existingPemain',
+            'existingPartner'
+        ));
+    }
+
+    public function lookup(LookupPemainRequest $request)
+    {
+        $this->tournamentAccess->assertTurnamenId((int) $request->id_turnamen);
+
+        return redirect()->route('admin.pemain.create', [
+            'id_turnamen' => $request->id_turnamen,
+            'no_hp' => trim($request->no_hp),
+            'status' => $request->input('status', 'approved'),
+        ]);
     }
 
     public function store(StorePemainRequest $request)
     {
         $data = $request->validated();
-        $turnamenId = $data['id_turnamen'];
-        $this->tournamentAccess->assertTurnamenId((int) $turnamenId);
+        $turnamen = Turnamen::findOrFail($data['id_turnamen']);
+        $this->tournamentAccess->assertTurnamenId((int) $turnamen->id);
         $status = $data['status'];
-        $foto = $request->file('foto');
-        unset($data['id_turnamen'], $data['status'], $data['foto']);
-
-        $data['usia'] = Carbon::parse($data['tgl_lahir'])->age;
-        $data['rating'] = $data['rating'] ?? 0;
 
         try {
-            if ($foto) {
-                $data['foto'] = $this->photoService->storeAsWebp($foto);
+            if ($turnamen->isDouble()) {
+                $pemain1 = $this->registrationService->upsertPemain([
+                    'no_hp' => $data['no_hp'],
+                    'nama' => $data['nama'],
+                    'tgl_lahir' => $data['tgl_lahir'],
+                    'gender' => $data['gender'],
+                    'rating' => $data['rating'] ?? null,
+                ], $request->file('foto'));
+
+                $pemain2 = $this->registrationService->upsertPemain([
+                    'no_hp' => $data['partner_no_hp'],
+                    'nama' => $data['partner_nama'],
+                    'tgl_lahir' => $data['partner_tgl_lahir'],
+                    'gender' => $data['partner_gender'],
+                    'rating' => $data['partner_rating'] ?? null,
+                ], $request->file('partner_foto'));
+
+                if ($this->registrationService->isRegisteredForTournament($pemain1, $turnamen)
+                    || $this->registrationService->isRegisteredForTournament($pemain2, $turnamen)) {
+                    throw new \RuntimeException('Salah satu pemain sudah terdaftar pada turnamen ini.');
+                }
+
+                TurnamenPeserta::create([
+                    'id_turnamen' => $turnamen->id,
+                    'id_pemain1' => $pemain1->id,
+                    'id_pemain2' => $pemain2->id,
+                    'status' => $status,
+                ]);
+            } else {
+                $pemain = $this->registrationService->upsertPemain([
+                    'no_hp' => $data['no_hp'],
+                    'nama' => $data['nama'],
+                    'tgl_lahir' => $data['tgl_lahir'],
+                    'gender' => $data['gender'],
+                    'rating' => $data['rating'] ?? null,
+                ], $request->file('foto'));
+
+                if ($this->registrationService->isRegisteredForTournament($pemain, $turnamen)) {
+                    throw new \RuntimeException('Pemain sudah terdaftar pada turnamen ini.');
+                }
+
+                TurnamenPeserta::create([
+                    'id_turnamen' => $turnamen->id,
+                    'id_pemain1' => $pemain->id,
+                    'status' => $status,
+                ]);
             }
         } catch (\RuntimeException $e) {
-            return back()->withInput()->withErrors(['foto' => $e->getMessage()]);
+            return back()->withInput()->withErrors(['no_hp' => $e->getMessage()]);
         }
 
-        $pemain = Pemain::create($data);
+        return redirect()
+            ->route('admin.pemain.index', ['id_turnamen' => $turnamen->id])
+            ->with('success', $turnamen->isDouble() ? 'Pasangan pemain berhasil ditambahkan.' : 'Pemain berhasil ditambahkan.');
+    }
 
-        TurnamenPeserta::create([
-            'id_turnamen' => $turnamenId,
-            'id_pemain' => $pemain->id,
-            'status' => $status,
+    public function createPartner(Request $request, TurnamenPeserta $peserta)
+    {
+        $peserta->load(['turnamen', 'pemain1']);
+        $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
+
+        if (! $peserta->turnamen->isDouble() || $peserta->id_pemain2) {
+            return redirect()
+                ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
+                ->with('error', 'Pasangan tidak memerlukan pemain 2.');
+        }
+
+        $noHp = trim((string) $request->get('no_hp', old('no_hp', '')));
+        $showForm = $noHp !== '';
+        $existingPemain = $showForm ? Pemain::where('no_hp', $noHp)->first() : null;
+
+        return view('admin.pemain.add-partner', compact('peserta', 'showForm', 'noHp', 'existingPemain'));
+    }
+
+    public function partnerLookup(LookupPartnerPemainRequest $request, TurnamenPeserta $peserta)
+    {
+        $peserta->load(['turnamen', 'pemain1']);
+        $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
+
+        $noHp = trim($request->no_hp);
+
+        if ($peserta->pemain1 && $peserta->pemain1->no_hp === $noHp) {
+            return back()->withInput()->withErrors(['no_hp' => 'Nomor HP pemain 2 harus berbeda dari pemain 1.']);
+        }
+
+        return redirect()->route('admin.pemain.peserta.partner.create', [
+            'peserta' => $peserta->id,
+            'no_hp' => $noHp,
         ]);
+    }
+
+    public function storePartner(StorePartnerPemainRequest $request, TurnamenPeserta $peserta)
+    {
+        $peserta->load(['turnamen', 'pemain1']);
+        $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
+
+        if (! $peserta->turnamen->isDouble() || $peserta->id_pemain2) {
+            return redirect()
+                ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
+                ->with('error', 'Pasangan tidak memerlukan pemain 2.');
+        }
+
+        $data = $request->validated();
+
+        if ($peserta->pemain1 && $peserta->pemain1->no_hp === trim($data['no_hp'])) {
+            return back()->withInput()->withErrors(['no_hp' => 'Nomor HP pemain 2 harus berbeda dari pemain 1.']);
+        }
+
+        try {
+            $pemain2 = $this->registrationService->upsertPemain([
+                'no_hp' => $data['no_hp'],
+                'nama' => $data['nama'],
+                'tgl_lahir' => $data['tgl_lahir'],
+                'gender' => $data['gender'],
+                'rating' => $data['rating'] ?? null,
+            ], $request->file('foto'));
+
+            if ($this->registrationService->isRegisteredForTournament($pemain2, $peserta->turnamen)) {
+                throw new \RuntimeException('Pemain 2 sudah terdaftar pada turnamen ini.');
+            }
+
+            $peserta->update(['id_pemain2' => $pemain2->id]);
+        } catch (\RuntimeException $e) {
+            return back()->withInput()->withErrors(['no_hp' => $e->getMessage()]);
+        }
 
         return redirect()
-            ->route('admin.pemain.index', ['id_turnamen' => $turnamenId])
-            ->with('success', 'Pemain berhasil ditambahkan.');
+            ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
+            ->with('success', 'Pemain 2 berhasil ditambahkan ke pasangan.');
     }
 
     public function edit(Pemain $pemain)
@@ -121,9 +316,11 @@ class PemainController extends Controller
         $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
 
         $turnamenList = $this->matchmakingService->listForFilter();
-        $pemain->load('turnamenPeserta.turnamen');
+        $turnamenPesertaEntries = TurnamenPeserta::involvingPemain($pemain->id)
+            ->with('turnamen', 'pemain2')
+            ->get();
 
-        return view('admin.pemain.edit', compact('pemain', 'turnamenList'));
+        return view('admin.pemain.edit', compact('pemain', 'turnamenList', 'turnamenPesertaEntries'));
     }
 
     public function update(UpdatePemainRequest $request, Pemain $pemain)
@@ -180,8 +377,9 @@ class PemainController extends Controller
         $this->tournamentAccess->assertTurnamenId((int) $request->id_turnamen);
         $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
 
-        $peserta = TurnamenPeserta::where('id_turnamen', $request->id_turnamen)
-            ->where('id_pemain', $pemain->id)
+        $peserta = TurnamenPeserta::query()
+            ->forTurnamen((int) $request->id_turnamen)
+            ->involvingPemain($pemain->id)
             ->first();
 
         if (! $peserta) {

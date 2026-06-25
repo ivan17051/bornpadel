@@ -14,11 +14,12 @@ class CreateTurnamenPesertaTable extends Migration
         Schema::create('turnamen_peserta', function (Blueprint $table) {
             $table->id();
             $table->foreignId('id_turnamen')->constrained('m_turnamen')->cascadeOnDelete();
-            $table->foreignId('id_pemain')->constrained('m_pemain')->cascadeOnDelete();
+            $table->foreignId('id_pemain1')->constrained('m_pemain')->cascadeOnDelete();
+            $table->foreignId('id_pemain2')->nullable()->constrained('m_pemain')->cascadeOnDelete();
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
             $table->timestamps();
 
-            $table->unique(['id_turnamen', 'id_pemain']);
+            $table->unique(['id_turnamen', 'id_pemain1']);
         });
 
         $defaultTurnamen = Turnamen::query()->orderByDesc('doc')->first();
@@ -27,7 +28,7 @@ class CreateTurnamenPesertaTable extends Migration
             foreach (Pemain::all() as $pemain) {
                 TurnamenPeserta::create([
                     'id_turnamen' => $defaultTurnamen->id,
-                    'id_pemain' => $pemain->id,
+                    'id_pemain1' => $pemain->id,
                     'status' => $pemain->status,
                 ]);
             }

@@ -62,8 +62,8 @@ class Turnamen extends Model
 
     public function pemain()
     {
-        return $this->belongsToMany(Pemain::class, 'turnamen_peserta', 'id_turnamen', 'id_pemain')
-            ->withPivot('status')
+        return $this->belongsToMany(Pemain::class, 'turnamen_peserta', 'id_turnamen', 'id_pemain1')
+            ->withPivot('status', 'id_pemain2')
             ->withTimestamps();
     }
 

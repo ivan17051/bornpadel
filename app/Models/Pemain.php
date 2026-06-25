@@ -23,15 +23,20 @@ class Pemain extends Model
         'rating' => 'decimal:2',
     ];
 
-    public function turnamenPeserta()
+    public function turnamenPesertaAsPemain1()
     {
-        return $this->hasMany(TurnamenPeserta::class, 'id_pemain');
+        return $this->hasMany(TurnamenPeserta::class, 'id_pemain1');
+    }
+
+    public function turnamenPesertaAsPemain2()
+    {
+        return $this->hasMany(TurnamenPeserta::class, 'id_pemain2');
     }
 
     public function turnamen()
     {
-        return $this->belongsToMany(Turnamen::class, 'turnamen_peserta', 'id_pemain', 'id_turnamen')
-            ->withPivot('status')
+        return $this->belongsToMany(Turnamen::class, 'turnamen_peserta', 'id_pemain1', 'id_turnamen')
+            ->withPivot('status', 'id_pemain2')
             ->withTimestamps();
     }
 
@@ -46,11 +51,10 @@ class Pemain extends Model
             return null;
         }
 
-        if ($this->relationLoaded('turnamenPeserta')) {
-            return $this->turnamenPeserta->firstWhere('id_turnamen', $turnamen->id);
-        }
-
-        return $this->turnamenPeserta()->where('id_turnamen', $turnamen->id)->first();
+        return TurnamenPeserta::query()
+            ->involvingPemain($this->id)
+            ->where('id_turnamen', $turnamen->id)
+            ->first();
     }
 
     public function grupMembers()

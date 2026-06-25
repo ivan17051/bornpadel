@@ -33,7 +33,7 @@ class PemainSeeder extends Seeder
             if ($turnamen) {
                 TurnamenPeserta::create([
                     'id_turnamen' => $turnamen->id,
-                    'id_pemain' => $record->id,
+                    'id_pemain1' => $record->id,
                     'status' => $status,
                 ]);
             }

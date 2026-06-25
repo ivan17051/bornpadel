@@ -1,112 +1,156 @@
 @php
     $pemainModel = isset($pemain) ? $pemain : null;
-    $showRegistrationFields = $showRegistrationFields ?? false;
-    $turnamenList = $turnamenList ?? collect();
+    $isEdit = (bool) $pemainModel;
+    $selectedTurnamen = $selectedTurnamen ?? null;
+    $isDouble = $selectedTurnamen && $selectedTurnamen->isDouble();
+    $showForm = $showForm ?? $isEdit;
+    $noHp = old('no_hp', $noHp ?? optional($pemainModel)->no_hp ?? '');
+    $existingPemain = $existingPemain ?? ($noHp ? \App\Models\Pemain::where('no_hp', trim($noHp))->first() : null);
+    $existingPartner = $existingPartner ?? null;
+    $photoService = app(\App\Services\PemainPhotoService::class);
+    $previewSrc = $existingPemain && $existingPemain->foto ? $photoService->url($existingPemain->foto) : null;
+    $partnerPreviewSrc = $existingPartner && $existingPartner->foto ? $photoService->url($existingPartner->foto) : null;
+    $hasPartnerErrors = $errors->hasAny([
+        'partner_no_hp', 'partner_nama', 'partner_tgl_lahir', 'partner_gender', 'partner_rating', 'partner_foto',
+    ]);
 @endphp
 
-@if ($showRegistrationFields)
-    <div class="mb-3">
-        <label for="id_turnamen" class="form-label">Turnamen <span class="text-danger">*</span></label>
-        <select name="id_turnamen" id="id_turnamen" class="form-select @error('id_turnamen') is-invalid @enderror" required>
-            <option value="" disabled {{ old('id_turnamen', request('id_turnamen')) ? '' : 'selected' }}>Pilih turnamen</option>
-            @foreach ($turnamenList as $item)
-                <option value="{{ $item->id }}"
-                    {{ (string) old('id_turnamen', request('id_turnamen')) === (string) $item->id ? 'selected' : '' }}>
-                    {{ $item->nama }} — {{ ucfirst($item->status) }}
-                </option>
-            @endforeach
-        </select>
-        @error('id_turnamen')
-            <div class="invalid-feedback">{{ $message }}</div>
-        @enderror
+@if (! $isEdit && ! $showForm)
+    <div class="alert alert-light border mb-4">
+        <i class="bi bi-search me-2"></i>
+        Cari nomor HP pemain 1 terlebih dahulu. Jika sudah ada di database, data akan otomatis terisi.
     </div>
 
-    <div class="mb-3">
-        <label for="status" class="form-label">Status Pendaftaran <span class="text-danger">*</span></label>
-        <select name="status" id="status" class="form-select @error('status') is-invalid @enderror" required>
-            @foreach (['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected'] as $value => $label)
-                <option value="{{ $value }}" {{ old('status', 'approved') === $value ? 'selected' : '' }}>
-                    {{ $label }}
-                </option>
-            @endforeach
-        </select>
-        @error('status')
-            <div class="invalid-feedback">{{ $message }}</div>
-        @enderror
-    </div>
+    <form action="{{ route('admin.pemain.lookup') }}" method="POST">
+        @csrf
+        <div class="mb-3">
+            <label for="lookup_id_turnamen" class="form-label">Turnamen <span class="text-danger">*</span></label>
+            <select name="id_turnamen" id="lookup_id_turnamen" class="form-select @error('id_turnamen') is-invalid @enderror" required>
+                <option value="" disabled {{ old('id_turnamen', request('id_turnamen')) ? '' : 'selected' }}>Pilih turnamen</option>
+                @foreach ($turnamenList as $item)
+                    <option value="{{ $item->id }}" data-jenis="{{ $item->jenis }}"
+                        {{ (string) old('id_turnamen', request('id_turnamen')) === (string) $item->id ? 'selected' : '' }}>
+                        {{ $item->nama }} — {{ ucfirst($item->status) }} ({{ $item->jenis_label }})
+                    </option>
+                @endforeach
+            </select>
+            @error('id_turnamen')
+                <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
 
-    <hr class="my-4">
+        <div class="mb-3">
+            <label for="lookup_status" class="form-label">Status Pendaftaran <span class="text-danger">*</span></label>
+            <select name="status" id="lookup_status" class="form-select" required>
+                @foreach (['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected'] as $value => $label)
+                    <option value="{{ $value }}" {{ old('status', request('status', 'approved')) === $value ? 'selected' : '' }}>
+                        {{ $label }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="mb-4">
+            <label for="lookup_no_hp" class="form-label">Nomor HP / WhatsApp Pemain 1 <span class="text-danger">*</span></label>
+            <input type="tel"
+                   name="no_hp"
+                   id="lookup_no_hp"
+                   class="form-control @error('no_hp') is-invalid @enderror"
+                   value="{{ old('no_hp') }}"
+                   placeholder="08xxxxxxxxxx"
+                   required>
+            @error('no_hp')
+                <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-search me-1"></i> Cari & Lanjutkan
+        </button>
+    </form>
+@elseif ($isEdit)
+    @if ($showPhotoField ?? false)
+        <x-pemain-photo-input input-id="admin-foto" preview-id="admin-foto-preview" label="Foto Pemain" :show-preview="false" />
+    @endif
+
+    @include('admin.pemain.partials.player-fields', [
+        'prefix' => '',
+        'labelPrefix' => 'Pemain',
+        'existingPemain' => $pemainModel,
+        'inputId' => 'edit-foto',
+        'previewId' => 'edit-foto-preview',
+        'phoneReadonly' => false,
+        'phoneValue' => optional($pemainModel)->no_hp,
+        'showPhoto' => false,
+    ])
+@else
+    <input type="hidden" name="id_turnamen" value="{{ old('id_turnamen', $selectedTurnamen->id) }}">
+    <input type="hidden" name="status" value="{{ old('status', request('status', 'approved')) }}">
+
+    @if ($isDouble)
+        <div class="alert alert-light border mb-3">
+            <i class="bi bi-people me-2"></i>
+            Turnamen <strong>double</strong>. Isi data pemain 1 dan pemain 2 melalui tab di bawah.
+        </div>
+
+        <ul class="nav nav-tabs mb-4" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {{ $hasPartnerErrors ? '' : 'active' }}"
+                        type="button"
+                        data-bs-toggle="tab"
+                        data-bs-target="#admin-player1-tab"
+                        role="tab">
+                    Pemain 1
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {{ $hasPartnerErrors ? 'active' : '' }}"
+                        type="button"
+                        data-bs-toggle="tab"
+                        data-bs-target="#admin-player2-tab"
+                        role="tab">
+                    Pemain 2
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <div class="tab-pane fade {{ $hasPartnerErrors ? '' : 'show active' }}" id="admin-player1-tab" role="tabpanel">
+                @include('admin.pemain.partials.player-fields', [
+                    'prefix' => '',
+                    'labelPrefix' => 'Pemain 1',
+                    'existingPemain' => $existingPemain,
+                    'previewSrc' => $previewSrc,
+                    'inputId' => 'admin-foto',
+                    'previewId' => 'admin-foto-preview',
+                    'phoneReadonly' => true,
+                    'phoneValue' => $noHp,
+                ])
+            </div>
+            <div class="tab-pane fade {{ $hasPartnerErrors ? 'show active' : '' }}" id="admin-player2-tab" role="tabpanel">
+                @include('admin.pemain.partials.player-fields', [
+                    'prefix' => 'partner_',
+                    'labelPrefix' => 'Pemain 2',
+                    'existingPemain' => $existingPartner,
+                    'previewSrc' => $partnerPreviewSrc,
+                    'inputId' => 'partner-foto',
+                    'previewId' => 'partner-foto-preview',
+                    'inputName' => 'partner_foto',
+                    'phoneReadonly' => false,
+                    'phoneValue' => old('partner_no_hp'),
+                ])
+            </div>
+        </div>
+    @else
+        @include('admin.pemain.partials.player-fields', [
+            'prefix' => '',
+            'labelPrefix' => 'Pemain',
+            'existingPemain' => $existingPemain,
+            'previewSrc' => $previewSrc,
+            'inputId' => 'admin-foto',
+            'previewId' => 'admin-foto-preview',
+            'phoneReadonly' => true,
+            'phoneValue' => $noHp,
+        ])
+    @endif
 @endif
-
-@if ($showPhotoField ?? false)
-    <x-pemain-photo-input input-id="admin-foto" preview-id="admin-foto-preview" label="Foto Pemain" />
-@endif
-
-<div class="mb-3">
-    <label for="nama" class="form-label">Nama Lengkap <span class="text-danger">*</span></label>
-    <input type="text"
-           name="nama"
-           id="nama"
-           class="form-control @error('nama') is-invalid @enderror"
-           value="{{ old('nama', optional($pemainModel)->nama) }}"
-           required>
-    @error('nama')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="mb-3">
-    <label for="tgl_lahir" class="form-label">Tanggal Lahir <span class="text-danger">*</span></label>
-    <input type="date"
-           name="tgl_lahir"
-           id="tgl_lahir"
-           class="form-control @error('tgl_lahir') is-invalid @enderror"
-           value="{{ old('tgl_lahir', optional(optional($pemainModel)->tgl_lahir)->format('Y-m-d')) }}"
-           max="{{ date('Y-m-d', strtotime('-1 day')) }}"
-           required>
-    @error('tgl_lahir')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="mb-3">
-    <label for="gender" class="form-label">Jenis Kelamin <span class="text-danger">*</span></label>
-    <select name="gender" id="gender" class="form-select @error('gender') is-invalid @enderror" required>
-        <option value="" disabled {{ old('gender', optional($pemainModel)->gender) ? '' : 'selected' }}>Pilih jenis kelamin</option>
-        <option value="male" {{ old('gender', optional($pemainModel)->gender) === 'male' ? 'selected' : '' }}>Laki-laki</option>
-        <option value="female" {{ old('gender', optional($pemainModel)->gender) === 'female' ? 'selected' : '' }}>Perempuan</option>
-    </select>
-    @error('gender')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="mb-3">
-    <label for="no_hp" class="form-label">Nomor HP / WhatsApp <span class="text-danger">*</span></label>
-    <input type="tel"
-           name="no_hp"
-           id="no_hp"
-           class="form-control @error('no_hp') is-invalid @enderror"
-           value="{{ old('no_hp', optional($pemainModel)->no_hp) }}"
-           placeholder="08xxxxxxxxxx"
-           required>
-    @error('no_hp')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="mb-3">
-    <label for="rating" class="form-label">Rating</label>
-    <input type="number"
-           name="rating"
-           id="rating"
-           class="form-control @error('rating') is-invalid @enderror"
-           value="{{ old('rating', optional($pemainModel)->rating) }}"
-           min="0"
-           max="10"
-           step="0.1">
-    <div class="form-text">Skala 0–10. Kosongkan jika belum ada rating.</div>
-    @error('rating')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>

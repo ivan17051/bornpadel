@@ -57,7 +57,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::get('/pemain', [PemainController::class, 'index'])->name('pemain.index');
         Route::get('/pemain/create', [PemainController::class, 'create'])->name('pemain.create');
+        Route::post('/pemain/lookup', [PemainController::class, 'lookup'])->name('pemain.lookup');
         Route::post('/pemain', [PemainController::class, 'store'])->name('pemain.store');
+        Route::get('/pemain/peserta/{peserta}/partner', [PemainController::class, 'createPartner'])->name('pemain.peserta.partner.create');
+        Route::post('/pemain/peserta/{peserta}/partner/lookup', [PemainController::class, 'partnerLookup'])->name('pemain.peserta.partner.lookup');
+        Route::post('/pemain/peserta/{peserta}/partner', [PemainController::class, 'storePartner'])->name('pemain.peserta.partner.store');
         Route::get('/pemain/{pemain}/edit', [PemainController::class, 'edit'])->name('pemain.edit');
         Route::patch('/pemain/{pemain}', [PemainController::class, 'update'])->name('pemain.update');
         Route::patch('/pemain/{pemain}/status', [PemainController::class, 'updateStatus'])->name('pemain.status');

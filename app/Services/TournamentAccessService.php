@@ -112,8 +112,9 @@ class TournamentAccessService
             return;
         }
 
-        $exists = TurnamenPeserta::where('id_turnamen', $this->assignedTurnamenId())
-            ->where('id_pemain', $pemain->id)
+        $exists = TurnamenPeserta::query()
+            ->forTurnamen((int) $this->assignedTurnamenId())
+            ->involvingPemain($pemain->id)
             ->exists();
 
         if (! $exists) {

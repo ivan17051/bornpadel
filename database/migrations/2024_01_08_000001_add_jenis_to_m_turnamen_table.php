@@ -8,6 +8,10 @@ class AddJenisToMTurnamenTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasColumn('m_turnamen', 'jenis')) {
+            return;
+        }
+
         Schema::table('m_turnamen', function (Blueprint $table) {
             $table->enum('jenis', ['single', 'double'])->default('single')->after('syarat');
         });
@@ -15,6 +19,10 @@ class AddJenisToMTurnamenTable extends Migration
 
     public function down()
     {
+        if (! Schema::hasColumn('m_turnamen', 'jenis')) {
+            return;
+        }
+
         Schema::table('m_turnamen', function (Blueprint $table) {
             $table->dropColumn('jenis');
         });

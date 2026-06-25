@@ -121,16 +121,26 @@ class GroupMatchmakingService
 
     public function getApprovedPlayers(Turnamen $turnamen): Collection
     {
-        return Pemain::whereHas('turnamenPeserta', function ($query) use ($turnamen) {
-            $query->where('id_turnamen', $turnamen->id)->where('status', 'approved');
-        })->orderBy('nama')->get();
+        $playerIds = TurnamenPeserta::query()
+            ->forTurnamen($turnamen->id)
+            ->approved()
+            ->get()
+            ->flatMap(function (TurnamenPeserta $peserta) {
+                return $peserta->pemainIds();
+            })
+            ->unique()
+            ->values();
+
+        if ($playerIds->isEmpty()) {
+            return collect();
+        }
+
+        return Pemain::whereIn('id', $playerIds)->orderBy('nama')->get();
     }
 
     public function countApprovedPlayers(Turnamen $turnamen): int
     {
-        return TurnamenPeserta::where('id_turnamen', $turnamen->id)
-            ->where('status', 'approved')
-            ->count();
+        return $this->getApprovedPlayers($turnamen)->count();
     }
 
     public function generateRandomGroups(
