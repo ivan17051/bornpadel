@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Grup;
 use App\Models\GrupMember;
-use App\Models\Pemain;
 use App\Models\Pertandingan;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
@@ -25,6 +24,11 @@ class GroupMatchmakingService
     public function getDefaultMaxPerGroup(): int
     {
         return self::DEFAULT_MAX_PER_GROUP;
+    }
+
+    public function unitLabel(Turnamen $turnamen): string
+    {
+        return $turnamen->isDouble() ? 'pasangan' : 'pemain';
     }
 
     public function previewGroupSplit(int $totalPlayers, int $minPerGroup, int $maxPerGroup): ?array
@@ -49,18 +53,18 @@ class GroupMatchmakingService
     public function calculateGroupSizes(int $totalPlayers, int $minPerGroup, int $maxPerGroup): array
     {
         if ($minPerGroup > $maxPerGroup) {
-            throw new RuntimeException('Minimum pemain per grup tidak boleh lebih besar dari maksimum.');
+            throw new RuntimeException('Minimum per grup tidak boleh lebih besar dari maksimum.');
         }
 
         if ($totalPlayers < $minPerGroup) {
-            throw new RuntimeException("Minimal {$minPerGroup} pemain approved diperlukan.");
+            throw new RuntimeException("Minimal {$minPerGroup} peserta approved diperlukan.");
         }
 
         $minGroups = (int) ceil($totalPlayers / $maxPerGroup);
         $maxGroups = (int) floor($totalPlayers / $minPerGroup);
 
         if ($minGroups > $maxGroups) {
-            throw new RuntimeException('Tidak dapat membagi pemain secara merata dengan batas min/max grup ini.');
+            throw new RuntimeException('Tidak dapat membagi peserta secara merata dengan batas min/max grup ini.');
         }
 
         for ($groupCount = $minGroups; $groupCount <= $maxGroups; $groupCount++) {
@@ -77,7 +81,7 @@ class GroupMatchmakingService
             }
         }
 
-        throw new RuntimeException('Tidak dapat membagi pemain secara merata dengan batas min/max grup ini.');
+        throw new RuntimeException('Tidak dapat membagi peserta secara merata dengan batas min/max grup ini.');
     }
 
     public function getActiveTournament(): ?Turnamen
@@ -119,28 +123,29 @@ class GroupMatchmakingService
             && ! $turnamen->grup()->exists();
     }
 
-    public function getApprovedPlayers(Turnamen $turnamen): Collection
+    public function getApprovedEntries(Turnamen $turnamen): Collection
     {
-        $playerIds = TurnamenPeserta::query()
+        $query = TurnamenPeserta::query()
             ->forTurnamen($turnamen->id)
             ->approved()
-            ->get()
-            ->flatMap(function (TurnamenPeserta $peserta) {
-                return $peserta->pemainIds();
-            })
-            ->unique()
-            ->values();
+            ->with(['pemain1', 'pemain2']);
 
-        if ($playerIds->isEmpty()) {
-            return collect();
+        if ($turnamen->isDouble()) {
+            $query->completePairs();
         }
 
-        return Pemain::whereIn('id', $playerIds)->orderBy('nama')->get();
+        return $query->orderBy('id')->get();
     }
 
     public function countApprovedPlayers(Turnamen $turnamen): int
     {
-        return $this->getApprovedPlayers($turnamen)->count();
+        return $this->getApprovedEntries($turnamen)->count();
+    }
+
+    /** @deprecated Use getApprovedEntries() */
+    public function getApprovedPlayers(Turnamen $turnamen): Collection
+    {
+        return $this->getApprovedEntries($turnamen);
     }
 
     public function generateRandomGroups(
@@ -165,32 +170,33 @@ class GroupMatchmakingService
             throw new RuntimeException('Mode pembagian grup tidak valid.');
         }
 
-        $players = $this->getApprovedPlayers($turnamen);
-        $groupSizes = $this->calculateGroupSizes($players->count(), $minPerGroup, $maxPerGroup);
+        $entries = $this->getApprovedEntries($turnamen);
+        $groupSizes = $this->calculateGroupSizes($entries->count(), $minPerGroup, $maxPerGroup);
 
-        return DB::transaction(function () use ($turnamen, $players, $groupSizes, $mode) {
-            $chunks = $this->distributePlayersIntoGroups($players, $groupSizes, $mode);
+        return DB::transaction(function () use ($turnamen, $entries, $groupSizes, $mode) {
+            $chunks = $this->distributeEntriesIntoGroups($entries, $groupSizes, $mode);
             $result = ['groups' => [], 'matches' => 0, 'mode' => $mode, 'group_sizes' => $groupSizes];
 
-            foreach ($chunks as $index => $groupPlayers) {
+            foreach ($chunks as $index => $groupEntries) {
                 $grup = Grup::create([
                     'id_turnamen' => $turnamen->id,
                     'nama' => 'Grup ' . $this->groupLabel($index + 1),
                 ]);
 
-                foreach ($groupPlayers as $pemain) {
+                foreach ($groupEntries as $entry) {
                     GrupMember::create([
                         'id_grup' => $grup->id,
-                        'id_pemain' => $pemain->id,
+                        'id_pemain' => $entry->representative_pemain_id,
+                        'id_turnamen_peserta' => $entry->id,
                     ]);
                 }
 
-                $matchCount = $this->generateRoundRobinMatches($turnamen, $grup, $groupPlayers);
+                $matchCount = $this->generateRoundRobinMatches($turnamen, $grup, $groupEntries);
                 $result['matches'] += $matchCount;
                 $result['groups'][] = [
                     'id' => $grup->id,
                     'nama' => $grup->nama,
-                    'pemain_count' => $groupPlayers->count(),
+                    'pemain_count' => $groupEntries->count(),
                     'matches' => $matchCount,
                 ];
             }
@@ -199,19 +205,26 @@ class GroupMatchmakingService
         });
     }
 
-    protected function generateRoundRobinMatches(Turnamen $turnamen, Grup $grup, Collection $players): int
+    protected function generateRoundRobinMatches(Turnamen $turnamen, Grup $grup, Collection $entries): int
     {
-        $playerIds = $players->pluck('id')->values()->all();
         $count = 0;
+        $items = $entries->values();
 
-        for ($i = 0; $i < count($playerIds); $i++) {
-            for ($j = $i + 1; $j < count($playerIds); $j++) {
+        for ($i = 0; $i < $items->count(); $i++) {
+            for ($j = $i + 1; $j < $items->count(); $j++) {
+                /** @var TurnamenPeserta $side1 */
+                $side1 = $items[$i];
+                /** @var TurnamenPeserta $side2 */
+                $side2 = $items[$j];
+
                 Pertandingan::create([
                     'id_turnamen' => $turnamen->id,
                     'id_grup' => $grup->id,
                     'nama_ronde' => 'Fase Grup',
-                    'id_pemain1' => $playerIds[$i],
-                    'id_pemain2' => $playerIds[$j],
+                    'id_pemain1' => $side1->representative_pemain_id,
+                    'id_pemain2' => $side2->representative_pemain_id,
+                    'id_peserta1' => $side1->id,
+                    'id_peserta2' => $side2->id,
                     'status' => 'scheduled',
                 ]);
                 $count++;
@@ -221,14 +234,14 @@ class GroupMatchmakingService
         return $count;
     }
 
-    protected function distributePlayersIntoGroups(Collection $players, array $groupSizes, string $mode): array
+    protected function distributeEntriesIntoGroups(Collection $entries, array $groupSizes, string $mode): array
     {
         if ($mode === 'by_rating') {
-            $ordered = $players->sortByDesc(function (Pemain $pemain) {
-                return (float) $pemain->rating;
+            $ordered = $entries->sortByDesc(function (TurnamenPeserta $entry) {
+                return $entry->average_rating;
             })->values();
         } else {
-            $ordered = $players->shuffle()->values();
+            $ordered = $entries->shuffle()->values();
         }
 
         $groups = [];

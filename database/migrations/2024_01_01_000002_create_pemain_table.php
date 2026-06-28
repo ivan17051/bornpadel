@@ -11,8 +11,8 @@ class CreatePemainTable extends Migration
         Schema::create('m_pemain', function (Blueprint $table) {
             $table->id();
             $table->string('nama');
-            $table->date('tgl_lahir');
-            $table->unsignedTinyInteger('usia');
+            $table->date('tgl_lahir')->nullable();
+            $table->unsignedTinyInteger('usia')->nullable();
             $table->enum('gender', ['male', 'female']);
             $table->string('no_hp', 20);
             $table->decimal('rating', 5, 2)->default(0);

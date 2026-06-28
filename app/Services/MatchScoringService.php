@@ -11,10 +11,14 @@ use RuntimeException;
 class MatchScoringService
 {
     protected $knockoutBracketService;
+    protected $pointRewardService;
 
-    public function __construct(KnockoutBracketService $knockoutBracketService)
-    {
+    public function __construct(
+        KnockoutBracketService $knockoutBracketService,
+        PointRewardService $pointRewardService
+    ) {
         $this->knockoutBracketService = $knockoutBracketService;
+        $this->pointRewardService = $pointRewardService;
     }
 
     public function recordScore(Pertandingan $pertandingan, array $sets): Pertandingan
@@ -24,7 +28,7 @@ class MatchScoringService
         }
 
         if (! $pertandingan->id_pemain1 || ! $pertandingan->id_pemain2) {
-            throw new RuntimeException('Kedua pemain harus sudah ditentukan sebelum input skor.');
+            throw new RuntimeException('Kedua peserta harus sudah ditentukan sebelum input skor.');
         }
 
         $result = $this->calculateMatchResult($sets, $pertandingan->id_pemain1, $pertandingan->id_pemain2);
@@ -41,8 +45,11 @@ class MatchScoringService
                 ]);
             }
 
+            $winnerPesertaId = $pertandingan->resolvePesertaIdForPemain($result['winner_id']);
+
             $pertandingan->update([
                 'id_pemenang' => $result['winner_id'],
+                'id_peserta_pemenang' => $winnerPesertaId,
                 'status' => 'completed',
             ]);
 
@@ -51,16 +58,24 @@ class MatchScoringService
                     $pertandingan->id_grup,
                     $result['winner_id'],
                     $result['loser_id'],
+                    $winnerPesertaId,
+                    $pertandingan->resolvePesertaIdForPemain($result['loser_id']),
                     $result['winner_sets'],
                     $result['loser_sets'],
                     $result['winner_games'],
                     $result['loser_games']
                 );
             } else {
-                $this->knockoutBracketService->advanceWinner($pertandingan, $result['winner_id']);
+                $this->knockoutBracketService->advanceWinner(
+                    $pertandingan,
+                    $result['winner_id'],
+                    $winnerPesertaId
+                );
             }
 
-            return $pertandingan->fresh(['skor', 'pemain1', 'pemain2', 'pemenang', 'grup']);
+            $this->pointRewardService->awardMatchWin($pertandingan->fresh());
+
+            return $pertandingan->fresh(['skor', 'pemain1', 'pemain2', 'peserta1', 'peserta2', 'pemenang', 'pesertaPemenang', 'grup']);
         });
     }
 
@@ -96,7 +111,7 @@ class MatchScoringService
         }
 
         if ($setsWonP1 >= $setsToWin && $setsWonP2 >= $setsToWin) {
-            throw new RuntimeException('Skor tidak valid. Hanya satu pemain yang boleh memenangkan 3 set.');
+            throw new RuntimeException('Skor tidak valid. Hanya satu pihak yang boleh memenangkan 3 set.');
         }
 
         $p1Won = $setsWonP1 >= $setsToWin;
@@ -117,21 +132,18 @@ class MatchScoringService
         int $grupId,
         int $winnerId,
         int $loserId,
+        ?int $winnerPesertaId,
+        ?int $loserPesertaId,
         int $winnerSets,
         int $loserSets,
         int $winnerGames,
         int $loserGames
     ): void {
-        $winnerMember = GrupMember::where('id_grup', $grupId)
-            ->where('id_pemain', $winnerId)
-            ->first();
-
-        $loserMember = GrupMember::where('id_grup', $grupId)
-            ->where('id_pemain', $loserId)
-            ->first();
+        $winnerMember = $this->findGrupMember($grupId, $winnerId, $winnerPesertaId);
+        $loserMember = $this->findGrupMember($grupId, $loserId, $loserPesertaId);
 
         if (! $winnerMember || ! $loserMember) {
-            throw new RuntimeException('Kedua pemain harus terdaftar di grup untuk memperbarui klasemen.');
+            throw new RuntimeException('Kedua peserta harus terdaftar di grup untuk memperbarui klasemen.');
         }
 
         $winnerMember->increment('poin_didapat', 2);
@@ -140,5 +152,16 @@ class MatchScoringService
 
         $loserMember->increment('set_menang', $loserSets);
         $loserMember->increment('games_menang', $loserGames);
+    }
+
+    protected function findGrupMember(int $grupId, int $pemainId, ?int $pesertaId): ?GrupMember
+    {
+        $query = GrupMember::where('id_grup', $grupId);
+
+        if ($pesertaId) {
+            return $query->where('id_turnamen_peserta', $pesertaId)->first();
+        }
+
+        return $query->where('id_pemain', $pemainId)->first();
     }
 }

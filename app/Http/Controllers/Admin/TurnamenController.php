@@ -35,8 +35,7 @@ class TurnamenController extends Controller
 
     public function store(StoreTurnamenRequest $request)
     {
-        $turnamen = Turnamen::create($request->validated());
-        $this->syncOpenStatus($turnamen);
+        Turnamen::create($request->validated());
 
         return redirect()
             ->route('admin.turnamen.index')
@@ -51,7 +50,6 @@ class TurnamenController extends Controller
     public function update(UpdateTurnamenRequest $request, Turnamen $turnamen)
     {
         $turnamen->update($request->validated());
-        $this->syncOpenStatus($turnamen->fresh());
 
         return redirect()
             ->route('admin.turnamen.index')
@@ -69,16 +67,5 @@ class TurnamenController extends Controller
         return redirect()
             ->route('admin.turnamen.index')
             ->with('success', 'Turnamen berhasil dihapus.');
-    }
-
-    private function syncOpenStatus(Turnamen $turnamen): void
-    {
-        if ($turnamen->status !== 'open') {
-            return;
-        }
-
-        Turnamen::where('id', '!=', $turnamen->id)
-            ->where('status', 'open')
-            ->update(['status' => 'draft']);
     }
 }

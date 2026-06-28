@@ -18,6 +18,7 @@ use App\Services\PemainRegistrationService;
 use App\Services\TournamentAccessService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PemainController extends Controller
 {
@@ -131,6 +132,43 @@ class PemainController extends Controller
         return view('admin.pemain.index', compact('pemain', 'peserta', 'turnamen', 'turnamenList', 'isDoubleView'));
     }
 
+    public function directory(Request $request)
+    {
+        $query = Pemain::query()
+            ->latest();
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($builder) use ($search) {
+                $builder->where('nama', 'like', "%{$search}%")
+                    ->orWhere('no_hp', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('gender')) {
+            $query->where('gender', $request->gender);
+        }
+
+        if ($request->registration === 'none') {
+            $query->withoutRegistration();
+        } elseif ($request->registration === 'registered') {
+            $query->withRegistration();
+        }
+
+        $pemain = $query->paginate(20)->withQueryString();
+        $totalPemain = Pemain::count();
+        $unregisteredCount = Pemain::withoutRegistration()->count();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'data' => $pemain,
+            ]);
+        }
+
+        return view('admin.pemain.directory', compact('pemain', 'totalPemain', 'unregisteredCount'));
+    }
+
     public function create(Request $request)
     {
         $turnamenList = $this->matchmakingService->listForFilter();
@@ -235,6 +273,7 @@ class PemainController extends Controller
         $turnamen = Turnamen::findOrFail($data['id_turnamen']);
         $this->tournamentAccess->assertTurnamenId((int) $turnamen->id);
         $status = $data['status'];
+        $buktiBayar = $request->file('bukti_bayar');
 
         try {
             if ($turnamen->isDouble()) {
@@ -264,6 +303,7 @@ class PemainController extends Controller
                     'id_pemain1' => $pemain1->id,
                     'id_pemain2' => $pemain2->id,
                     'status' => $status,
+                    'bukti_bayar' => $this->registrationService->storeBuktiBayar($buktiBayar),
                 ]);
             } else {
                 $pemain = $this->registrationService->upsertPemain([
@@ -282,6 +322,7 @@ class PemainController extends Controller
                     'id_turnamen' => $turnamen->id,
                     'id_pemain1' => $pemain->id,
                     'status' => $status,
+                    'bukti_bayar' => $this->registrationService->storeBuktiBayar($buktiBayar),
                 ]);
             }
         } catch (\RuntimeException $e) {
@@ -432,8 +473,13 @@ class PemainController extends Controller
 
         $data = $request->validated();
 
-        if (isset($data['tgl_lahir'])) {
-            $data['usia'] = Carbon::parse($data['tgl_lahir'])->age;
+        if (array_key_exists('tgl_lahir', $data)) {
+            if (! empty($data['tgl_lahir'])) {
+                $data['usia'] = Carbon::parse($data['tgl_lahir'])->age;
+            } else {
+                $data['tgl_lahir'] = null;
+                $data['usia'] = null;
+            }
         }
 
         $foto = $request->file('foto');
@@ -473,8 +519,9 @@ class PemainController extends Controller
     public function updateStatus(Request $request, Pemain $pemain)
     {
         $request->validate([
-            'status' => ['required', 'in:approved,rejected,pending'],
+            'status' => ['required', 'in:approved,rejected,pending,unpaid,paid'],
             'id_turnamen' => ['required', 'exists:m_turnamen,id'],
+            'bukti_bayar' => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:5120'],
         ]);
 
         $this->tournamentAccess->assertTurnamenId((int) $request->id_turnamen);
@@ -483,6 +530,7 @@ class PemainController extends Controller
         $peserta = TurnamenPeserta::query()
             ->forTurnamen((int) $request->id_turnamen)
             ->involvingPemain($pemain->id)
+            ->with('turnamen')
             ->first();
 
         if (! $peserta) {
@@ -492,12 +540,34 @@ class PemainController extends Controller
             ], 422);
         }
 
-        $peserta->update(['status' => $request->status]);
+        if ($request->status === 'approved'
+            && $peserta->turnamen
+            && $peserta->turnamen->isDouble()
+            && ! $peserta->isCompletePair()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pasangan belum lengkap. Tambahkan pemain 2 sebelum disetujui.',
+            ], 422);
+        }
+
+        $updatePayload = ['status' => $request->status];
+
+        if ($request->hasFile('bukti_bayar')) {
+            $this->registrationService->updateBuktiBayar($peserta, $request->file('bukti_bayar'));
+        }
+
+        $peserta->update($updatePayload);
 
         $messages = [
-            'approved' => 'Pemain berhasil disetujui.',
-            'rejected' => 'Pemain ditolak.',
-            'pending' => 'Status pemain dikembalikan ke pending.',
+            'approved' => $peserta->turnamen && $peserta->turnamen->isDouble()
+                ? 'Pasangan berhasil disetujui.'
+                : 'Pemain berhasil disetujui.',
+            'rejected' => $peserta->turnamen && $peserta->turnamen->isDouble()
+                ? 'Pasangan ditolak.'
+                : 'Pemain ditolak.',
+            'pending' => $peserta->turnamen && $peserta->turnamen->isDouble()
+                ? 'Status pasangan dikembalikan ke pending.'
+                : 'Status pemain dikembalikan ke pending.',
         ];
 
         return response()->json([
@@ -511,10 +581,24 @@ class PemainController extends Controller
     {
         $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
 
-        $matchQuery = Pertandingan::where(function ($q) use ($pemain) {
+        $pesertaQuery = TurnamenPeserta::query()->involvingPemain($pemain->id);
+
+        if ($this->tournamentAccess->isPanitia()) {
+            $pesertaQuery->forTurnamen($this->tournamentAccess->assignedTurnamenId());
+        }
+
+        $pesertaIds = $pesertaQuery->pluck('id');
+
+        $matchQuery = Pertandingan::where(function ($q) use ($pemain, $pesertaIds) {
             $q->where('id_pemain1', $pemain->id)
                 ->orWhere('id_pemain2', $pemain->id)
                 ->orWhere('id_pemenang', $pemain->id);
+
+            if ($pesertaIds->isNotEmpty()) {
+                $q->orWhereIn('id_peserta1', $pesertaIds)
+                    ->orWhereIn('id_peserta2', $pesertaIds)
+                    ->orWhereIn('id_peserta_pemenang', $pesertaIds);
+            }
         });
 
         if ($this->tournamentAccess->isPanitia()) {
@@ -534,8 +618,16 @@ class PemainController extends Controller
             return back()->with('error', 'Pemain tidak dapat dihapus karena sudah terdaftar dalam pertandingan.');
         }
 
-        $this->photoService->delete($pemain->foto);
-        $pemain->delete();
+        DB::transaction(function () use ($pemain, $pesertaQuery) {
+            $pesertaQuery->with('turnamen')->get()->each(function (TurnamenPeserta $peserta) use ($pemain) {
+                if ($peserta->turnamen && $peserta->turnamen->isDouble()) {
+                    $this->registrationService->detachPemainFromDoublePeserta($peserta, $pemain->id);
+                }
+            });
+
+            $this->photoService->delete($pemain->foto);
+            $pemain->delete();
+        });
 
         if (request()->expectsJson()) {
             return response()->json([

@@ -11,6 +11,7 @@ class TurnamenSeeder extends Seeder
     {
         Turnamen::create([
             'nama' => 'Born Padel Open 2026',
+            'tanggal' => '2026-03-15',
             'harga' => 250000,
             'syarat' => 'Minimal usia 18 tahun, rating WPT minimal 2.0, membawa raket sendiri.',
             'jenis' => 'double',
@@ -19,6 +20,7 @@ class TurnamenSeeder extends Seeder
 
         Turnamen::create([
             'nama' => 'Born Padel Club Championship',
+            'tanggal' => '2026-04-20',
             'harga' => 150000,
             'syarat' => 'Terbuka untuk member aktif Born Padel Club.',
             'jenis' => 'single',

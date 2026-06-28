@@ -31,6 +31,8 @@
                 <select name="status" class="form-select">
                     <option value="">Semua Status</option>
                     <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
+                    <option value="unpaid" {{ request('status') === 'unpaid' ? 'selected' : '' }}>Unpaid</option>
+                    <option value="paid" {{ request('status') === 'paid' ? 'selected' : '' }}>Paid</option>
                     <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
                     <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected</option>
                 </select>
@@ -45,7 +47,7 @@
     </div>
 </div>
 
-<div class="card">
+<div class="card pemain-table-card">
     <div class="card-header d-flex justify-content-between align-items-center row">
         <div class="col-md-6">
             <h5 class="card-title mb-0">
@@ -67,11 +69,14 @@
                 <a href="{{ route('admin.pemain.create', request()->only('id_turnamen')) }}" class="btn btn-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i> Tambah Pemain
                 </a>
+                <a href="{{ route('admin.pemain.directory') }}" class="btn btn-outline-secondary btn-sm ms-1">
+                    <i class="bi bi-database me-1"></i> Database
+                </a>
             </div>
         </div>
     </div>
     <div class="card-body p-0">
-        <div class="table-responsive">
+        <div class="table-responsive" id="pemain-table-wrapper">
             <table class="table table-hover table-striped mb-0 align-middle" id="pemain-table">
                 <thead class="table-light">
                     <tr>
@@ -162,7 +167,9 @@
                             </td>
                             <td>{{ $pemain->firstItem() + $loop->index }}</td>
                             <td>
-                                <strong>{{ $item->nama }}</strong>
+                                <strong>
+                                    <x-pemain-link :pemain="$item" class="text-decoration-none text-dark" />
+                                </strong>
                                 <div class="small text-muted d-md-none">{{ $item->no_hp }}</div>
                             </td>
                             <td class="d-none d-md-table-cell">{{ $item->no_hp }}</td>
@@ -209,6 +216,19 @@
     @endif
 </div>
 @endsection
+
+@push('styles')
+<style>
+    .pemain-table-card,
+    .pemain-table-card > .card-body {
+        overflow: visible;
+    }
+
+    #pemain-table-wrapper .dropdown-menu {
+        z-index: 1080;
+    }
+</style>
+@endpush
 
 @push('scripts')
 <script>

@@ -1,5 +1,5 @@
 @php
-    $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'rejected'], true);
+    $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'rejected', 'unpaid', 'paid'], true);
     $hasReject = $turnamen && (
         ($registrationStatus === 'pending' && ! $turnamenOngoing)
         || ($registrationStatus === 'approved' && ! $turnamenOngoing)
@@ -11,6 +11,7 @@
     <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
             type="button"
             data-bs-toggle="dropdown"
+            data-bs-popper-config='{"strategy":"fixed","placement":"bottom-end"}'
             aria-expanded="false">
         <i class="bi bi-three-dots-vertical"></i>
     </button>

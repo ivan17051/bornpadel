@@ -2,28 +2,36 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Concerns\NormalizesPhoneNumbers;
 use App\Models\Turnamen;
 use Illuminate\Foundation\Http\FormRequest;
 
 class LookupPemainRequest extends FormRequest
 {
+    use NormalizesPhoneNumbers;
+
     public function authorize()
     {
         return true;
+    }
+
+    protected function prepareForValidation()
+    {
+        $this->normalizePhoneFields(['no_hp', 'partner_no_hp']);
     }
 
     public function rules()
     {
         $rules = [
             'id_turnamen' => ['required', 'exists:m_turnamen,id'],
-            'no_hp' => ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'],
-            'status' => ['nullable', 'in:pending,approved,rejected'],
+            'no_hp' => ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
+            'status' => ['nullable', 'in:pending,approved,rejected,unpaid,paid'],
         ];
 
         $turnamen = Turnamen::find($this->input('id_turnamen'));
 
         if ($turnamen && $turnamen->isDouble()) {
-            $rules['partner_no_hp'] = ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp'];
+            $rules['partner_no_hp'] = ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp'];
         }
 
         return $rules;

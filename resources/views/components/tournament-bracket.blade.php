@@ -35,14 +35,26 @@
                         <div class="bracket-matches d-flex flex-column justify-content-around h-100">
                             @foreach ($round['matches'] as $match)
                                 <div class="bracket-match {{ $match['status'] === 'completed' ? 'is-completed' : '' }} {{ $match['pemenang_id'] ? 'has-winner' : '' }}">
-                                    <div class="bracket-player {{ $match['pemenang_id'] && $match['pemain1_id'] === $match['pemenang_id'] ? 'is-winner' : '' }} {{ ! $match['pemain1_id'] ? 'is-tbd' : '' }}">
-                                        <span class="bracket-player-name">{{ $match['pemain1'] }}</span>
+                                    <div class="bracket-player {{ $match['pemenang_id'] && $match['pemain1_id'] === $match['pemenang_id'] ? 'is-winner' : '' }} {{ ! $match['pemain1_id'] && empty($match['pemain1_ids']) ? 'is-tbd' : '' }}">
+                                        <span class="bracket-player-name">
+                                            @if (! empty($match['pemain1_ids']))
+                                                <x-pemain-names :pemain-ids="$match['pemain1_ids']" :nama="$match['pemain1']" />
+                                            @else
+                                                {{ $match['pemain1'] }}
+                                            @endif
+                                        </span>
                                         @if ($match['skor'] && $match['status'] === 'completed')
                                             <span class="bracket-score-badge">{{ collect(explode(', ', $match['skor']))->map(fn($s) => explode('-', $s)[0] ?? '')->implode(' ') }}</span>
                                         @endif
                                     </div>
-                                    <div class="bracket-player {{ $match['pemenang_id'] && $match['pemain2_id'] === $match['pemenang_id'] ? 'is-winner' : '' }} {{ ! $match['pemain2_id'] ? 'is-tbd' : '' }}">
-                                        <span class="bracket-player-name">{{ $match['pemain2'] }}</span>
+                                    <div class="bracket-player {{ $match['pemenang_id'] && $match['pemain2_id'] === $match['pemenang_id'] ? 'is-winner' : '' }} {{ ! $match['pemain2_id'] && empty($match['pemain2_ids']) ? 'is-tbd' : '' }}">
+                                        <span class="bracket-player-name">
+                                            @if (! empty($match['pemain2_ids']))
+                                                <x-pemain-names :pemain-ids="$match['pemain2_ids']" :nama="$match['pemain2']" />
+                                            @else
+                                                {{ $match['pemain2'] }}
+                                            @endif
+                                        </span>
                                         @if ($match['skor'] && $match['status'] === 'completed')
                                             <span class="bracket-score-badge">{{ collect(explode(', ', $match['skor']))->map(fn($s) => explode('-', $s)[1] ?? '')->implode(' ') }}</span>
                                         @endif

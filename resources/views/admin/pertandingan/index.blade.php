@@ -84,9 +84,9 @@
                         <tr>
                             <td><span class="badge text-bg-info">{{ $match->nama_ronde }}</span></td>
                             <td>{{ $match->grup->nama ?? '—' }}</td>
-                            <td>{{ $match->pemain1->nama ?? 'TBD' }}</td>
+                            <td>@include('admin.pertandingan.partials.match-side-label', ['match' => $match, 'side' => 1])</td>
                             <td class="text-center text-muted">vs</td>
-                            <td>{{ $match->pemain2->nama ?? 'TBD' }}</td>
+                            <td>@include('admin.pertandingan.partials.match-side-label', ['match' => $match, 'side' => 2])</td>
                             <td>
                                 @if ($match->skor->isNotEmpty())
                                     @foreach ($match->skor as $s)
@@ -94,8 +94,8 @@
                                             {{ $s->skor_pemain1 }}-{{ $s->skor_pemain2 }}
                                         </span>
                                     @endforeach
-                                    @if ($match->pemenang)
-                                        <i class="bi bi-trophy-fill text-warning ms-1" title="{{ $match->pemenang->nama }}"></i>
+                                    @if ($match->pemenang || $match->pesertaPemenang)
+                                        <i class="bi bi-trophy-fill text-warning ms-1" title="{{ $match->winner_label }}"></i>
                                     @endif
                                 @else
                                     <span class="text-muted">—</span>

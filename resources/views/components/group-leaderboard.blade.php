@@ -38,7 +38,7 @@
                                     <thead class="table-light">
                                         <tr>
                                             <th class="text-center" style="width:3rem">#</th>
-                                            <th>Pemain</th>
+                                            <th>{{ optional($turnamen)->isDouble() ? 'Pasangan' : 'Pemain' }}</th>
                                             <th class="text-center">Poin</th>
                                             <th class="text-center d-none d-sm-table-cell">Set</th>
                                             <th class="text-center d-none d-md-table-cell">Games</th>
@@ -54,7 +54,9 @@
                                                         {{ $row['rank'] }}
                                                     @endif
                                                 </td>
-                                                <td class="fw-semibold">{{ $row['nama'] }}</td>
+                                                <td class="fw-semibold">
+                                                    <x-pemain-names :pemain-ids="$row['pemain_ids'] ?? []" :nama="$row['nama']" />
+                                                </td>
                                                 <td class="text-center">
                                                     <span class="badge text-bg-primary">{{ $row['poin_didapat'] }}</span>
                                                 </td>

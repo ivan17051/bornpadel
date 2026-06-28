@@ -14,7 +14,10 @@ class Pertandingan extends Model
         'nama_ronde',
         'id_pemain1',
         'id_pemain2',
+        'id_peserta1',
+        'id_peserta2',
         'id_pemenang',
+        'id_peserta_pemenang',
         'status',
         'id_next_pertandingan',
     ];
@@ -37,6 +40,21 @@ class Pertandingan extends Model
     public function pemain2()
     {
         return $this->belongsTo(Pemain::class, 'id_pemain2');
+    }
+
+    public function peserta1()
+    {
+        return $this->belongsTo(TurnamenPeserta::class, 'id_peserta1');
+    }
+
+    public function peserta2()
+    {
+        return $this->belongsTo(TurnamenPeserta::class, 'id_peserta2');
+    }
+
+    public function pesertaPemenang()
+    {
+        return $this->belongsTo(TurnamenPeserta::class, 'id_peserta_pemenang');
     }
 
     public function pemenang()
@@ -68,5 +86,45 @@ class Pertandingan extends Model
     public function isReadyForScoring(): bool
     {
         return $this->id_pemain1 && $this->id_pemain2;
+    }
+
+    public function getSide1LabelAttribute(): string
+    {
+        if ($this->peserta1) {
+            return $this->peserta1->display_name;
+        }
+
+        return $this->pemain1->nama ?? 'TBD';
+    }
+
+    public function getSide2LabelAttribute(): string
+    {
+        if ($this->peserta2) {
+            return $this->peserta2->display_name;
+        }
+
+        return $this->pemain2->nama ?? 'TBD';
+    }
+
+    public function getWinnerLabelAttribute(): ?string
+    {
+        if ($this->pesertaPemenang) {
+            return $this->pesertaPemenang->display_name;
+        }
+
+        return $this->pemenang->nama ?? null;
+    }
+
+    public function resolvePesertaIdForPemain(int $pemainId): ?int
+    {
+        if ((int) $this->id_pemain1 === $pemainId) {
+            return $this->id_peserta1 ? (int) $this->id_peserta1 : null;
+        }
+
+        if ((int) $this->id_pemain2 === $pemainId) {
+            return $this->id_peserta2 ? (int) $this->id_peserta2 : null;
+        }
+
+        return null;
     }
 }

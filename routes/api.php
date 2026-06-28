@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Route;
 // Guest API
 Route::prefix('guest')->group(function () {
     Route::get('/tournaments/active', [TournamentController::class, 'active']);
+    Route::get('/tournaments/open', [TournamentController::class, 'open']);
     Route::post('/register', [RegistrationController::class, 'store']);
     Route::get('/standings', [StandingsController::class, 'index'])->name('api.guest.standings');
     Route::get('/bracket', [BracketController::class, 'index'])->name('api.guest.bracket');
@@ -26,6 +27,7 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     Route::post('/matchmaking/close-registration', [MatchmakingController::class, 'closeRegistration']);
     Route::post('/matchmaking/random-grup', [MatchmakingController::class, 'randomGrup']);
     Route::post('/matchmaking/end-group-stage', [MatchmakingController::class, 'endGroupStage']);
+    Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament']);
 
     Route::get('/pertandingan/{pertandingan}', [PertandinganController::class, 'show']);
     Route::post('/pertandingan/{pertandingan}/score', [PertandinganController::class, 'storeScore']);

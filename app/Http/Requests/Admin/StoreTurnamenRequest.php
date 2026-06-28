@@ -15,6 +15,7 @@ class StoreTurnamenRequest extends FormRequest
     {
         return [
             'nama' => ['required', 'string', 'max:255'],
+            'tanggal' => ['required', 'date'],
             'harga' => ['required', 'numeric', 'min:0'],
             'syarat' => ['nullable', 'string'],
             'jenis' => ['required', 'in:single,double'],
@@ -26,6 +27,8 @@ class StoreTurnamenRequest extends FormRequest
     {
         return [
             'nama.required' => 'Nama turnamen wajib diisi.',
+            'tanggal.required' => 'Tanggal turnamen wajib diisi.',
+            'tanggal.date' => 'Tanggal turnamen tidak valid.',
             'harga.required' => 'Biaya pendaftaran wajib diisi.',
             'harga.min' => 'Biaya pendaftaran tidak boleh negatif.',
             'status.in' => 'Status turnamen tidak valid.',

@@ -55,6 +55,7 @@
                     <tr>
                         <th>#</th>
                         <th>Nama</th>
+                        <th class="d-none d-md-table-cell">Tanggal</th>
                         <th class="d-none d-md-table-cell">Biaya</th>
                         <th class="d-none d-lg-table-cell">Jenis</th>
                         <th>Status</th>
@@ -69,8 +70,12 @@
                             <td>
                                 <strong>{{ $item->nama }}</strong>
                                 <div class="small text-muted d-md-none">
-                                    Rp {{ number_format($item->harga, 0, ',', '.') }}
+                                    {{ optional($item->tanggal)->format('d M Y') ?? '—' }}
+                                    · Rp {{ number_format($item->harga, 0, ',', '.') }}
                                 </div>
+                            </td>
+                            <td class="d-none d-md-table-cell">
+                                {{ optional($item->tanggal)->format('d M Y') ?? '—' }}
                             </td>
                             <td class="d-none d-md-table-cell">
                                 Rp {{ number_format($item->harga, 0, ',', '.') }}
@@ -114,7 +119,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">
+                            <td colspan="8" class="text-center text-muted py-4">
                                 Belum ada turnamen. <a href="{{ route('admin.turnamen.create') }}">Buat turnamen pertama</a>.
                             </td>
                         </tr>

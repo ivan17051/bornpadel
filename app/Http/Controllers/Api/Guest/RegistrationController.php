@@ -18,7 +18,9 @@ class RegistrationController extends Controller
 
     public function store(StorePemainRegistrationRequest $request): JsonResponse
     {
-        $turnamen = $this->registrationService->getActiveTournament();
+        $turnamen = app(PemainRegistrationService::class)->resolveOpenTournament(
+            $request->input('id_turnamen') ? (int) $request->input('id_turnamen') : null
+        ) ?? $this->registrationService->getActiveTournament();
 
         if (! $turnamen) {
             return response()->json([
@@ -28,6 +30,7 @@ class RegistrationController extends Controller
         }
 
         $validated = $request->validated();
+        $buktiBayar = $request->file('bukti_bayar');
 
         try {
             if ($turnamen->isDouble()) {
@@ -42,7 +45,8 @@ class RegistrationController extends Controller
                         'gender' => $validated['partner_gender'],
                         'rating' => $validated['partner_rating'] ?? null,
                     ],
-                    $request->file('partner_foto')
+                    $request->file('partner_foto'),
+                    $buktiBayar
                 );
 
                 $pemain = $result['pemain'];
@@ -76,7 +80,8 @@ class RegistrationController extends Controller
             $pemain = $this->registrationService->register(
                 $turnamen,
                 $validated,
-                $request->file('foto')
+                $request->file('foto'),
+                $buktiBayar
             );
         } catch (\RuntimeException $e) {
             return response()->json([

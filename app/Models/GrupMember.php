@@ -11,6 +11,7 @@ class GrupMember extends Model
     protected $fillable = [
         'id_grup',
         'id_pemain',
+        'id_turnamen_peserta',
         'poin_didapat',
         'set_menang',
         'games_menang',
@@ -24,5 +25,19 @@ class GrupMember extends Model
     public function pemain()
     {
         return $this->belongsTo(Pemain::class, 'id_pemain');
+    }
+
+    public function turnamenPeserta()
+    {
+        return $this->belongsTo(TurnamenPeserta::class, 'id_turnamen_peserta');
+    }
+
+    public function getDisplayNameAttribute(): string
+    {
+        if ($this->turnamenPeserta) {
+            return $this->turnamenPeserta->display_name;
+        }
+
+        return optional($this->pemain)->nama ?? '-';
     }
 }

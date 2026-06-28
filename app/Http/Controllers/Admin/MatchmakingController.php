@@ -7,6 +7,7 @@ use App\Models\Turnamen;
 use App\Services\GroupMatchmakingService;
 use App\Services\KnockoutBracketService;
 use App\Services\TournamentAccessService;
+use App\Services\TournamentCompletionService;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -15,15 +16,18 @@ class MatchmakingController extends Controller
     protected $matchmakingService;
     protected $knockoutBracketService;
     protected $tournamentAccess;
+    protected $tournamentCompletionService;
 
     public function __construct(
         GroupMatchmakingService $matchmakingService,
         KnockoutBracketService $knockoutBracketService,
-        TournamentAccessService $tournamentAccess
+        TournamentAccessService $tournamentAccess,
+        TournamentCompletionService $tournamentCompletionService
     ) {
         $this->matchmakingService = $matchmakingService;
         $this->knockoutBracketService = $knockoutBracketService;
         $this->tournamentAccess = $tournamentAccess;
+        $this->tournamentCompletionService = $tournamentCompletionService;
     }
 
     public function index(Request $request)
@@ -40,7 +44,17 @@ class MatchmakingController extends Controller
         $groupSplitPreview = null;
         if ($turnamen) {
             $grup = $turnamen->grup()
-                ->with(['pemain', 'pertandingan.pemain1', 'pertandingan.pemain2'])
+                ->with([
+                    'members.turnamenPeserta.pemain1',
+                    'members.turnamenPeserta.pemain2',
+                    'members.pemain',
+                    'pertandingan.peserta1.pemain1',
+                    'pertandingan.peserta1.pemain2',
+                    'pertandingan.peserta2.pemain1',
+                    'pertandingan.peserta2.pemain2',
+                    'pertandingan.pemain1',
+                    'pertandingan.pemain2',
+                ])
                 ->get();
 
             $groupSplitPreview = $this->matchmakingService->previewGroupSplit(
@@ -54,6 +68,7 @@ class MatchmakingController extends Controller
             'turnamen' => $turnamen,
             'turnamenList' => $turnamenList,
             'approvedCount' => $approvedCount,
+            'unitLabel' => $turnamen ? $this->matchmakingService->unitLabel($turnamen) : 'pemain',
             'grup' => $grup,
             'groupSplitPreview' => $groupSplitPreview,
             'defaultMinPerGroup' => $this->matchmakingService->getDefaultMinPerGroup(),
@@ -62,25 +77,58 @@ class MatchmakingController extends Controller
             'canRandomGrup' => $turnamen ? $this->matchmakingService->canGenerateRandomGroups($turnamen) : false,
             'canEndGroupStage' => $turnamen ? $this->knockoutBracketService->canEndGroupStage($turnamen) : false,
             'hasKnockoutBracket' => $turnamen ? $this->knockoutBracketService->hasKnockoutBracket($turnamen) : false,
+            'canCompleteTournament' => $turnamen ? $this->tournamentCompletionService->canComplete($turnamen) : false,
         ]);
     }
 
     public function endGroupStage(Request $request)
     {
+        $request->validate([
+            'tournament_id' => ['nullable', 'integer', 'exists:m_turnamen,id'],
+            'id_turnamen' => ['nullable', 'integer', 'exists:m_turnamen,id'],
+            'jumlah_lolos' => ['required', 'integer', 'min:1', 'max:8'],
+        ], [
+            'jumlah_lolos.required' => 'Jumlah peserta lolos wajib diisi.',
+            'jumlah_lolos.min' => 'Jumlah peserta lolos minimal 1.',
+        ]);
+
         try {
             $turnamen = $this->resolveTournament($request);
-            $result = $this->knockoutBracketService->generateKnockoutBracket($turnamen);
+            $jumlahLolos = (int) $request->input('jumlah_lolos');
+            $result = $this->knockoutBracketService->generateKnockoutBracket($turnamen, $jumlahLolos);
+            $result['jumlah_lolos_per_grup'] = $jumlahLolos;
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        $byeMessage = $result['bye_count'] > 0
+            ? sprintf(' %d BYE diberikan ke unggulan teratas.', $result['bye_count'])
+            : '';
+
+        return response()->json([
+            'success' => true,
+            'message' => sprintf(
+                'Bracket knockout berhasil dibuat (%s) dengan %d pertandingan.%s',
+                implode(' → ', $result['rounds']),
+                $result['matches_created'],
+                $byeMessage
+            ),
+            'data' => $result,
+        ]);
+    }
+
+    public function completeTournament(Request $request)
+    {
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $result = $this->tournamentCompletionService->complete($turnamen);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
 
         return response()->json([
             'success' => true,
-            'message' => sprintf(
-                'Bracket knockout berhasil dibuat (%s) dengan %d pertandingan.',
-                implode(' → ', $result['rounds']),
-                $result['matches_created']
-            ),
+            'message' => 'Turnamen berhasil diselesaikan. Poin bonus juara telah ditambahkan.',
             'data' => $result,
         ]);
     }
@@ -152,7 +200,10 @@ class MatchmakingController extends Controller
     {
         $request->validate([
             'id_turnamen' => ['nullable', 'exists:m_turnamen,id'],
+            'tournament_id' => ['nullable', 'exists:m_turnamen,id'],
         ]);
+
+        $turnamenId = $request->input('tournament_id') ?? $request->input('id_turnamen');
 
         if ($this->tournamentAccess->isPanitia()) {
             $turnamen = $this->tournamentAccess->assignedTurnamen();
@@ -164,8 +215,8 @@ class MatchmakingController extends Controller
             return $turnamen;
         }
 
-        if ($request->filled('id_turnamen')) {
-            return Turnamen::findOrFail($request->id_turnamen);
+        if ($request->filled('id_turnamen') || $request->filled('tournament_id')) {
+            return Turnamen::findOrFail($turnamenId);
         }
 
         $turnamen = $this->matchmakingService->getActiveTournament();

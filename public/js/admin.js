@@ -288,26 +288,70 @@ const BornPadelAdmin = (function () {
         const endGroupBtn = document.getElementById('btn-end-group-stage');
 
         if (endGroupBtn && !endGroupBtn.disabled) {
-            endGroupBtn.addEventListener('click', async () => {
+            const modalEl = document.getElementById('endGroupStageModal');
+            const confirmBtn = document.getElementById('btn-confirm-end-group-stage');
+            const jumlahInput = document.getElementById('jumlah-lolos-input');
+            const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
+
+            endGroupBtn.addEventListener('click', () => {
+                if (modal) {
+                    modal.show();
+                }
+            });
+
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', async () => {
+                    const parsed = parseInt(jumlahInput?.value || '0', 10);
+
+                    if (!parsed || parsed < 1) {
+                        showToast('Jumlah lolos harus angka minimal 1.', 'error');
+                        return;
+                    }
+
+                    const original = confirmBtn.innerHTML;
+                    setButtonLoading(confirmBtn, true);
+
+                    try {
+                        const data = await apiRequest(endGroupBtn.dataset.url, 'POST', {
+                            tournament_id: parseInt(endGroupBtn.dataset.turnamen, 10),
+                            id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
+                            jumlah_lolos: parsed,
+                        });
+                        modal?.hide();
+                        showToast(data.message);
+                        goTo('/admin/bracket');
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                        setButtonLoading(confirmBtn, false, original);
+                    }
+                });
+            }
+        }
+
+        const completeTournamentBtn = document.getElementById('btn-complete-tournament');
+
+        if (completeTournamentBtn) {
+            completeTournamentBtn.addEventListener('click', async () => {
                 const confirmed = await confirmAction({
-                    title: 'Akhiri fase grup dan buat bracket knockout?',
-                    text: '2 pemain teratas dari setiap grup akan lolos ke babak gugur.',
-                    confirmText: 'Ya, buat bracket',
+                    title: 'Selesaikan turnamen?',
+                    text: 'Poin bonus juara 1, 2, dan 3 akan ditambahkan ke total poin pemain.',
+                    confirmText: 'Ya, selesaikan',
                 });
                 if (!confirmed) return;
 
-                const original = endGroupBtn.innerHTML;
-                setButtonLoading(endGroupBtn, true);
+                const original = completeTournamentBtn.innerHTML;
+                setButtonLoading(completeTournamentBtn, true);
 
                 try {
-                    const data = await apiRequest(endGroupBtn.dataset.url, 'POST', {
-                        id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
+                    const data = await apiRequest(completeTournamentBtn.dataset.url, 'POST', {
+                        tournament_id: parseInt(completeTournamentBtn.dataset.turnamen, 10),
+                        id_turnamen: parseInt(completeTournamentBtn.dataset.turnamen, 10),
                     });
                     showToast(data.message);
-                    goTo('/admin/bracket');
+                    reloadPage();
                 } catch (e) {
                     showToast(e.message, 'error');
-                    setButtonLoading(endGroupBtn, false, original);
+                    setButtonLoading(completeTournamentBtn, false, original);
                 }
             });
         }

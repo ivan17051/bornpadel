@@ -58,13 +58,12 @@
 </div>
 
 <div class="mb-3">
-    <label for="{{ $field('tgl_lahir') }}" class="form-label fw-semibold">Tanggal Lahir <span class="text-danger">*</span></label>
+    <label for="{{ $field('tgl_lahir') }}" class="form-label fw-semibold">Tanggal Lahir <span class="text-muted fw-normal">(opsional)</span></label>
     <input type="date"
            name="{{ $field('tgl_lahir') }}"
            id="{{ $field('tgl_lahir') }}"
            class="form-control @error($errorName('tgl_lahir')) is-invalid @enderror"
            value="{{ $oldValue('tgl_lahir', optional(optional($existingPemain)->tgl_lahir)->format('Y-m-d')) }}"
-           required
            max="{{ date('Y-m-d', strtotime('-1 day')) }}">
     @error($errorName('tgl_lahir'))
         <div class="invalid-feedback">{{ $message }}</div>

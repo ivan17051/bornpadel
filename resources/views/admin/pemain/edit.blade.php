@@ -33,7 +33,7 @@
                          style="width: 70px; height: 70px; min-width: 70px; min-height: 70px;">
                     <h5 class="card-title mb-0">{{ $pemain->nama }}</h5>
                 </div>
-                @if ($pemain->usia)
+                @if ($pemain->tgl_lahir && $pemain->usia)
                     <span class="badge text-bg-secondary">{{ $pemain->usia }} tahun</span>
                 @endif
             </div>

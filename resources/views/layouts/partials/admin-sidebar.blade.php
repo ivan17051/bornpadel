@@ -36,9 +36,9 @@
                 </li>
                 @endif
                 <li class="nav-item">
-                    <a href="{{ route('admin.pemain.index') }}" class="nav-link {{ request()->routeIs('admin.pemain.*') ? 'active' : '' }}">
-                        <i class="nav-icon bi bi-people"></i>
-                        <p>Pemain</p>
+                    <a href="{{ route('admin.pemain.directory') }}" class="nav-link {{ request()->routeIs('admin.pemain.directory') ? 'active' : '' }}">
+                        <i class="nav-icon bi bi-database"></i>
+                        <p>Semua Pemain</p>
                     </a>
                 </li>
                 @if (auth()->user()->isAdmin())
@@ -51,6 +51,12 @@
                 @endif
 
                 <div class="nav-header">TURNAMEN</div>
+                <li class="nav-item">
+                    <a href="{{ route('admin.pemain.index') }}" class="nav-link {{ request()->routeIs('admin.pemain.index') || request()->routeIs('admin.pemain.create') || request()->routeIs('admin.pemain.edit') ? 'active' : '' }}">
+                        <i class="nav-icon bi bi-people"></i>
+                        <p>Pemain Turnamen</p>
+                    </a>
+                </li>
                 <li class="nav-item">
                     <a href="{{ route('admin.matchmaking.index') }}" class="nav-link {{ request()->routeIs('admin.matchmaking.*') ? 'active' : '' }}">
                         <i class="nav-icon bi bi-shuffle"></i>

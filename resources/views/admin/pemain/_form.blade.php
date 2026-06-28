@@ -48,7 +48,7 @@
         <div class="mb-3">
             <label for="lookup_status" class="form-label">Status Pendaftaran <span class="text-danger">*</span></label>
             <select name="status" id="lookup_status" class="form-select" required>
-                @foreach (['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected'] as $value => $label)
+                @foreach (['pending' => 'Pending', 'unpaid' => 'Unpaid', 'paid' => 'Paid', 'approved' => 'Approved', 'rejected' => 'Rejected'] as $value => $label)
                     <option value="{{ $value }}" {{ old('status', request('status', 'approved')) === $value ? 'selected' : '' }}>
                         {{ $label }}
                     </option>
@@ -57,31 +57,18 @@
         </div>
 
         <div class="mb-3">
-            <label for="lookup_no_hp" class="form-label">Nomor HP / WhatsApp Pemain 1 <span class="text-danger">*</span></label>
-            <input type="tel"
-                   name="no_hp"
-                   id="lookup_no_hp"
-                   class="form-control @error('no_hp') is-invalid @enderror"
-                   value="{{ old('no_hp') }}"
-                   placeholder="08xxxxxxxxxx"
-                   required>
-            @error('no_hp')
-                <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
+            <x-phone-input name="no_hp"
+                           id="lookup_no_hp"
+                           label="Nomor HP / WhatsApp Pemain 1"
+                           :value="old('no_hp')" />
         </div>
 
         <div class="mb-4 {{ $lookupIsDouble ? '' : 'd-none' }}" id="lookup-partner-hp-wrap">
-            <label for="lookup_partner_no_hp" class="form-label">Nomor HP / WhatsApp Pemain 2 <span class="text-danger">*</span></label>
-            <input type="tel"
-                   name="partner_no_hp"
-                   id="lookup_partner_no_hp"
-                   class="form-control @error('partner_no_hp') is-invalid @enderror"
-                   value="{{ old('partner_no_hp') }}"
-                   placeholder="08xxxxxxxxxx"
-                   {{ $lookupIsDouble ? 'required' : '' }}>
-            @error('partner_no_hp')
-                <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
+            <x-phone-input name="partner_no_hp"
+                           id="lookup_partner_no_hp"
+                           label="Nomor HP / WhatsApp Pemain 2"
+                           :value="old('partner_no_hp')"
+                           :required="$lookupIsDouble" />
         </div>
 
         <button type="submit" class="btn btn-primary">
@@ -94,9 +81,8 @@
         (function () {
             const select = document.getElementById('lookup_id_turnamen');
             const wrap = document.getElementById('lookup-partner-hp-wrap');
-            const input = document.getElementById('lookup_partner_no_hp');
 
-            if (!select || !wrap || !input) {
+            if (!select || !wrap) {
                 return;
             }
 
@@ -104,9 +90,12 @@
                 const option = select.options[select.selectedIndex];
                 const isDouble = option && option.dataset.jenis === 'double';
                 wrap.classList.toggle('d-none', !isDouble);
-                input.required = isDouble;
-                if (!isDouble) {
-                    input.value = '';
+                const localInput = wrap.querySelector('[data-phone-local]');
+                if (localInput) {
+                    localInput.required = isDouble;
+                    if (!isDouble) {
+                        localInput.value = '';
+                    }
                 }
             }
 
@@ -212,6 +201,18 @@
                 ])
             </div>
         </div>
+
+        <div class="mb-3 mt-3">
+            <label for="bukti_bayar_double" class="form-label">Bukti Pembayaran <span class="text-muted">(opsional)</span></label>
+            <input type="file"
+                   name="bukti_bayar"
+                   id="bukti_bayar_double"
+                   class="form-control @error('bukti_bayar') is-invalid @enderror"
+                   accept="image/jpeg,image/png,image/webp,application/pdf">
+            @error('bukti_bayar')
+                <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
     @else
         @if ($isExisting)
             <div class="alert alert-info py-2 small mb-3">
@@ -235,5 +236,17 @@
             'phoneReadonly' => true,
             'phoneValue' => $noHp,
         ])
+
+        <div class="mb-3">
+            <label for="bukti_bayar" class="form-label">Bukti Pembayaran <span class="text-muted">(opsional)</span></label>
+            <input type="file"
+                   name="bukti_bayar"
+                   id="bukti_bayar"
+                   class="form-control @error('bukti_bayar') is-invalid @enderror"
+                   accept="image/jpeg,image/png,image/webp,application/pdf">
+            @error('bukti_bayar')
+                <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
     @endif
 @endif

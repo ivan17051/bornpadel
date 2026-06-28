@@ -15,9 +15,11 @@
         <x-tournament-bracket :bracket="$bracket" :turnamen="$turnamen" :refreshable="true" />
 
         <div class="text-center mt-4 d-flex flex-wrap justify-content-center gap-2">
-            <a href="{{ route('guest.standings') }}" class="btn btn-outline-primary">
-                <i class="bi bi-bar-chart-steps me-1"></i> Klasemen Grup
-            </a>
+            @if ($turnamen)
+                <a href="{{ route('guest.standings', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-outline-primary">
+                    <i class="bi bi-bar-chart-steps me-1"></i> Klasemen Grup
+                </a>
+            @endif
             <a href="{{ route('guest.landing') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left me-1"></i> Beranda
             </a>

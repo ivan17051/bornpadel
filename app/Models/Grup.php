@@ -38,7 +38,7 @@ class Grup extends Model
     public function orderedStandings()
     {
         return $this->members()
-            ->with('pemain')
+            ->with(['pemain', 'turnamenPeserta.pemain1', 'turnamenPeserta.pemain2'])
             ->orderByDesc('poin_didapat')
             ->orderByDesc('set_menang')
             ->orderByDesc('games_menang');

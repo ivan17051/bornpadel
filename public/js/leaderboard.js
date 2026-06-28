@@ -6,7 +6,27 @@
     if (!container) return;
 
     const refreshUrl = container.dataset.refreshUrl;
-    const refreshBtn = document.getElementById('btn-refresh-leaderboard');
+    const profileBase = '/pemain/';
+
+    const renderNameCell = (row) => {
+        const ids = row.pemain_ids || (row.id_pemain ? [row.id_pemain] : []);
+
+        if (!ids.length) {
+            return row.nama || '—';
+        }
+
+        if (ids.length === 1) {
+            return `<a href="${profileBase}${ids[0]}" class="pemain-profile-link">${row.nama || 'Pemain'}</a>`;
+        }
+
+        const names = String(row.nama || '').split(' / ');
+
+        return ids.map((id, index) => {
+            const label = names[index] || 'Pemain';
+            const link = `<a href="${profileBase}${id}" class="pemain-profile-link">${label}</a>`;
+            return index < ids.length - 1 ? `${link}<span class="text-muted"> / </span>` : link;
+        }).join('');
+    };
 
     const renderHeader = () => `
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -38,7 +58,7 @@
                     <td class="text-center fw-bold">
                         ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
                     </td>
-                    <td class="fw-semibold">${row.nama}</td>
+                    <td class="fw-semibold">${renderNameCell(row)}</td>
                     <td class="text-center"><span class="badge text-bg-primary">${row.poin_didapat}</span></td>
                     <td class="text-center d-none d-sm-table-cell">${row.set_menang}</td>
                     <td class="text-center d-none d-md-table-cell">${row.games_menang}</td>
@@ -94,6 +114,5 @@
     };
 
     bindRefreshButton();
-
     setInterval(fetchStandings, 30000);
 })();

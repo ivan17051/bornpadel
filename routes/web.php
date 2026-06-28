@@ -12,12 +12,14 @@ use App\Http\Controllers\Admin\TurnamenController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Guest\BracketController;
 use App\Http\Controllers\Guest\LandingController;
+use App\Http\Controllers\Guest\PemainController as GuestPemainController;
 use App\Http\Controllers\Guest\RegistrationController;
 use App\Http\Controllers\Guest\StandingsController;
 use Illuminate\Support\Facades\Route;
 
 // Public guest routes
 Route::get('/', [LandingController::class, 'index'])->name('guest.landing');
+Route::get('/pemain/{pemain}', [GuestPemainController::class, 'show'])->name('guest.pemain.show');
 Route::get('/register', [RegistrationController::class, 'create'])->name('guest.register');
 Route::post('/register/lookup', [RegistrationController::class, 'lookup'])->name('guest.register.lookup');
 Route::get('/register/form', [RegistrationController::class, 'form'])->name('guest.register.form');
@@ -56,6 +58,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
 
         Route::get('/pemain', [PemainController::class, 'index'])->name('pemain.index');
+        Route::get('/pemain/directory', [PemainController::class, 'directory'])->name('pemain.directory');
         Route::get('/pemain/create', [PemainController::class, 'create'])->name('pemain.create');
         Route::post('/pemain/lookup', [PemainController::class, 'lookup'])->name('pemain.lookup');
         Route::post('/pemain', [PemainController::class, 'store'])->name('pemain.store');
@@ -71,6 +74,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/matchmaking/close-registration', [MatchmakingController::class, 'closeRegistration'])->name('matchmaking.close-registration');
         Route::post('/matchmaking/random-grup', [MatchmakingController::class, 'randomGrup'])->name('matchmaking.random-grup');
         Route::post('/matchmaking/end-group-stage', [MatchmakingController::class, 'endGroupStage'])->name('matchmaking.end-group-stage');
+        Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament'])->name('matchmaking.complete-tournament');
 
         Route::get('/bracket', [AdminBracketController::class, 'index'])->name('bracket.index');
         Route::get('/pertandingan', [PertandinganController::class, 'index'])->name('pertandingan.index');

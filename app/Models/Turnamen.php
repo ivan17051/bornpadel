@@ -13,6 +13,7 @@ class Turnamen extends Model
 
     protected $fillable = [
         'nama',
+        'tanggal',
         'harga',
         'syarat',
         'jenis',
@@ -20,6 +21,7 @@ class Turnamen extends Model
     ];
 
     protected $casts = [
+        'tanggal' => 'date',
         'harga' => 'decimal:2',
         'doc' => 'datetime',
         'dom' => 'datetime',
@@ -28,6 +30,19 @@ class Turnamen extends Model
     public function scopeOpen($query)
     {
         return $query->where('status', 'open');
+    }
+
+    public function scopePublicVisible($query)
+    {
+        $cutoff = now()->subDays(30)->startOfDay();
+
+        return $query->where(function ($builder) use ($cutoff) {
+            $builder->whereIn('status', ['open', 'ongoing'])
+                ->orWhere(function ($completed) use ($cutoff) {
+                    $completed->where('status', 'completed')
+                        ->where('tanggal', '>=', $cutoff);
+                });
+        })->orderByDesc('tanggal');
     }
 
     public function isRegistrationOpen(): bool

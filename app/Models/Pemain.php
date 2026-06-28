@@ -15,12 +15,14 @@ class Pemain extends Model
         'gender',
         'no_hp',
         'rating',
+        'total_poin',
         'foto',
     ];
 
     protected $casts = [
         'tgl_lahir' => 'date',
         'rating' => 'decimal:2',
+        'total_poin' => 'integer',
     ];
 
     public function turnamenPesertaAsPemain1()
@@ -82,5 +84,20 @@ class Pemain extends Model
     public function pertandinganDimenangkan()
     {
         return $this->hasMany(Pertandingan::class, 'id_pemenang');
+    }
+
+    public function scopeWithoutRegistration($query)
+    {
+        return $query
+            ->whereDoesntHave('turnamenPesertaAsPemain1')
+            ->whereDoesntHave('turnamenPesertaAsPemain2');
+    }
+
+    public function scopeWithRegistration($query)
+    {
+        return $query->where(function ($builder) {
+            $builder->whereHas('turnamenPesertaAsPemain1')
+                ->orWhereHas('turnamenPesertaAsPemain2');
+        });
     }
 }

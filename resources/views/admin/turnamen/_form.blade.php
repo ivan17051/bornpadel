@@ -16,6 +16,19 @@
 </div>
 
 <div class="mb-3">
+    <label for="tanggal" class="form-label">Tanggal Turnamen <span class="text-danger">*</span></label>
+    <input type="date"
+           name="tanggal"
+           id="tanggal"
+           class="form-control @error('tanggal') is-invalid @enderror"
+           value="{{ old('tanggal', optional(optional($turnamenModel)->tanggal)->format('Y-m-d')) }}"
+           required>
+    @error('tanggal')
+        <div class="invalid-feedback">{{ $message }}</div>
+    @enderror
+</div>
+
+<div class="mb-3">
     <label for="harga" class="form-label">Biaya Pendaftaran (Rp) <span class="text-danger">*</span></label>
     <input type="number"
            name="harga"
@@ -66,7 +79,7 @@
             </option>
         @endforeach
     </select>
-    <div class="form-text">Hanya satu turnamen yang boleh berstatus <strong>open</strong> pada saat yang sama.</div>
+    <div class="form-text">Beberapa turnamen dapat berstatus <strong>open</strong> secara bersamaan.</div>
     @error('status')
         <div class="invalid-feedback">{{ $message }}</div>
     @enderror

@@ -79,6 +79,17 @@
             font-weight: 600;
         }
 
+        a.pemain-profile-link {
+            color: inherit;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        a.pemain-profile-link:hover {
+            color: var(--bp-primary-dark);
+            text-decoration: underline;
+        }
+
         .btn-bp {
             background: var(--bp-primary);
             border-color: var(--bp-primary);

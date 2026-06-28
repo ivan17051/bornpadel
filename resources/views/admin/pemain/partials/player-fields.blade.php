@@ -20,27 +20,17 @@
 @endphp
 
 @if ($phoneReadonly ?? false)
-    <div class="mb-3">
-        <label class="form-label">Nomor HP / WhatsApp</label>
-        <input type="text" class="form-control" value="{{ $phoneValue ?? '' }}" readonly>
-        <input type="hidden" name="{{ $field('no_hp') }}" value="{{ $phoneValue ?? '' }}">
-    </div>
+    <x-phone-input :name="$field('no_hp')"
+                   :id="$field('no_hp')"
+                   label="Nomor HP / WhatsApp"
+                   :value="$phoneValue ?? ''"
+                   :readonly="true" />
 @else
-    <div class="mb-3">
-        <label for="{{ $field('no_hp') }}" class="form-label">Nomor HP / WhatsApp <span class="text-danger">*</span></label>
-        <input type="tel"
-               name="{{ $field('no_hp') }}"
-               id="{{ $field('no_hp') }}"
-               class="form-control @error($errorName('no_hp')) is-invalid @enderror"
-               value="{{ $phoneValue ?? $oldValue('no_hp', optional($existingPemain)->no_hp) }}"
-               placeholder="08xxxxxxxxxx"
-               required
-               inputmode="tel"
-               autocomplete="tel">
-        @error($errorName('no_hp'))
-            <div class="invalid-feedback">{{ $message }}</div>
-        @enderror
-    </div>
+    <x-phone-input :name="$field('no_hp')"
+                   :id="$field('no_hp')"
+                   label="Nomor HP / WhatsApp"
+                   :value="$phoneValue ?? $oldValue('no_hp', optional($existingPemain)->no_hp)"
+                   :error-key="$errorName('no_hp')" />
 @endif
 
 @if ($existingPemain ?? null)
@@ -79,14 +69,13 @@
 </div>
 
 <div class="mb-3">
-    <label for="{{ $field('tgl_lahir') }}" class="form-label">Tanggal Lahir <span class="text-danger">*</span></label>
+    <label for="{{ $field('tgl_lahir') }}" class="form-label">Tanggal Lahir <span class="text-muted fw-normal">(opsional)</span></label>
     <input type="date"
            name="{{ $field('tgl_lahir') }}"
            id="{{ $field('tgl_lahir') }}"
            class="form-control @error($errorName('tgl_lahir')) is-invalid @enderror"
            value="{{ $oldValue('tgl_lahir', optional(optional($existingPemain)->tgl_lahir)->format('Y-m-d')) }}"
-           max="{{ date('Y-m-d', strtotime('-1 day')) }}"
-           required>
+           max="{{ date('Y-m-d', strtotime('-1 day')) }}">
     @error($errorName('tgl_lahir'))
         <div class="invalid-feedback">{{ $message }}</div>
     @enderror

@@ -35,7 +35,19 @@ class PertandinganController extends Controller
             $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
         );
 
-        $query = Pertandingan::with(['pemain1', 'pemain2', 'pemenang', 'grup', 'skor'])
+        $query = Pertandingan::with([
+            'pemain1',
+            'pemain2',
+            'peserta1.pemain1',
+            'peserta1.pemain2',
+            'peserta2.pemain1',
+            'peserta2.pemain2',
+            'pemenang',
+            'pesertaPemenang.pemain1',
+            'pesertaPemenang.pemain2',
+            'grup',
+            'skor',
+        ])
             ->orderBy('nama_ronde')
             ->orderBy('id_grup')
             ->orderBy('id');
@@ -77,7 +89,18 @@ class PertandinganController extends Controller
     {
         $this->tournamentAccess->assertPertandinganAccess($pertandingan);
 
-        $pertandingan->load(['pemain1', 'pemain2', 'pemenang', 'grup', 'skor']);
+        $pertandingan->load([
+            'pemain1',
+            'pemain2',
+            'peserta1.pemain1',
+            'peserta1.pemain2',
+            'peserta2.pemain1',
+            'peserta2.pemain2',
+            'pemenang',
+            'pesertaPemenang',
+            'grup',
+            'skor',
+        ]);
 
         return response()->json([
             'success' => true,
@@ -88,11 +111,11 @@ class PertandinganController extends Controller
                 'status' => $pertandingan->status,
                 'pemain1' => [
                     'id' => $pertandingan->id_pemain1,
-                    'nama' => $pertandingan->pemain1 ? $pertandingan->pemain1->nama : 'TBD',
+                    'nama' => $pertandingan->side1_label,
                 ],
                 'pemain2' => [
                     'id' => $pertandingan->id_pemain2,
-                    'nama' => $pertandingan->pemain2 ? $pertandingan->pemain2->nama : 'TBD',
+                    'nama' => $pertandingan->side2_label,
                 ],
                 'ready_for_scoring' => $pertandingan->isReadyForScoring(),
                 'pemenang_id' => $pertandingan->id_pemenang,

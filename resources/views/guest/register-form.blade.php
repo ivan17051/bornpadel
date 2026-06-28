@@ -79,6 +79,7 @@
                 <form action="{{ route('guest.register.store') }}" method="POST" enctype="multipart/form-data" novalidate>
                     @csrf
                     <input type="hidden" name="no_hp" value="{{ old('no_hp', $noHp) }}">
+                    <input type="hidden" name="id_turnamen" value="{{ old('id_turnamen', $turnamen->id) }}">
                     @if ($isDouble)
                         <input type="hidden" name="partner_no_hp" value="{{ old('partner_no_hp', $partnerNoHp) }}">
                     @endif
@@ -184,11 +185,24 @@
                         ])
                     @endif
 
+                    <div class="mb-4">
+                        <label for="bukti_bayar" class="form-label fw-semibold">Bukti Pembayaran <span class="text-muted">(opsional)</span></label>
+                        <input type="file"
+                               name="bukti_bayar"
+                               id="bukti_bayar"
+                               class="form-control @error('bukti_bayar') is-invalid @enderror"
+                               accept="image/jpeg,image/png,image/webp,application/pdf">
+                        <div class="form-text">Unggah bukti transfer jika sudah melakukan pembayaran.</div>
+                        @error('bukti_bayar')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
                     <div class="d-grid gap-2 mt-2">
                         <button type="submit" class="btn btn-bp btn-lg">
                             <i class="bi bi-send me-2"></i> Kirim Pendaftaran
                         </button>
-                        <a href="{{ route('guest.register') }}" class="btn btn-outline-secondary">
+                        <a href="{{ route('guest.register', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-outline-secondary">
                             <i class="bi bi-arrow-left me-1"></i> Ganti Nomor HP
                         </a>
                     </div>

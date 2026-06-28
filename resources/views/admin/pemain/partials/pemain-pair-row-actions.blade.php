@@ -1,6 +1,7 @@
 @php
-    $hasPairApprove = $turnamen && in_array($registrationStatus, ['pending', 'rejected'], true);
-    $hasPairReject = $turnamen && (
+    $representativePemain = $pemain1 ?? $pemain2;
+    $hasPairApprove = $turnamen && $representativePemain && in_array($registrationStatus, ['pending', 'rejected', 'unpaid', 'paid'], true);
+    $hasPairReject = $turnamen && $representativePemain && (
         ($registrationStatus === 'pending' && ! $turnamenOngoing)
         || ($registrationStatus === 'approved' && ! $turnamenOngoing)
     );
@@ -11,6 +12,7 @@
     <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
             type="button"
             data-bs-toggle="dropdown"
+            data-bs-popper-config='{"strategy":"fixed","placement":"bottom-end"}'
             aria-expanded="false">
         <i class="bi bi-three-dots-vertical"></i>
     </button>
@@ -34,8 +36,8 @@
         @elseif ($peserta ?? null)
             <li>
                 <a class="dropdown-item"
-                   href="{{ route('admin.pemain.edit', array_merge([$pemain1], request()->only('id_turnamen'))) }}">
-                    <i class="bi bi-person-plus me-2"></i> Tambah Pemain 2
+                   href="{{ route('admin.pemain.edit', array_merge([$pemain1 ?? $pemain2], request()->only('id_turnamen'))) }}">
+                    <i class="bi bi-person-plus me-2"></i> Tambah {{ $pemain1 ? 'Pemain 2' : 'Pemain 1' }}
                 </a>
             </li>
         @endif
@@ -45,7 +47,7 @@
             <li>
                 <button type="button"
                         class="dropdown-item btn-approve"
-                        data-url="{{ route('admin.pemain.status', $pemain1) }}"
+                        data-url="{{ route('admin.pemain.status', $representativePemain) }}"
                         data-turnamen="{{ $turnamen->id }}">
                     <i class="bi bi-check-all me-2"></i> Setujui Pasangan
                 </button>
@@ -56,7 +58,7 @@
             <li>
                 <button type="button"
                         class="dropdown-item btn-reject"
-                        data-url="{{ route('admin.pemain.status', $pemain1) }}"
+                        data-url="{{ route('admin.pemain.status', $representativePemain) }}"
                         data-turnamen="{{ $turnamen->id }}">
                     <i class="bi bi-x-lg me-2"></i> Tolak Pasangan
                 </button>

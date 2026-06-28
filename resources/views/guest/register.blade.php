@@ -26,6 +26,15 @@
                         <span class="badge badge-open">Pendaftaran Dibuka</span>
                     </div>
                 </div>
+
+                <div class="border-top pt-3 mt-3">
+                    <div class="info-label mb-2">Syarat & Ketentuan</div>
+                    @if ($turnamen->syarat)
+                        <div class="text-secondary small" style="white-space: pre-line;">{{ $turnamen->syarat }}</div>
+                    @else
+                        <p class="text-muted small mb-0">Belum ada syarat khusus untuk turnamen ini.</p>
+                    @endif
+                </div>
             </div>
         </div>
 
@@ -46,45 +55,23 @@
 
                 <form action="{{ route('guest.register.lookup') }}" method="POST" novalidate>
                     @csrf
+                    <input type="hidden" name="id_turnamen" value="{{ $turnamen->id }}">
 
                     <div class="mb-4">
-                        <label for="no_hp" class="form-label fw-semibold">
-                            Nomor HP / WhatsApp Pemain 1
-                            <span class="text-danger">*</span>
-                        </label>
-                        <input type="tel"
-                               name="no_hp"
-                               id="no_hp"
-                               class="form-control form-control-lg @error('no_hp') is-invalid @enderror"
-                               value="{{ old('no_hp') }}"
-                               placeholder="08xxxxxxxxxx"
-                               required
-                               autofocus
-                               inputmode="tel"
-                               autocomplete="tel">
-                        @error('no_hp')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
+                        <x-phone-input name="no_hp"
+                                       id="guest_no_hp"
+                                       label="Nomor HP / WhatsApp Pemain 1"
+                                       :value="old('no_hp')"
+                                       size="lg" />
                     </div>
 
                     @if ($turnamen->isDouble())
                         <div class="mb-4">
-                            <label for="partner_no_hp" class="form-label fw-semibold">
-                                Nomor HP / WhatsApp Pemain 2
-                                <span class="text-danger">*</span>
-                            </label>
-                            <input type="tel"
-                                   name="partner_no_hp"
-                                   id="partner_no_hp"
-                                   class="form-control form-control-lg @error('partner_no_hp') is-invalid @enderror"
-                                   value="{{ old('partner_no_hp') }}"
-                                   placeholder="08xxxxxxxxxx"
-                                   required
-                                   inputmode="tel"
-                                   autocomplete="tel">
-                            @error('partner_no_hp')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            <x-phone-input name="partner_no_hp"
+                                           id="guest_partner_no_hp"
+                                           label="Nomor HP / WhatsApp Pemain 2"
+                                           :value="old('partner_no_hp')"
+                                           size="lg" />
                         </div>
                     @endif
 

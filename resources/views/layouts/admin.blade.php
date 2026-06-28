@@ -43,6 +43,15 @@
         .toast-container { z-index: 1090; }
         .card-footer .pagination { margin-bottom: 0; }
         .card-footer nav { max-width: 100%; overflow-x: auto; }
+        a.pemain-profile-link {
+            color: inherit;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        a.pemain-profile-link:hover {
+            color: var(--bp-primary-dark);
+            text-decoration: underline;
+        }
     </style>
     @stack('styles')
 </head>
