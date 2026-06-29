@@ -34,7 +34,8 @@ class MatchmakingController extends Controller
     {
         $turnamenList = $this->matchmakingService->listForFilter();
         $turnamen = $this->matchmakingService->resolveTournament(
-            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
+            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null,
+            false
         );
         $approvedCount = $turnamen
             ? $this->matchmakingService->countApprovedPlayers($turnamen)

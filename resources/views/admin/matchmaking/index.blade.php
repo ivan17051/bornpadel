@@ -8,20 +8,12 @@
 @endsection
 
 @section('content')
-@include('admin.partials.turnamen-filter', ['filterRoute' => route('admin.matchmaking.index')])
+@include('admin.partials.turnamen-filter', [
+    'filterRoute' => route('admin.matchmaking.index'),
+    'requireTurnamenSelection' => true,
+])
 
-@if (! $turnamen)
-    <div class="alert alert-warning">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        @if ($turnamenList->isEmpty())
-            Belum ada turnamen.
-            <a href="{{ route('admin.turnamen.create') }}">Buat turnamen</a> terlebih dahulu.
-        @else
-            Pilih turnamen dari filter di atas, atau
-            <a href="{{ route('admin.turnamen.index') }}">buka turnamen aktif</a> (status open/ongoing).
-        @endif
-    </div>
-@else
+@if ($turnamen)
     @php
         $unitLabel = $unitLabel ?? ($turnamen->isDouble() ? 'pasangan' : 'pemain');
         $unitLabelTitle = ucfirst($unitLabel);

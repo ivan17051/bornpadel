@@ -43,10 +43,26 @@ class PemainController extends Controller
     {
         $turnamenList = $this->matchmakingService->listForFilter();
         $turnamen = $this->matchmakingService->resolveTournament(
-            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
+            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null,
+            false
         );
 
         $isDoubleView = $turnamen && $turnamen->isDouble();
+
+        if (! $turnamen) {
+            $peserta = null;
+            $pemain = Pemain::query()->whereRaw('0 = 1')->paginate(15)->withQueryString();
+            $isDoubleView = false;
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $pemain,
+                ]);
+            }
+
+            return view('admin.pemain.index', compact('peserta', 'pemain', 'turnamen', 'turnamenList', 'isDoubleView'));
+        }
 
         if ($isDoubleView) {
             $pesertaQuery = TurnamenPeserta::query()
@@ -577,6 +593,55 @@ class PemainController extends Controller
         ]);
     }
 
+    public function detachFromTurnamen(Request $request, Pemain $pemain)
+    {
+        $request->validate([
+            'id_turnamen' => ['required', 'exists:m_turnamen,id'],
+        ]);
+
+        $turnamenId = (int) $request->id_turnamen;
+        $this->tournamentAccess->assertTurnamenId($turnamenId);
+        $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
+
+        $peserta = TurnamenPeserta::query()
+            ->forTurnamen($turnamenId)
+            ->involvingPemain($pemain->id)
+            ->first();
+
+        if (! $peserta) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pemain tidak terdaftar pada turnamen ini.',
+            ], 422);
+        }
+
+        $inMatches = Pertandingan::query()
+            ->where('id_turnamen', $turnamenId)
+            ->where(function ($query) use ($pemain, $peserta) {
+                $query->where('id_pemain1', $pemain->id)
+                    ->orWhere('id_pemain2', $pemain->id)
+                    ->orWhere('id_pemenang', $pemain->id)
+                    ->orWhere('id_peserta1', $peserta->id)
+                    ->orWhere('id_peserta2', $peserta->id)
+                    ->orWhere('id_peserta_pemenang', $peserta->id);
+            })
+            ->exists();
+
+        if ($inMatches) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pemain tidak dapat dihapus dari turnamen karena sudah terdaftar dalam pertandingan.',
+            ], 422);
+        }
+
+        $this->registrationService->detachPemainFromPeserta($peserta, $pemain->id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pemain berhasil dihapus dari turnamen.',
+        ]);
+    }
+
     public function destroy(Pemain $pemain)
     {
         $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
@@ -621,7 +686,7 @@ class PemainController extends Controller
         DB::transaction(function () use ($pemain, $pesertaQuery) {
             $pesertaQuery->with('turnamen')->get()->each(function (TurnamenPeserta $peserta) use ($pemain) {
                 if ($peserta->turnamen && $peserta->turnamen->isDouble()) {
-                    $this->registrationService->detachPemainFromDoublePeserta($peserta, $pemain->id);
+                    $this->registrationService->detachPemainFromPeserta($peserta, $pemain->id);
                 }
             });
 

@@ -2,6 +2,8 @@
     $filterRoute = $filterRoute ?? url()->current();
     $preserveParams = $preserveParams ?? [];
     $turnamenList = $turnamenList ?? collect();
+    $requireTurnamenSelection = $requireTurnamenSelection ?? false;
+    $emptyOptionLabel = $emptyOptionLabel ?? ($requireTurnamenSelection ? 'Pilih turnamen' : 'Default (turnamen aktif)');
     $user = auth()->user();
     $isPanitia = $user && $user->isPanitia();
     $lockedTurnamen = $isPanitia ? $turnamenList->first() : null;
@@ -48,7 +50,7 @@
                 <label for="id_turnamen" class="form-label small text-muted mb-1">Turnamen</label>
                 <select name="id_turnamen" id="id_turnamen" class="form-select" onchange="this.form.submit()">
                     <option value="" {{ ! request('id_turnamen') ? 'selected' : '' }}>
-                        Default (turnamen aktif)
+                        {{ $emptyOptionLabel }}
                     </option>
                     @foreach ($turnamenList as $item)
                         <option value="{{ $item->id }}"

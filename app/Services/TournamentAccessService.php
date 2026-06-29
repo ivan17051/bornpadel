@@ -56,14 +56,21 @@ class TournamentAccessService
         return $turnamen ? collect([$turnamen]) : collect();
     }
 
-    public function resolveTurnamen(?int $id = null, ?GroupMatchmakingService $matchmakingService = null): ?Turnamen
-    {
+    public function resolveTurnamen(
+        ?int $id = null,
+        ?GroupMatchmakingService $matchmakingService = null,
+        bool $fallbackToActive = true
+    ): ?Turnamen {
         if ($this->isPanitia()) {
             return $this->assignedTurnamen();
         }
 
         if ($id) {
             return Turnamen::find($id);
+        }
+
+        if (! $fallbackToActive) {
+            return null;
         }
 
         $matchmakingService = $matchmakingService ?? app(GroupMatchmakingService::class);

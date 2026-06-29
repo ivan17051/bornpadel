@@ -187,7 +187,7 @@ class PemainRegistrationService
         return optional($pemain->pesertaForTurnamen($turnamen))->status;
     }
 
-    public function detachPemainFromDoublePeserta(TurnamenPeserta $peserta, int $pemainId): void
+    public function detachPemainFromPeserta(TurnamenPeserta $peserta, int $pemainId): void
     {
         $updates = [];
 

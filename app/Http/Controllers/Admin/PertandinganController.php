@@ -32,7 +32,8 @@ class PertandinganController extends Controller
     {
         $turnamenList = $this->matchmakingService->listForFilter();
         $turnamen = $this->matchmakingService->resolveTournament(
-            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
+            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null,
+            false
         );
 
         $query = Pertandingan::with([
@@ -54,6 +55,8 @@ class PertandinganController extends Controller
 
         if ($turnamen) {
             $query->where('id_turnamen', $turnamen->id);
+        } else {
+            $query->whereRaw('0 = 1');
         }
 
         if ($request->filled('nama_ronde')) {

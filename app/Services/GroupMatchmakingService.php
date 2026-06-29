@@ -91,9 +91,9 @@ class GroupMatchmakingService
             ->first();
     }
 
-    public function resolveTournament(?int $id = null): ?Turnamen
+    public function resolveTournament(?int $id = null, bool $fallbackToActive = true): ?Turnamen
     {
-        return app(TournamentAccessService::class)->resolveTurnamen($id, $this);
+        return app(TournamentAccessService::class)->resolveTurnamen($id, $this, $fallbackToActive);
     }
 
     public function listForFilter(): Collection

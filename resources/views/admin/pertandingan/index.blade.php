@@ -8,7 +8,11 @@
 @endsection
 
 @section('content')
-@include('admin.partials.turnamen-filter', ['filterRoute' => route('admin.pertandingan.index')])
+@include('admin.partials.turnamen-filter', [
+    'filterRoute' => route('admin.pertandingan.index'),
+    'requireTurnamenSelection' => true,
+])
+
 
 <div class="card mb-3">
     <div class="card-body">
@@ -128,7 +132,13 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-4">Belum ada pertandingan.</td>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                @if ($turnamen)
+                                    Belum ada pertandingan.
+                                @else
+                                    Pilih turnamen untuk melihat pertandingan.
+                                @endif
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>

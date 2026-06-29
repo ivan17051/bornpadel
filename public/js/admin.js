@@ -181,8 +181,8 @@ const BornPadelAdmin = (function () {
             btn.addEventListener('click', async () => {
                 const name = btn.dataset.name || 'pemain ini';
                 const confirmed = await confirmAction({
-                    title: `Hapus profil ${name}?`,
-                    text: 'Tindakan ini tidak dapat dibatalkan.',
+                    title: `Hapus ${name} dari turnamen?`,
+                    text: 'Profil pemain tetap tersimpan di database. Pemain hanya dihapus dari pendaftaran turnamen ini.',
                     confirmText: 'Ya, hapus',
                     icon: 'warning',
                     confirmButtonColor: '#dc3545',
@@ -190,9 +190,12 @@ const BornPadelAdmin = (function () {
                 if (!confirmed) return;
 
                 try {
-                    await apiRequest(btn.dataset.url, 'DELETE');
-                    showAlert('Profil pemain berhasil dihapus.', 'success');
-                    btn.closest('tr')?.remove();
+                    const body = btn.dataset.turnamen
+                        ? { id_turnamen: parseInt(btn.dataset.turnamen, 10) }
+                        : null;
+                    await apiRequest(btn.dataset.url, 'DELETE', body);
+                    showAlert('Pemain berhasil dihapus dari turnamen.', 'success');
+                    reloadPage();
                 } catch (e) {
                     showAlert(e.message, 'error');
                 }

@@ -4,7 +4,7 @@
         ($registrationStatus === 'pending' && ! $turnamenOngoing)
         || ($registrationStatus === 'approved' && ! $turnamenOngoing)
     );
-    $hasDelete = ! $turnamenOngoing;
+    $hasDelete = $turnamen && ! $turnamenOngoing;
 @endphp
 
 <div class="dropdown">
@@ -50,9 +50,10 @@
             <li>
                 <button type="button"
                         class="dropdown-item text-danger btn-delete-pemain"
-                        data-url="{{ route('admin.pemain.destroy', $pemain) }}"
+                        data-url="{{ route('admin.pemain.registration.destroy', $pemain) }}"
+                        data-turnamen="{{ $turnamen->id }}"
                         data-name="{{ $pemain->nama }}">
-                    <i class="bi bi-trash me-2"></i> Hapus
+                    <i class="bi bi-trash me-2"></i> Hapus dari Turnamen
                 </button>
             </li>
         @endif

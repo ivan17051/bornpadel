@@ -68,6 +68,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/pemain/{pemain}/edit', [PemainController::class, 'edit'])->name('pemain.edit');
         Route::patch('/pemain/{pemain}', [PemainController::class, 'update'])->name('pemain.update');
         Route::patch('/pemain/{pemain}/status', [PemainController::class, 'updateStatus'])->name('pemain.status');
+        Route::delete('/pemain/{pemain}/registration', [PemainController::class, 'detachFromTurnamen'])->name('pemain.registration.destroy');
         Route::delete('/pemain/{pemain}', [PemainController::class, 'destroy'])->name('pemain.destroy');
 
         Route::get('/matchmaking', [MatchmakingController::class, 'index'])->name('matchmaking.index');

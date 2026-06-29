@@ -13,6 +13,7 @@
 @include('admin.partials.turnamen-filter', [
     'filterRoute' => route('admin.pemain.index'),
     'sweetAlert' => true,
+    'requireTurnamenSelection' => true,
 ])
 
 <div class="card mb-3">
@@ -69,9 +70,7 @@
                 <a href="{{ route('admin.pemain.create', request()->only('id_turnamen')) }}" class="btn btn-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i> Tambah Pemain
                 </a>
-                <a href="{{ route('admin.pemain.directory') }}" class="btn btn-outline-secondary btn-sm ms-1">
-                    <i class="bi bi-database me-1"></i> Database
-                </a>
+                
             </div>
         </div>
     </div>
@@ -151,7 +150,11 @@
                         @empty
                             <tr>
                                 <td colspan="9" class="text-center text-muted py-4">
-                                    Belum ada pasangan terdaftar pada turnamen ini.
+                                    @if ($turnamen)
+                                        Belum ada pasangan terdaftar pada turnamen ini.
+                                    @else
+                                        Pilih turnamen untuk melihat daftar pemain.
+                                    @endif
                                 </td>
                             </tr>
                         @endforelse
@@ -199,7 +202,7 @@
                                 @if ($turnamen)
                                     Belum ada pemain terdaftar pada turnamen ini.
                                 @else
-                                    Belum ada pemain terdaftar.
+                                    Pilih turnamen untuk melihat daftar pemain.
                                 @endif
                             </td>
                         </tr>
@@ -251,9 +254,6 @@ document.addEventListener('DOMContentLoaded', function () {
         BornPadelAdmin.showAlert('Akun panitia belum ditugaskan ke turnamen.', 'warning');
     @endif
 
-    @if (! $turnamen && ! auth()->user()->isPanitia())
-        BornPadelAdmin.showAlert('Pilih turnamen untuk melihat dan mengelola status pendaftaran peserta.', 'info');
-    @endif
 });
 </script>
 @endpush
