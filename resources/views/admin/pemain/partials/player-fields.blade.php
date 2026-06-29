@@ -33,17 +33,6 @@
                    :error-key="$errorName('no_hp')" />
 @endif
 
-@if ($existingPemain ?? null)
-    <div class="alert alert-info py-2 small mb-3">
-        <i class="bi bi-person-check me-1"></i>
-        Pemain ditemukan di database. Data dapat diperbarui sebelum disimpan.
-    </div>
-@elseif (($phoneValue ?? '') !== '' || old($field('no_hp')))
-    <div class="alert alert-light border py-2 small mb-3">
-        <i class="bi bi-person-plus me-1"></i>
-        Nomor HP belum terdaftar. Lengkapi data pemain baru.
-    </div>
-@endif
 
 @if ($showPhoto ?? true)
     <x-pemain-photo-input

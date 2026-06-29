@@ -296,7 +296,7 @@ class PemainController extends Controller
                 $pemain1 = $this->registrationService->upsertPemain([
                     'no_hp' => $data['no_hp'],
                     'nama' => $data['nama'],
-                    'tgl_lahir' => $data['tgl_lahir'],
+                    'tgl_lahir' => $data['tgl_lahir'] ?? null,
                     'gender' => $data['gender'],
                     'rating' => $data['rating'] ?? null,
                 ], $request->file('foto'));
@@ -304,7 +304,7 @@ class PemainController extends Controller
                 $pemain2 = $this->registrationService->upsertPemain([
                     'no_hp' => $data['partner_no_hp'],
                     'nama' => $data['partner_nama'],
-                    'tgl_lahir' => $data['partner_tgl_lahir'],
+                    'tgl_lahir' => $data['partner_tgl_lahir'] ?? null,
                     'gender' => $data['partner_gender'],
                     'rating' => $data['partner_rating'] ?? null,
                 ], $request->file('partner_foto'));
@@ -325,7 +325,7 @@ class PemainController extends Controller
                 $pemain = $this->registrationService->upsertPemain([
                     'no_hp' => $data['no_hp'],
                     'nama' => $data['nama'],
-                    'tgl_lahir' => $data['tgl_lahir'],
+                    'tgl_lahir' => $data['tgl_lahir'] ?? null,
                     'gender' => $data['gender'],
                     'rating' => $data['rating'] ?? null,
                 ], $request->file('foto'));
@@ -422,7 +422,7 @@ class PemainController extends Controller
             $pemain2 = $this->registrationService->upsertPemain([
                 'no_hp' => $data['no_hp'],
                 'nama' => $data['nama'],
-                'tgl_lahir' => $data['tgl_lahir'],
+                'tgl_lahir' => $data['tgl_lahir'] ?? null,
                 'gender' => $data['gender'],
                 'rating' => $data['rating'] ?? null,
             ], $request->file('foto'));

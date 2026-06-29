@@ -203,7 +203,7 @@
         </div>
 
         <div class="mb-3 mt-3">
-            <label for="bukti_bayar_double" class="form-label">Bukti Pembayaran <span class="text-muted">(opsional)</span></label>
+            <label for="bukti_bayar_double" class="form-label">Bukti Pembayaran</label>
             <input type="file"
                    name="bukti_bayar"
                    id="bukti_bayar_double"
@@ -237,8 +237,8 @@
             'phoneValue' => $noHp,
         ])
 
-        <div class="mb-3">
-            <label for="bukti_bayar" class="form-label">Bukti Pembayaran <span class="text-muted">(opsional)</span></label>
+        <div class="mb-3 mt-3">
+            <label for="bukti_bayar" class="form-label">Bukti Pembayaran</label>
             <input type="file"
                    name="bukti_bayar"
                    id="bukti_bayar"

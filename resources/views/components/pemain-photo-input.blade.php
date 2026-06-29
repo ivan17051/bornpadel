@@ -14,11 +14,11 @@
     $initialPreview = $previewSrc ?: $placeholder;
 @endphp
 
-<div class="mb-3 pemain-photo-field">
+<div class="mb-3 mt-3 pemain-photo-field">
     <label for="{{ $inputId }}" class="form-label fw-semibold">
         {{ $label }}
         @if ($optional)
-            <span class="text-muted fw-normal">(opsional)</span>
+            <!-- <span class="text-muted fw-normal">(opsional)</span> -->
         @else
             <span class="text-danger">*</span>
         @endif

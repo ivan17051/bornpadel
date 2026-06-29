@@ -18,6 +18,22 @@ class StorePemainRequest extends FormRequest
     protected function prepareForValidation()
     {
         $this->normalizePhoneFields(['no_hp', 'partner_no_hp']);
+        $this->mergeNullableDates(['tgl_lahir', 'partner_tgl_lahir']);
+    }
+
+    protected function mergeNullableDates(array $fields): void
+    {
+        $merge = [];
+
+        foreach ($fields as $field) {
+            if ($this->has($field) && $this->input($field) === '') {
+                $merge[$field] = null;
+            }
+        }
+
+        if ($merge !== []) {
+            $this->merge($merge);
+        }
     }
 
     public function rules()

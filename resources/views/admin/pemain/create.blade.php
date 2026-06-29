@@ -10,8 +10,6 @@
 
 @section('content')
 @php
-    $photoService = app(\App\Services\PemainPhotoService::class);
-    $placeholderAvatar = $photoService->placeholderUrl();
     $isDoubleForm = $showForm && $selectedTurnamen && $selectedTurnamen->isDouble();
 @endphp
 
@@ -53,20 +51,6 @@
 
     <div class="col-lg-{{ $showForm ? '7' : '6' }}">
         <div class="card">
-            <div class="card-header d-flex align-items-center gap-3">
-                @if ($showForm)
-                    <img src="{{ $placeholderAvatar }}"
-                         id="admin-foto-preview"
-                         alt="Preview foto"
-                         width="56"
-                         height="56"
-                         data-fallback="{{ $placeholderAvatar }}"
-                         onerror="if (this.dataset.fallback) { this.onerror = null; this.src = this.dataset.fallback; }"
-                         class="pemain-avatar rounded-circle object-fit-cover bg-light"
-                         style="width: 56px; height: 56px;">
-                @endif
-                <h5 class="card-title mb-0">{{ $showForm ? 'Data Peserta' : 'Tambah Pemain' }}</h5>
-            </div>
             <div class="card-body">
                 @if ($showForm)
                     <form action="{{ route('admin.pemain.store') }}" method="POST" enctype="multipart/form-data">
@@ -99,9 +83,3 @@
     </div>
 </div>
 @endsection
-
-@push('styles')
-<style>
-    .pemain-avatar { object-fit: cover; display: block; }
-</style>
-@endpush
