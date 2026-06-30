@@ -65,5 +65,6 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'admin' => \App\Http\Middleware\EnsureAdmin::class,
         'scope.turnamen' => \App\Http\Middleware\ScopeUserTurnamen::class,
+        'external.api' => \App\Http\Middleware\AuthenticateExternalApi::class,
     ];
 }

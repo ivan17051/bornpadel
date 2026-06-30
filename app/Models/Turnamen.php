@@ -18,6 +18,7 @@ class Turnamen extends Model
         'syarat',
         'jenis',
         'status',
+        'mahjong_is_final',
     ];
 
     protected $casts = [
@@ -25,6 +26,7 @@ class Turnamen extends Model
         'harga' => 'decimal:2',
         'doc' => 'datetime',
         'dom' => 'datetime',
+        'mahjong_is_final' => 'boolean',
     ];
 
     public function scopeOpen($query)
@@ -66,9 +68,22 @@ class Turnamen extends Model
         return $this->jenis === 'double';
     }
 
+    public function isMahjong(): bool
+    {
+        return $this->jenis === 'mahjong';
+    }
+
     public function getJenisLabelAttribute(): string
     {
-        return $this->jenis === 'double' ? 'Double' : 'Single';
+        if ($this->jenis === 'double') {
+            return 'Double';
+        }
+
+        if ($this->jenis === 'mahjong') {
+            return 'Mahjong';
+        }
+
+        return 'Single';
     }
 
     public function turnamenPeserta()
@@ -93,6 +108,16 @@ class Turnamen extends Model
         return $this->hasMany(Pertandingan::class, 'id_turnamen');
     }
 
+    public function pemenang()
+    {
+        return $this->hasMany(TurnamenPemenang::class, 'id_turnamen')->orderBy('peringkat');
+    }
+
+    public function activeGrup()
+    {
+        return $this->hasMany(Grup::class, 'id_turnamen')->where('is_aktif', true);
+    }
+
     public function finalMatch()
     {
         return $this->hasOne(Pertandingan::class, 'id_turnamen')
@@ -105,6 +130,14 @@ class Turnamen extends Model
     {
         if ($this->status !== 'completed') {
             return null;
+        }
+
+        if ($this->isMahjong()) {
+            $juara = $this->relationLoaded('pemenang')
+                ? $this->pemenang->firstWhere('peringkat', 1)
+                : $this->pemenang()->where('peringkat', 1)->with('pemain')->first();
+
+            return optional(optional($juara)->pemain)->nama;
         }
 
         $final = $this->relationLoaded('finalMatch')

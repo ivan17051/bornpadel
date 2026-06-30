@@ -13,9 +13,15 @@ class GrupMember extends Model
         'id_pemain',
         'id_turnamen_peserta',
         'poin_didapat',
+        'poin_akumulasi',
         'set_menang',
         'games_menang',
     ];
+
+    public function getTotalPoinAttribute(): int
+    {
+        return (int) $this->poin_akumulasi + (int) $this->poin_didapat;
+    }
 
     public function grup()
     {

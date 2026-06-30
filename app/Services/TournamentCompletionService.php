@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\GrupMember;
 use App\Models\Pertandingan;
 use App\Models\Turnamen;
+use App\Models\TurnamenPemenang;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -23,6 +24,10 @@ class TournamentCompletionService
             return false;
         }
 
+        if ($turnamen->isMahjong()) {
+            return app(MahjongMatchmakingService::class)->canComplete($turnamen);
+        }
+
         $final = $this->getFinalMatch($turnamen);
 
         return $final && $final->status === 'completed';
@@ -30,6 +35,10 @@ class TournamentCompletionService
 
     public function complete(Turnamen $turnamen): array
     {
+        if ($turnamen->isMahjong()) {
+            return $this->completeMahjong($turnamen);
+        }
+
         if (! $this->canComplete($turnamen)) {
             throw new RuntimeException('Turnamen belum dapat diselesaikan. Pastikan pertandingan Final sudah selesai.');
         }
@@ -183,5 +192,55 @@ class TournamentCompletionService
         $member = GrupMember::where('id_pemain', $pemainIds[0] ?? 0)->first();
 
         return $member ? (int) $member->poin_didapat : 0;
+    }
+
+    protected function completeMahjong(Turnamen $turnamen): array
+    {
+        $mahjongService = app(MahjongMatchmakingService::class);
+
+        if (! $mahjongService->canComplete($turnamen)) {
+            throw new RuntimeException('Turnamen Mahjong belum dapat diselesaikan. Pastikan grup final berisi 4 pemain.');
+        }
+
+        return DB::transaction(function () use ($turnamen, $mahjongService) {
+            $mahjongService->commitCurrentRoundPoints($turnamen);
+            $placements = $mahjongService->resolveFinalPlacements($turnamen);
+            $placementConfig = config('tournament.points.placement', []);
+            $awards = [];
+
+            TurnamenPemenang::where('id_turnamen', $turnamen->id)->delete();
+
+            foreach ([1, 2, 3] as $place) {
+                $placement = $placements[$place] ?? null;
+
+                if (! $placement) {
+                    continue;
+                }
+
+                TurnamenPemenang::create([
+                    'id_turnamen' => $turnamen->id,
+                    'peringkat' => $place,
+                    'id_pemain' => $placement['pemain_ids'][0],
+                    'id_turnamen_peserta' => $placement['peserta_id'],
+                    'total_poin' => $placement['total_poin'],
+                ]);
+
+                $awards[] = [
+                    'place' => $place,
+                    'pemain_ids' => $placement['pemain_ids'],
+                    'points' => (int) ($placementConfig[$place] ?? 0),
+                ];
+            }
+
+            $this->pointRewardService->awardPlacementPoints($awards);
+            $turnamen->update(['status' => 'completed']);
+            $turnamen->activeGrup()->update(['is_aktif' => false]);
+
+            return [
+                'turnamen' => $turnamen->fresh(),
+                'placements' => $placements,
+                'awards' => $awards,
+            ];
+        });
     }
 }

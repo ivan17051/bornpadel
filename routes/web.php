@@ -84,6 +84,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/matchmaking/close-registration', [MatchmakingController::class, 'closeRegistration'])->name('matchmaking.close-registration');
         Route::post('/matchmaking/random-grup', [MatchmakingController::class, 'randomGrup'])->name('matchmaking.random-grup');
         Route::post('/matchmaking/end-group-stage', [MatchmakingController::class, 'endGroupStage'])->name('matchmaking.end-group-stage');
+        Route::post('/matchmaking/reshuffle-groups', [MatchmakingController::class, 'reshuffleGroups'])->name('matchmaking.reshuffle-groups');
+        Route::patch('/matchmaking/grup-member/{member}/points', [MatchmakingController::class, 'updateMahjongPoints'])->name('matchmaking.mahjong-points');
         Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament'])->name('matchmaking.complete-tournament');
 
         Route::get('/bracket', [AdminBracketController::class, 'index'])->name('bracket.index');

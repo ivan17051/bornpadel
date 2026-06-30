@@ -39,9 +39,15 @@
                                         <tr>
                                             <th class="text-center" style="width:3rem">#</th>
                                             <th>{{ optional($turnamen)->isDouble() ? 'Pasangan' : 'Pemain' }}</th>
-                                            <th class="text-center">Poin</th>
-                                            <th class="text-center d-none d-sm-table-cell">Set</th>
-                                            <th class="text-center d-none d-md-table-cell">Games</th>
+                                            @if (!empty($grup['is_mahjong']))
+                                                <th class="text-center">Akumulasi</th>
+                                                <th class="text-center">Babak</th>
+                                                <th class="text-center">Total</th>
+                                            @else
+                                                <th class="text-center">Poin</th>
+                                                <th class="text-center d-none d-sm-table-cell">Set</th>
+                                                <th class="text-center d-none d-md-table-cell">Games</th>
+                                            @endif
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -57,11 +63,21 @@
                                                 <td class="fw-semibold">
                                                     <x-pemain-names :pemain-ids="$row['pemain_ids'] ?? []" :nama="$row['nama']" />
                                                 </td>
-                                                <td class="text-center">
-                                                    <span class="badge text-bg-primary">{{ $row['poin_didapat'] }}</span>
-                                                </td>
-                                                <td class="text-center d-none d-sm-table-cell">{{ $row['set_menang'] }}</td>
-                                                <td class="text-center d-none d-md-table-cell">{{ $row['games_menang'] }}</td>
+                                                @if (!empty($grup['is_mahjong']))
+                                                    <td class="text-center text-muted">{{ $row['poin_akumulasi'] ?? 0 }}</td>
+                                                    <td class="text-center">
+                                                        <span class="badge text-bg-secondary">{{ $row['poin_didapat'] }}</span>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <span class="badge text-bg-primary">{{ $row['total_poin'] ?? $row['poin_didapat'] }}</span>
+                                                    </td>
+                                                @else
+                                                    <td class="text-center">
+                                                        <span class="badge text-bg-primary">{{ $row['poin_didapat'] }}</span>
+                                                    </td>
+                                                    <td class="text-center d-none d-sm-table-cell">{{ $row['set_menang'] }}</td>
+                                                    <td class="text-center d-none d-md-table-cell">{{ $row['games_menang'] }}</td>
+                                                @endif
                                             </tr>
                                         @endforeach
                                     </tbody>

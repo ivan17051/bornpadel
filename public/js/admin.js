@@ -295,6 +295,7 @@ const BornPadelAdmin = (function () {
             const confirmBtn = document.getElementById('btn-confirm-end-group-stage');
             const jumlahInput = document.getElementById('jumlah-lolos-input');
             const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
+            const isMahjong = endGroupBtn.dataset.mahjong === '1';
 
             endGroupBtn.addEventListener('click', () => {
                 if (modal) {
@@ -305,9 +306,15 @@ const BornPadelAdmin = (function () {
             if (confirmBtn) {
                 confirmBtn.addEventListener('click', async () => {
                     const parsed = parseInt(jumlahInput?.value || '0', 10);
+                    const minLolos = isMahjong ? 4 : 1;
 
-                    if (!parsed || parsed < 1) {
-                        showToast('Jumlah lolos harus angka minimal 1.', 'error');
+                    if (!parsed || parsed < minLolos) {
+                        showToast(`Jumlah lolos harus angka minimal ${minLolos}.`, 'error');
+                        return;
+                    }
+
+                    if (isMahjong && parsed > 4 && parsed % 4 !== 0) {
+                        showToast('Jumlah pemain lolos harus kelipatan 4.', 'error');
                         return;
                     }
 
@@ -322,7 +329,11 @@ const BornPadelAdmin = (function () {
                         });
                         modal?.hide();
                         showToast(data.message);
-                        goTo('/admin/bracket');
+                        if (isMahjong) {
+                            reloadPage();
+                        } else {
+                            goTo('/admin/bracket');
+                        }
                     } catch (e) {
                         showToast(e.message, 'error');
                         setButtonLoading(confirmBtn, false, original);
@@ -330,6 +341,61 @@ const BornPadelAdmin = (function () {
                 });
             }
         }
+
+        const reshuffleBtn = document.getElementById('btn-reshuffle-groups');
+
+        if (reshuffleBtn) {
+            reshuffleBtn.addEventListener('click', async () => {
+                const confirmed = await confirmAction({
+                    title: 'Acak ulang grup?',
+                    text: 'Pemain akan dibagi ulang ke grup baru (4 per grup). Poin akumulasi dipertahankan.',
+                    confirmText: 'Ya, reshuffle',
+                });
+                if (!confirmed) return;
+
+                const original = reshuffleBtn.innerHTML;
+                setButtonLoading(reshuffleBtn, true);
+
+                try {
+                    const data = await apiRequest(reshuffleBtn.dataset.url, 'POST', {
+                        id_turnamen: parseInt(reshuffleBtn.dataset.turnamen, 10),
+                        mode: 'random',
+                    });
+                    showToast(data.message);
+                    reloadPage();
+                } catch (e) {
+                    showToast(e.message, 'error');
+                    setButtonLoading(reshuffleBtn, false, original);
+                }
+            });
+        }
+
+        document.querySelectorAll('.btn-save-mahjong-poin').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const memberId = btn.dataset.memberId;
+                const input = document.querySelector(`.mahjong-poin-input[data-member-id="${memberId}"]`);
+
+                if (!input) return;
+
+                const original = btn.innerHTML;
+                setButtonLoading(btn, true);
+
+                try {
+                    const data = await apiRequest(input.dataset.url, 'PATCH', {
+                        poin_didapat: parseInt(input.value || '0', 10),
+                    });
+                    const totalBadge = document.querySelector(`.mahjong-total-poin[data-member-id="${memberId}"]`);
+                    if (totalBadge && data.data) {
+                        totalBadge.textContent = data.data.total_poin;
+                    }
+                    showToast(data.message);
+                } catch (e) {
+                    showToast(e.message, 'error');
+                } finally {
+                    setButtonLoading(btn, false, original);
+                }
+            });
+        });
 
         const completeTournamentBtn = document.getElementById('btn-complete-tournament');
 
@@ -366,30 +432,46 @@ const BornPadelAdmin = (function () {
 
             btn.addEventListener('click', async () => {
                 const mode = btn.dataset.mode || 'random';
-                const groupSettings = getGroupSettings();
+                const isMahjong = btn.dataset.mahjong === '1';
                 const total = parseInt(previewEl?.dataset.approved || '0', 10);
-                const sizes = calculateGroupSizes(
-                    total,
-                    groupSettings.min_pemain_grup,
-                    groupSettings.max_pemain_grup
-                );
 
-                if (!sizes) {
-                    showAlert('Pemain tidak cukup atau batas min/max grup tidak valid.', 'error');
-                    return;
+                let previewText;
+                if (isMahjong) {
+                    if (total < 4 || total % 4 !== 0) {
+                        showAlert('Jumlah pemain approved harus minimal 4 dan kelipatan 4.', 'error');
+                        return;
+                    }
+                    previewText = `${total} pemain → ${total / 4} grup (4 pemain per grup)`;
+                } else {
+                    const groupSettings = getGroupSettings();
+                    const sizes = calculateGroupSizes(
+                        total,
+                        groupSettings.min_pemain_grup,
+                        groupSettings.max_pemain_grup
+                    );
+
+                    if (!sizes) {
+                        showAlert('Pemain tidak cukup atau batas min/max grup tidak valid.', 'error');
+                        return;
+                    }
+
+                    previewText = `${total} pemain → ${sizes.length} grup (${sizes.join(' + ')})`;
                 }
 
-                const previewText = `${total} pemain → ${sizes.length} grup (${sizes.join(' + ')})`;
                 const confirmed = await confirmAction(mode === 'by_rating'
                     ? {
-                        title: 'Kelompokkan pemain berdasarkan rating?',
-                        text: `${previewText}. Jadwal pertandingan akan dibuat. Tindakan ini tidak dapat diulang.`,
-                        confirmText: 'Ya, buat grup rating',
+                        title: isMahjong ? 'Buat grup berdasarkan rating?' : 'Kelompokkan pemain berdasarkan rating?',
+                        text: isMahjong
+                            ? `${previewText}. Tidak ada pertandingan head-to-head.`
+                            : `${previewText}. Jadwal pertandingan akan dibuat. Tindakan ini tidak dapat diulang.`,
+                        confirmText: isMahjong ? 'Ya, buat grup' : 'Ya, buat grup rating',
                     }
                     : {
-                        title: 'Acak pemain ke grup?',
-                        text: `${previewText}. Jadwal pertandingan akan dibuat. Tindakan ini tidak dapat diulang.`,
-                        confirmText: 'Ya, random grup',
+                        title: isMahjong ? 'Buat grup Mahjong?' : 'Acak pemain ke grup?',
+                        text: isMahjong
+                            ? `${previewText}. Tidak ada pertandingan head-to-head.`
+                            : `${previewText}. Jadwal pertandingan akan dibuat. Tindakan ini tidak dapat diulang.`,
+                        confirmText: isMahjong ? 'Ya, buat grup' : 'Ya, random grup',
                     });
                 if (!confirmed) return;
 
@@ -397,11 +479,16 @@ const BornPadelAdmin = (function () {
                 setButtonLoading(btn, true);
 
                 try {
-                    const data = await apiRequest(btn.dataset.url, 'POST', {
+                    const payload = {
                         id_turnamen: parseInt(btn.dataset.turnamen, 10),
                         mode,
-                        ...groupSettings,
-                    });
+                    };
+
+                    if (!isMahjong) {
+                        Object.assign(payload, getGroupSettings());
+                    }
+
+                    const data = await apiRequest(btn.dataset.url, 'POST', payload);
                     showToast(data.message);
                     reloadPage();
                 } catch (e) {

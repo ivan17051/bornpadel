@@ -62,7 +62,11 @@ class KnockoutBracketService
 
         }
 
+        if ($turnamen->isMahjong()) {
 
+            return false;
+
+        }
 
         if ($this->hasKnockoutBracket($turnamen)) {
 

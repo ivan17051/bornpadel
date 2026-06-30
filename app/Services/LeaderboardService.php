@@ -25,12 +25,22 @@ class LeaderboardService
             return collect();
         }
 
-        return $turnamen->grup()
-            ->with(['members' => function ($query) {
-                $query->with(['pemain', 'turnamenPeserta.pemain1', 'turnamenPeserta.pemain2'])
-                    ->orderByDesc('poin_didapat')
-                    ->orderByDesc('set_menang')
-                    ->orderByDesc('games_menang');
+        $grupQuery = $turnamen->isMahjong()
+            ? $turnamen->activeGrup()
+            : $turnamen->grup();
+
+        return $grupQuery
+            ->with(['members' => function ($query) use ($turnamen) {
+                $query->with(['pemain', 'turnamenPeserta.pemain1', 'turnamenPeserta.pemain2']);
+
+                if ($turnamen->isMahjong()) {
+                    $query->orderByDesc('poin_akumulasi')
+                        ->orderByDesc('poin_didapat');
+                } else {
+                    $query->orderByDesc('poin_didapat')
+                        ->orderByDesc('set_menang')
+                        ->orderByDesc('games_menang');
+                }
             }])
             ->orderBy('nama')
             ->get()
@@ -38,9 +48,11 @@ class LeaderboardService
                 return [
                     'id' => $grup->id,
                     'nama' => $grup->nama,
+                    'babak' => $grup->babak,
                     'is_double' => $turnamen->isDouble(),
-                    'standings' => $grup->members->values()->map(function ($member, $index) {
-                        return [
+                    'is_mahjong' => $turnamen->isMahjong(),
+                    'standings' => $grup->members->values()->map(function ($member, $index) use ($turnamen) {
+                        $row = [
                             'rank' => $index + 1,
                             'id_pemain' => $member->id_pemain,
                             'id_peserta' => $member->id_turnamen_peserta,
@@ -50,6 +62,13 @@ class LeaderboardService
                             'set_menang' => $member->set_menang,
                             'games_menang' => $member->games_menang,
                         ];
+
+                        if ($turnamen->isMahjong()) {
+                            $row['poin_akumulasi'] = (int) $member->poin_akumulasi;
+                            $row['total_poin'] = $member->total_poin;
+                        }
+
+                        return $row;
                     }),
                 ];
             });

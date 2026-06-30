@@ -11,6 +11,12 @@ class Grup extends Model
     protected $fillable = [
         'id_turnamen',
         'nama',
+        'babak',
+        'is_aktif',
+    ];
+
+    protected $casts = [
+        'is_aktif' => 'boolean',
     ];
 
     public function turnamen()
@@ -39,8 +45,14 @@ class Grup extends Model
     {
         return $this->members()
             ->with(['pemain', 'turnamenPeserta.pemain1', 'turnamenPeserta.pemain2'])
+            ->orderByDesc('poin_akumulasi')
             ->orderByDesc('poin_didapat')
             ->orderByDesc('set_menang')
             ->orderByDesc('games_menang');
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_aktif', true);
     }
 }

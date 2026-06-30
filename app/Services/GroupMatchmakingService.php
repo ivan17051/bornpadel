@@ -28,7 +28,11 @@ class GroupMatchmakingService
 
     public function unitLabel(Turnamen $turnamen): string
     {
-        return $turnamen->isDouble() ? 'pasangan' : 'pemain';
+        if ($turnamen->isMahjong() || $turnamen->isSingle()) {
+            return 'pemain';
+        }
+
+        return 'pasangan';
     }
 
     public function previewGroupSplit(int $totalPlayers, int $minPerGroup, int $maxPerGroup): ?array
@@ -119,6 +123,10 @@ class GroupMatchmakingService
 
     public function canGenerateRandomGroups(Turnamen $turnamen): bool
     {
+        if ($turnamen->isMahjong()) {
+            return app(MahjongMatchmakingService::class)->canGenerateGroups($turnamen);
+        }
+
         return $turnamen->status === 'ongoing'
             && ! $turnamen->grup()->exists();
     }
@@ -164,6 +172,10 @@ class GroupMatchmakingService
 
         if ($turnamen->grup()->exists()) {
             throw new RuntimeException('Grup sudah dibuat untuk turnamen ini.');
+        }
+
+        if ($turnamen->isMahjong()) {
+            throw new RuntimeException('Gunakan fitur Mahjong untuk membuat grup turnamen ini.');
         }
 
         if (! in_array($mode, ['random', 'by_rating'], true)) {
