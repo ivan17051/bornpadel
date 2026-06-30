@@ -62,32 +62,4 @@
         </div>
     </div>
 </div>
-
-@if ($turnamen)
-    <div class="card">
-        <div class="card-header">
-            <h5 class="card-title mb-0">Turnamen Aktif</h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-8">
-                    <h4 class="mb-1">{{ $turnamen->nama }}</h4>
-                    <p class="text-muted mb-2">Biaya: Rp {{ number_format($turnamen->harga, 0, ',', '.') }}</p>
-                    <span class="badge bg-{{ $turnamen->status === 'open' ? 'success' : ($turnamen->status === 'ongoing' ? 'primary' : 'secondary') }}">
-                        {{ strtoupper($turnamen->status) }}
-                    </span>
-                </div>
-                <div class="col-md-4 text-md-end mt-3 mt-md-0">
-                    <a href="{{ route('admin.matchmaking.index') }}" class="btn btn-outline-primary">
-                        <i class="bi bi-shuffle me-1"></i> Kelola Matchmaking
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-@else
-    <div class="alert alert-info mb-0">
-        <i class="bi bi-info-circle me-2"></i> Tidak ada turnamen dengan status open atau ongoing.
-    </div>
-@endif
 @endsection

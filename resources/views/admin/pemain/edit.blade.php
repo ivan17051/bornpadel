@@ -4,7 +4,11 @@
 @section('page-title', 'Edit Pemain')
 
 @section('breadcrumb')
-    <li class="breadcrumb-item"><a href="{{ route('admin.pemain.index', request()->only('id_turnamen')) }}">Pemain</a></li>
+    @if (request('from') === 'directory')
+        <li class="breadcrumb-item"><a href="{{ route('admin.pemain.directory', request()->only(['search', 'gender', 'registration', 'page'])) }}">Database Pemain</a></li>
+    @else
+        <li class="breadcrumb-item"><a href="{{ route('admin.pemain.index', request()->only('id_turnamen')) }}">Pemain</a></li>
+    @endif
     <li class="breadcrumb-item active">Edit</li>
 @endsection
 
@@ -34,7 +38,7 @@
                     <h5 class="card-title mb-0">{{ $pemain->nama }}</h5>
                 </div>
                 @if ($pemain->tgl_lahir && $pemain->usia)
-                    <span class="badge text-bg-secondary">{{ $pemain->usia }} tahun</span>
+                    <span class="badge text-bg-secondary text-right">{{ $pemain->usia }} tahun</span>
                 @endif
             </div>
             <div class="card-body">
@@ -92,7 +96,12 @@
                       enctype="multipart/form-data">
                     @csrf
                     @method('PATCH')
-                    @if (request('id_turnamen'))
+                    @if (request('from') === 'directory')
+                        <input type="hidden" name="from" value="directory">
+                        @foreach (request()->only(['search', 'gender', 'registration', 'page']) as $key => $value)
+                            <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                        @endforeach
+                    @elseif (request('id_turnamen'))
                         <input type="hidden" name="id_turnamen" value="{{ request('id_turnamen') }}">
                     @endif
                     <x-pemain-photo-input
@@ -107,7 +116,11 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-lg me-1"></i> Simpan Perubahan
                         </button>
-                        <a href="{{ route('admin.pemain.index', request()->only('id_turnamen')) }}" class="btn btn-outline-secondary">Batal</a>
+                        @if (request('from') === 'directory')
+                            <a href="{{ route('admin.pemain.directory', request()->only(['search', 'gender', 'registration', 'page'])) }}" class="btn btn-outline-secondary">Batal</a>
+                        @else
+                            <a href="{{ route('admin.pemain.index', request()->only('id_turnamen')) }}" class="btn btn-outline-secondary">Batal</a>
+                        @endif
                     </div>
                 </form>
             </div>

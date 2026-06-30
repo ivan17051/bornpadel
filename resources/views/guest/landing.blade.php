@@ -4,7 +4,7 @@
 
 @section('content')
 <div class="row justify-content-center">
-    <div class="col-lg-10 col-xl-9">
+    <div class="col-lg-11 col-xl-10">
         <div class="text-center mb-4 mb-md-5">
             <h1 class="h3 fw-bold mb-2">Turnamen Born Padel</h1>
             <p class="text-muted mb-0">Daftar turnamen terbuka atau lihat klasemen dan bracket turnamen berlangsung.</p>
@@ -25,7 +25,7 @@
                             $statusLabel = 'Selesai';
                         }
                     @endphp
-                    <div class="col-md-6 col-lg-4">
+                    <div class="col-12 col-md-6">
                         <div class="card guest-card h-100">
                             <div class="card-body d-flex flex-column">
                                 <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
@@ -42,12 +42,21 @@
                                     </p>
                                 @endif
 
-                                <p class="fw-semibold text-primary mb-3">
-                                    Rp {{ number_format($item->harga, 0, ',', '.') }}
-                                    <span class="text-muted fw-normal small">
-                                        / {{ $item->isDouble() ? 'pasang' : 'peserta' }}
-                                    </span>
-                                </p>
+                                @if ($item->isRegistrationOpen())
+                                    <p class="fw-semibold text-primary mb-3">
+                                        Rp {{ number_format($item->harga, 0, ',', '.') }}
+                                        <span class="text-muted fw-normal small">
+                                            / {{ $item->isDouble() ? 'pasang' : 'peserta' }}
+                                        </span>
+                                    </p>
+                                @elseif ($item->status === 'completed' && $item->champion_label)
+                                    <p class="mb-3">
+                                        <span class="text-muted small text-uppercase">
+                                            <i class="bi bi-trophy me-1"></i> Juara
+                                        </span>
+                                        <span class="fw-semibold d-block">{{ $item->champion_label }}</span>
+                                    </p>
+                                @endif
 
                                 <div class="mt-auto d-flex flex-wrap gap-2">
                                     @if ($item->isRegistrationOpen())

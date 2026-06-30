@@ -127,7 +127,7 @@
                                    title="Profil publik">
                                     <i class="bi bi-person-badge"></i>
                                 </a>
-                                <a href="{{ route('admin.pemain.edit', $item) }}"
+                                <a href="{{ route('admin.pemain.edit', array_merge(['pemain' => $item, 'from' => 'directory'], request()->only(['search', 'gender', 'registration', 'page']))) }}"
                                    class="btn btn-sm btn-outline-primary"
                                    title="Edit">
                                     <i class="bi bi-pencil"></i>

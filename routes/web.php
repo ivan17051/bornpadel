@@ -62,6 +62,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/pemain/create', [PemainController::class, 'create'])->name('pemain.create');
         Route::post('/pemain/lookup', [PemainController::class, 'lookup'])->name('pemain.lookup');
         Route::post('/pemain', [PemainController::class, 'store'])->name('pemain.store');
+        Route::get('/pemain/peserta/{peserta}/slot/{slot}', [PemainController::class, 'createPesertaSlot'])
+            ->name('pemain.peserta.slot.create')
+            ->where('slot', '[12]');
+        Route::post('/pemain/peserta/{peserta}/slot/{slot}/lookup', [PemainController::class, 'lookupPesertaSlot'])
+            ->name('pemain.peserta.slot.lookup')
+            ->where('slot', '[12]');
+        Route::post('/pemain/peserta/{peserta}/slot/{slot}', [PemainController::class, 'storePesertaSlot'])
+            ->name('pemain.peserta.slot.store')
+            ->where('slot', '[12]');
         Route::get('/pemain/peserta/{peserta}/partner', [PemainController::class, 'createPartner'])->name('pemain.peserta.partner.create');
         Route::post('/pemain/peserta/{peserta}/partner/lookup', [PemainController::class, 'partnerLookup'])->name('pemain.peserta.partner.lookup');
         Route::post('/pemain/peserta/{peserta}/partner', [PemainController::class, 'storePartner'])->name('pemain.peserta.partner.store');

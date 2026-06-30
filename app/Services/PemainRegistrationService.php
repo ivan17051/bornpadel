@@ -42,7 +42,17 @@ class PemainRegistrationService
 
     public function getPublicTournaments(): Collection
     {
-        return Turnamen::publicVisible()->get();
+        return Turnamen::publicVisible()
+            ->with([
+                'finalMatch' => function ($query) {
+                    $query->with([
+                        'pesertaPemenang.pemain1',
+                        'pesertaPemenang.pemain2',
+                        'pemenang',
+                    ]);
+                },
+            ])
+            ->get();
     }
 
     public function resolvePublicTournament(?int $turnamenId = null): ?Turnamen

@@ -352,74 +352,120 @@ class PemainController extends Controller
             ->with('success', $turnamen->isDouble() ? 'Pasangan pemain berhasil ditambahkan.' : 'Pemain berhasil ditambahkan.');
     }
 
-    public function createPartner(Request $request, TurnamenPeserta $peserta)
+    protected function otherPemainForSlot(TurnamenPeserta $peserta, int $slot): ?Pemain
     {
-        $peserta->load(['turnamen', 'pemain1']);
-        $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
-
-        if (! $peserta->turnamen->isDouble() || $peserta->id_pemain2) {
-            return redirect()
-                ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
-                ->with('error', 'Pasangan tidak memerlukan pemain 2.');
-        }
-
-        return redirect()->route('admin.pemain.edit', [
-            'pemain' => $peserta->id_pemain1,
-            'id_turnamen' => $peserta->id_turnamen,
-        ]);
+        return $slot === 1 ? $peserta->pemain2 : $peserta->pemain1;
     }
 
-    public function partnerLookup(LookupPartnerPemainRequest $request, TurnamenPeserta $peserta)
+    protected function pesertaSlotField(int $slot): string
     {
-        $peserta->load(['turnamen', 'pemain1']);
+        return $slot === 1 ? 'id_pemain1' : 'id_pemain2';
+    }
+
+    protected function redirectIfPesertaSlotUnavailable(TurnamenPeserta $peserta, int $slot)
+    {
+        $peserta->loadMissing(['turnamen', 'pemain1', 'pemain2']);
         $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
 
-        if (! $peserta->turnamen->isDouble() || $peserta->id_pemain2) {
+        if (! $peserta->turnamen->isDouble()) {
             return redirect()
                 ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
-                ->with('error', 'Pasangan tidak memerlukan pemain 2.');
+                ->with('error', 'Turnamen ini bukan kategori double.');
+        }
+
+        if ($peserta->{$this->pesertaSlotField($slot)}) {
+            return redirect()
+                ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
+                ->with('error', 'Pemain ' . $slot . ' sudah terisi pada pasangan ini.');
+        }
+
+        return null;
+    }
+
+    public function createPesertaSlot(Request $request, TurnamenPeserta $peserta, int $slot)
+    {
+        if ($redirect = $this->redirectIfPesertaSlotUnavailable($peserta, $slot)) {
+            return $redirect;
+        }
+
+        $noHp = trim((string) $request->get('no_hp', old('no_hp', '')));
+        $showForm = $noHp !== '';
+        $otherPemain = $this->otherPemainForSlot($peserta, $slot);
+        $existingPemain = $showForm ? Pemain::where('no_hp', $noHp)->first() : null;
+
+        if ($showForm) {
+            if ($otherPemain && $otherPemain->no_hp === $noHp) {
+                return redirect()
+                    ->route('admin.pemain.peserta.slot.create', ['peserta' => $peserta->id, 'slot' => $slot])
+                    ->withInput()
+                    ->withErrors(['no_hp' => 'Nomor HP pemain ' . $slot . ' harus berbeda dari pemain ' . ($slot === 1 ? 2 : 1) . '.']);
+            }
+
+            if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $peserta->turnamen)) {
+                return redirect()
+                    ->route('admin.pemain.peserta.slot.create', ['peserta' => $peserta->id, 'slot' => $slot])
+                    ->withInput()
+                    ->withErrors(['no_hp' => 'Pemain ' . $slot . ' sudah terdaftar pada turnamen ini.']);
+            }
+        }
+
+        return view('admin.pemain.add-peserta-slot', compact(
+            'peserta',
+            'slot',
+            'showForm',
+            'noHp',
+            'existingPemain',
+            'otherPemain'
+        ));
+    }
+
+    public function lookupPesertaSlot(LookupPartnerPemainRequest $request, TurnamenPeserta $peserta, int $slot)
+    {
+        if ($redirect = $this->redirectIfPesertaSlotUnavailable($peserta, $slot)) {
+            return $redirect;
         }
 
         $noHp = trim($request->no_hp);
+        $otherPemain = $this->otherPemainForSlot($peserta, $slot);
 
-        if ($peserta->pemain1 && $peserta->pemain1->no_hp === $noHp) {
-            return back()->withInput()->withErrors(['no_hp' => 'Nomor HP pemain 2 harus berbeda dari pemain 1.']);
+        if ($otherPemain && $otherPemain->no_hp === $noHp) {
+            return back()->withInput()->withErrors([
+                'no_hp' => 'Nomor HP pemain ' . $slot . ' harus berbeda dari pemain ' . ($slot === 1 ? 2 : 1) . '.',
+            ]);
         }
 
-        $existingPartner = Pemain::where('no_hp', $noHp)->first();
+        $existingPemain = Pemain::where('no_hp', $noHp)->first();
 
-        if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $peserta->turnamen)) {
+        if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $peserta->turnamen)) {
             return back()
                 ->withInput()
-                ->withErrors(['no_hp' => 'Pemain 2 sudah terdaftar pada turnamen ini.']);
+                ->withErrors(['no_hp' => 'Pemain ' . $slot . ' sudah terdaftar pada turnamen ini.']);
         }
 
-        return redirect()->route('admin.pemain.edit', [
-            'pemain' => $peserta->id_pemain1,
-            'id_turnamen' => $peserta->id_turnamen,
-            'partner_no_hp' => $noHp,
+        return redirect()->route('admin.pemain.peserta.slot.create', [
+            'peserta' => $peserta->id,
+            'slot' => $slot,
+            'no_hp' => $noHp,
         ]);
     }
 
-    public function storePartner(StorePartnerPemainRequest $request, TurnamenPeserta $peserta)
+    public function storePesertaSlot(StorePartnerPemainRequest $request, TurnamenPeserta $peserta, int $slot)
     {
-        $peserta->load(['turnamen', 'pemain1']);
-        $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
-
-        if (! $peserta->turnamen->isDouble() || $peserta->id_pemain2) {
-            return redirect()
-                ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
-                ->with('error', 'Pasangan tidak memerlukan pemain 2.');
+        if ($redirect = $this->redirectIfPesertaSlotUnavailable($peserta, $slot)) {
+            return $redirect;
         }
 
         $data = $request->validated();
+        $otherPemain = $this->otherPemainForSlot($peserta, $slot);
 
-        if ($peserta->pemain1 && $peserta->pemain1->no_hp === trim($data['no_hp'])) {
-            return back()->withInput()->withErrors(['no_hp' => 'Nomor HP pemain 2 harus berbeda dari pemain 1.']);
+        if ($otherPemain && $otherPemain->no_hp === trim($data['no_hp'])) {
+            return back()->withInput()->withErrors([
+                'no_hp' => 'Nomor HP pemain ' . $slot . ' harus berbeda dari pemain ' . ($slot === 1 ? 2 : 1) . '.',
+            ]);
         }
 
         try {
-            $pemain2 = $this->registrationService->upsertPemain([
+            $pemain = $this->registrationService->upsertPemain([
                 'no_hp' => $data['no_hp'],
                 'nama' => $data['nama'],
                 'tgl_lahir' => $data['tgl_lahir'] ?? null,
@@ -427,21 +473,33 @@ class PemainController extends Controller
                 'rating' => $data['rating'] ?? null,
             ], $request->file('foto'));
 
-            if ($this->registrationService->isRegisteredForTournament($pemain2, $peserta->turnamen)) {
-                throw new \RuntimeException('Pemain 2 sudah terdaftar pada turnamen ini.');
+            if ($this->registrationService->isRegisteredForTournament($pemain, $peserta->turnamen)) {
+                throw new \RuntimeException('Pemain ' . $slot . ' sudah terdaftar pada turnamen ini.');
             }
 
-            $peserta->update(['id_pemain2' => $pemain2->id]);
+            $peserta->update([$this->pesertaSlotField($slot) => $pemain->id]);
         } catch (\RuntimeException $e) {
             return back()->withInput()->withErrors(['no_hp' => $e->getMessage()]);
         }
 
         return redirect()
-            ->route('admin.pemain.edit', [
-                'pemain' => $peserta->id_pemain1,
-                'id_turnamen' => $peserta->id_turnamen,
-            ])
-            ->with('success', 'Pemain 2 berhasil ditambahkan ke pasangan.');
+            ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
+            ->with('success', 'Pemain ' . $slot . ' berhasil ditambahkan ke pasangan.');
+    }
+
+    public function createPartner(Request $request, TurnamenPeserta $peserta)
+    {
+        return $this->createPesertaSlot($request, $peserta, 2);
+    }
+
+    public function partnerLookup(LookupPartnerPemainRequest $request, TurnamenPeserta $peserta)
+    {
+        return $this->lookupPesertaSlot($request, $peserta, 2);
+    }
+
+    public function storePartner(StorePartnerPemainRequest $request, TurnamenPeserta $peserta)
+    {
+        return $this->storePesertaSlot($request, $peserta, 2);
     }
 
     public function edit(Pemain $pemain)
@@ -528,7 +586,7 @@ class PemainController extends Controller
         }
 
         return redirect()
-            ->route('admin.pemain.index', request()->only('id_turnamen'))
+            ->to($this->pemainReturnUrl($request))
             ->with('success', 'Data pemain berhasil diperbarui.');
     }
 
@@ -702,7 +760,16 @@ class PemainController extends Controller
         }
 
         return redirect()
-            ->route('admin.pemain.index', request()->only('id_turnamen'))
+            ->to($this->pemainReturnUrl($request))
             ->with('success', 'Profil pemain berhasil dihapus.');
+    }
+
+    protected function pemainReturnUrl(Request $request): string
+    {
+        if ($request->input('from') === 'directory') {
+            return route('admin.pemain.directory', $request->only(['search', 'gender', 'registration', 'page']));
+        }
+
+        return route('admin.pemain.index', $request->only('id_turnamen'));
     }
 }

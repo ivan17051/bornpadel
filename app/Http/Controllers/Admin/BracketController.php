@@ -16,7 +16,8 @@ class BracketController extends Controller
     ) {
         $turnamenList = $matchmakingService->listForFilter();
         $turnamen = $matchmakingService->resolveTournament(
-            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
+            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null,
+            false
         );
         $bracket = $turnamen ? $bracketService->getBracketTree($turnamen) : [];
 

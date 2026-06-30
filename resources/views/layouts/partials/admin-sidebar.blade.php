@@ -54,7 +54,7 @@
                 <li class="nav-item">
                     <a href="{{ route('admin.pemain.index') }}" class="nav-link {{ request()->routeIs('admin.pemain.index') || request()->routeIs('admin.pemain.create') || request()->routeIs('admin.pemain.edit') ? 'active' : '' }}">
                         <i class="nav-icon bi bi-people"></i>
-                        <p>Pemain Turnamen</p>
+                        <p>Pemain Terdaftar</p>
                     </a>
                 </li>
                 <li class="nav-item">

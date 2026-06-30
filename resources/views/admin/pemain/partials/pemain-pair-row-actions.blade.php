@@ -1,5 +1,6 @@
 @php
     $representativePemain = $pemain1 ?? $pemain2;
+    $missingSlot = ! $pemain1 ? 1 : (! $pemain2 ? 2 : null);
     $hasPairApprove = $turnamen && $representativePemain && in_array($registrationStatus, ['pending', 'rejected', 'unpaid', 'paid'], true);
     $hasPairReject = $turnamen && $representativePemain && (
         ($registrationStatus === 'pending' && ! $turnamenOngoing)
@@ -33,11 +34,13 @@
                     <i class="bi bi-pencil me-2"></i> Edit {{ $pemain2->nama }}
                 </a>
             </li>
-        @elseif ($peserta ?? null)
+        @endif
+
+        @if ($missingSlot && ($peserta ?? null))
             <li>
                 <a class="dropdown-item"
-                   href="{{ route('admin.pemain.edit', array_merge([$pemain1 ?? $pemain2], request()->only('id_turnamen'))) }}">
-                    <i class="bi bi-person-plus me-2"></i> Tambah {{ $pemain1 ? 'Pemain 2' : 'Pemain 1' }}
+                   href="{{ route('admin.pemain.peserta.slot.create', ['peserta' => $peserta->id, 'slot' => $missingSlot]) }}">
+                    <i class="bi bi-person-plus me-2"></i> Tambah Pemain {{ $missingSlot }}
                 </a>
             </li>
         @endif

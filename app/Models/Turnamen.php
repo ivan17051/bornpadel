@@ -42,7 +42,8 @@ class Turnamen extends Model
                     $completed->where('status', 'completed')
                         ->where('tanggal', '>=', $cutoff);
                 });
-        })->orderByDesc('tanggal');
+        })->orderByRaw("CASE status WHEN 'open' THEN 0 WHEN 'ongoing' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END")
+            ->orderByDesc('tanggal');
     }
 
     public function isRegistrationOpen(): bool
@@ -90,5 +91,34 @@ class Turnamen extends Model
     public function pertandingan()
     {
         return $this->hasMany(Pertandingan::class, 'id_turnamen');
+    }
+
+    public function finalMatch()
+    {
+        return $this->hasOne(Pertandingan::class, 'id_turnamen')
+            ->whereNull('id_grup')
+            ->where('nama_ronde', 'Final')
+            ->latestOfMany('id');
+    }
+
+    public function getChampionLabelAttribute(): ?string
+    {
+        if ($this->status !== 'completed') {
+            return null;
+        }
+
+        $final = $this->relationLoaded('finalMatch')
+            ? $this->finalMatch
+            : $this->finalMatch()->with([
+                'pesertaPemenang.pemain1',
+                'pesertaPemenang.pemain2',
+                'pemenang',
+            ])->first();
+
+        if (! $final || $final->status !== 'completed') {
+            return null;
+        }
+
+        return $final->winner_label;
     }
 }

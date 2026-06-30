@@ -22,4 +22,11 @@ class StorePartnerPemainRequest extends FormRequest
             'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ];
     }
+
+    protected function prepareForValidation()
+    {
+        if ($this->has('tgl_lahir') && $this->input('tgl_lahir') === '') {
+            $this->merge(['tgl_lahir' => null]);
+        }
+    }
 }
