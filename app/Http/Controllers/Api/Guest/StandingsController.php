@@ -10,18 +10,44 @@ class StandingsController extends Controller
 {
     public function index(Request $request, LeaderboardService $leaderboardService)
     {
-        $standings = $leaderboardService->getStandings($request->input('id_turnamen'));
+        $turnamenId = $request->input('id_turnamen');
+        $turnamen = $turnamenId
+            ? \App\Models\Turnamen::find($turnamenId)
+            : $leaderboardService->getActiveTournament();
+
+        if ($turnamen && $turnamen->isMahjong()) {
+            $standings = $leaderboardService->getMahjongGlobalStandings($turnamen->id);
+
+            if ($standings->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Belum ada data klasemen.',
+                    'type' => 'mahjong',
+                    'data' => [],
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'type' => 'mahjong',
+                'data' => $standings,
+            ]);
+        }
+
+        $standings = $leaderboardService->getStandings($turnamenId);
 
         if ($standings->isEmpty()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Belum ada data klasemen.',
+                'type' => 'group',
                 'data' => [],
             ]);
         }
 
         return response()->json([
             'success' => true,
+            'type' => 'group',
             'data' => $standings,
         ]);
     }

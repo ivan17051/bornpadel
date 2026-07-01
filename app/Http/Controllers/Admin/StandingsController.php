@@ -20,7 +20,9 @@ class StandingsController extends Controller
             false
         );
         $standings = $turnamen
-            ? $leaderboardService->getStandings($turnamen->id)
+            ? ($turnamen->isMahjong()
+                ? $leaderboardService->getMahjongGlobalStandings($turnamen->id)
+                : $leaderboardService->getStandings($turnamen->id))
             : collect();
 
         return view('admin.standings.index', compact('turnamen', 'turnamenList', 'standings'));

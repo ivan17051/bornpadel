@@ -18,7 +18,9 @@ class StandingsController extends Controller
             $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
         );
 
-        $standings = $leaderboardService->getStandings(optional($turnamen)->id);
+        $standings = $turnamen && $turnamen->isMahjong()
+            ? $leaderboardService->getMahjongGlobalStandings($turnamen->id)
+            : $leaderboardService->getStandings(optional($turnamen)->id);
 
         return view('guest.standings', compact('turnamen', 'standings'));
     }

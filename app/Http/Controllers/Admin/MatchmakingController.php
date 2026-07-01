@@ -211,7 +211,7 @@ class MatchmakingController extends Controller
     public function updateMahjongPoints(Request $request, GrupMember $member)
     {
         $request->validate([
-            'poin_didapat' => ['required', 'integer', 'min:0'],
+            'poin_didapat' => ['required', 'integer'],
         ]);
 
         $member->load('grup.turnamen');

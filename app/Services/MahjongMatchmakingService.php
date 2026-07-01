@@ -119,7 +119,7 @@ class MahjongMatchmakingService
 
     public function updateMemberPoints(GrupMember $member, int $poinDidapat): GrupMember
     {
-        $member->update(['poin_didapat' => max(0, $poinDidapat)]);
+        $member->update(['poin_didapat' => $poinDidapat]);
 
         return $member->fresh();
     }

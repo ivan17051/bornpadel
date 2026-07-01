@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 
-@section('title', 'Klasemen Grup')
-@section('page-title', 'Klasemen Grup')
+@section('title', 'Klasemen')
+@section('page-title', 'Klasemen')
 
 @section('breadcrumb')
     <li class="breadcrumb-item active">Klasemen</li>
@@ -16,7 +16,11 @@
 ])
 
 @if ($turnamen)
-    <x-group-leaderboard :standings="$standings" :turnamen="$turnamen" :refreshable="true" />
+    @if ($turnamen->isMahjong())
+        <x-mahjong-leaderboard :standings="$standings" :turnamen="$turnamen" :refreshable="true" />
+    @else
+        <x-group-leaderboard :standings="$standings" :turnamen="$turnamen" :refreshable="true" />
+    @endif
 @else
     <div class="alert alert-light border text-center mb-0">
         <i class="bi bi-funnel text-muted d-block mb-2 fs-4"></i>

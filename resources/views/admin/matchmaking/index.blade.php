@@ -214,7 +214,6 @@
                                             <td class="text-center">
                                                 <input type="number"
                                                        class="form-control form-control-sm text-center mahjong-poin-input"
-                                                       min="0"
                                                        value="{{ (int) $member->poin_didapat }}"
                                                        data-member-id="{{ $member->id }}"
                                                        data-url="{{ route('admin.matchmaking.mahjong-points', $member) }}">
