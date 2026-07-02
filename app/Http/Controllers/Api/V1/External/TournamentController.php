@@ -7,6 +7,7 @@ use App\Models\Turnamen;
 use App\Models\TurnamenPemenang;
 use App\Services\MahjongMatchmakingService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class TournamentController extends Controller
 {
@@ -15,6 +16,42 @@ class TournamentController extends Controller
     public function __construct(MahjongMatchmakingService $mahjongService)
     {
         $this->mahjongService = $mahjongService;
+    }
+
+    public function mahjongList(Request $request): JsonResponse
+    {
+        $request->validate([
+            'status' => ['nullable', 'in:open,ongoing,completed,draft'],
+        ]);
+
+        $query = Turnamen::query()
+            ->where('jenis', 'mahjong')
+            ->orderByDesc('tanggal')
+            ->orderByDesc('id');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $turnamen = $query->get()->map(function (Turnamen $item) {
+            return [
+                'id' => $item->id,
+                'nama' => $item->nama,
+                'tanggal' => optional($item->tanggal)->toDateString(),
+                'harga' => $item->harga,
+                'syarat' => $item->syarat,
+                'jenis' => $item->jenis,
+                'jenis_label' => $item->jenis_label,
+                'status' => $item->status,
+                'mahjong_is_final' => (bool) $item->mahjong_is_final,
+                'registration_open' => $item->isRegistrationOpen(),
+            ];
+        })->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => $turnamen,
+        ]);
     }
 
     public function groupStandings(int $id): JsonResponse
