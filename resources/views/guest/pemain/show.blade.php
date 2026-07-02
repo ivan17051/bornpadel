@@ -26,12 +26,12 @@
                             <span class="badge text-bg-primary">Rating {{ number_format($pemain->rating, 1) }}</span>
                         </div>
                         <div class="row g-3 small">
-                            <div class="col-sm-6">
+                            <!-- <div class="col-sm-6">
                                 <div class="text-muted text-uppercase">Nomor HP</div>
                                 <strong>{{ $parsedPhone['country_code'] }} {{ $parsedPhone['local_number'] }}</strong>
-                            </div>
+                            </div> -->
                             <div class="col-sm-6">
-                                <div class="text-muted text-uppercase">Total Poin Karier</div>
+                                <div class="text-muted text-uppercase">Total Poin</div>
                                 <strong class="text-primary fs-5">{{ number_format($pemain->total_poin ?? 0) }}</strong>
                             </div>
                         </div>
