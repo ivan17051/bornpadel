@@ -180,6 +180,7 @@ class MatchmakingController extends Controller
                 $result['matches_created'],
                 $byeMessage
             ),
+            'redirect_url' => route('admin.bracket.index', ['id_turnamen' => $turnamen->id]),
             'data' => $result,
         ]);
     }

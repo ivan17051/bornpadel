@@ -16,21 +16,21 @@ class StandingsController extends Controller
             : $leaderboardService->getActiveTournament();
 
         if ($turnamen && $turnamen->isMahjong()) {
-            $standings = $leaderboardService->getMahjongGlobalStandings($turnamen->id);
+            $mahjongStandings = $leaderboardService->getMahjongStandingsByBabak($turnamen->id);
 
-            if ($standings->isEmpty()) {
+            if ($mahjongStandings['sections']->isEmpty() && $mahjongStandings['overall']->isEmpty()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Belum ada data klasemen.',
                     'type' => 'mahjong',
-                    'data' => [],
+                    'data' => $mahjongStandings,
                 ]);
             }
 
             return response()->json([
                 'success' => true,
                 'type' => 'mahjong',
-                'data' => $standings,
+                'data' => $mahjongStandings,
             ]);
         }
 

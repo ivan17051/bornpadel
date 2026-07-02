@@ -38,6 +38,8 @@
         }
         .text-bg-primary { color: #1a1a1a !important; }
         .status-badge-pending { background: #ffc107; color: #000; }
+        .status-badge-unpaid { background: #fd7e14; }
+        .status-badge-paid { background: #0dcaf0; color: #000; }
         .status-badge-approved { background: #198754; }
         .status-badge-rejected { background: #dc3545; }
         .toast-container { z-index: 1090; }

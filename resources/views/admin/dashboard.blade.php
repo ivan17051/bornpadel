@@ -32,7 +32,7 @@
                 <p>Menunggu Verifikasi</p>
             </div>
             <i class="small-box-icon bi bi-hourglass-split"></i>
-            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'pending', 'id_turnamen' => optional($turnamen)->id])) }}" class="small-box-footer link-dark">
+            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'paid', 'id_turnamen' => optional($turnamen)->id])) }}" class="small-box-footer link-dark">
                 Review <i class="bi bi-arrow-right-circle"></i>
             </a>
         </div>

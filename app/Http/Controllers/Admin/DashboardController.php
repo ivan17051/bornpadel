@@ -25,7 +25,7 @@ class DashboardController extends Controller
 
         if ($turnamen) {
             $pendingPemain = TurnamenPeserta::where('id_turnamen', $turnamen->id)
-                ->where('status', 'pending')
+                ->where('status', 'paid')
                 ->count();
             $approvedPemain = $matchmakingService->countApprovedPlayers($turnamen);
         }

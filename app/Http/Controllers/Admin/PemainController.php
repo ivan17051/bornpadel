@@ -506,38 +506,13 @@ class PemainController extends Controller
     {
         $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
 
-        $turnamenList = $this->matchmakingService->listForFilter();
         $turnamenPesertaEntries = TurnamenPeserta::involvingPemain($pemain->id)
             ->with('turnamen', 'pemain1', 'pemain2')
             ->get();
 
-        $partnerPesertaQuery = TurnamenPeserta::query()
-            ->where('id_pemain1', $pemain->id)
-            ->whereNull('id_pemain2')
-            ->whereHas('turnamen', function ($query) {
-                $query->where('jenis', 'double');
-            })
-            ->with(['turnamen', 'pemain1']);
-
-        if (request()->filled('id_turnamen')) {
-            $partnerPesertaQuery->where('id_turnamen', (int) request('id_turnamen'));
-        }
-
-        $partnerPeserta = $partnerPesertaQuery->first();
-        $partnerNoHp = trim((string) request('partner_no_hp', old('partner_no_hp', '')));
-        $showPartnerForm = $partnerPeserta && $partnerNoHp !== '';
-        $existingPartner = $showPartnerForm ? Pemain::where('no_hp', $partnerNoHp)->first() : null;
-        $isPartnerExisting = (bool) $existingPartner;
-
         return view('admin.pemain.edit', compact(
             'pemain',
-            'turnamenList',
-            'turnamenPesertaEntries',
-            'partnerPeserta',
-            'partnerNoHp',
-            'showPartnerForm',
-            'existingPartner',
-            'isPartnerExisting'
+            'turnamenPesertaEntries'
         ));
     }
 
@@ -614,6 +589,11 @@ class PemainController extends Controller
             ], 422);
         }
 
+        if ($request->hasFile('bukti_bayar')) {
+            $this->registrationService->updateBuktiBayar($peserta, $request->file('bukti_bayar'));
+            $peserta->refresh();
+        }
+
         if ($request->status === 'approved'
             && $peserta->turnamen
             && $peserta->turnamen->isDouble()
@@ -624,13 +604,7 @@ class PemainController extends Controller
             ], 422);
         }
 
-        $updatePayload = ['status' => $request->status];
-
-        if ($request->hasFile('bukti_bayar')) {
-            $this->registrationService->updateBuktiBayar($peserta, $request->file('bukti_bayar'));
-        }
-
-        $peserta->update($updatePayload);
+        $peserta->update(['status' => $request->status]);
 
         $messages = [
             'approved' => $peserta->turnamen && $peserta->turnamen->isDouble()
@@ -642,6 +616,12 @@ class PemainController extends Controller
             'pending' => $peserta->turnamen && $peserta->turnamen->isDouble()
                 ? 'Status pasangan dikembalikan ke pending.'
                 : 'Status pemain dikembalikan ke pending.',
+            'unpaid' => $peserta->turnamen && $peserta->turnamen->isDouble()
+                ? 'Status pasangan diubah menjadi unpaid.'
+                : 'Status pemain diubah menjadi unpaid.',
+            'paid' => $peserta->turnamen && $peserta->turnamen->isDouble()
+                ? 'Status pasangan diubah menjadi paid.'
+                : 'Status pemain diubah menjadi paid.',
         ];
 
         return response()->json([

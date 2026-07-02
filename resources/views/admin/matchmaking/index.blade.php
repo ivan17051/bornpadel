@@ -155,6 +155,7 @@
                                 class="btn btn-success {{ $canEndGroupStage ? '' : 'd-none' }}"
                                 data-url="{{ route('admin.matchmaking.end-group-stage') }}"
                                 data-turnamen="{{ $turnamen->id }}"
+                                data-bracket-url="{{ route('admin.bracket.index', ['id_turnamen' => $turnamen->id]) }}"
                                 data-jenis="{{ $turnamen->jenis }}"
                                 data-mahjong="{{ $isMahjong ? '1' : '0' }}"
                                 data-max-lolos="{{ $activePlayerCount ?? $approvedCount }}"

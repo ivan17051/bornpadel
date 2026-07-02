@@ -1,11 +1,9 @@
 @php
     $representativePemain = $pemain1 ?? $pemain2;
     $missingSlot = ! $pemain1 ? 1 : (! $pemain2 ? 2 : null);
-    $hasPairApprove = $turnamen && $representativePemain && in_array($registrationStatus, ['pending', 'rejected', 'unpaid', 'paid'], true);
-    $hasPairReject = $turnamen && $representativePemain && (
-        ($registrationStatus === 'pending' && ! $turnamenOngoing)
-        || ($registrationStatus === 'approved' && ! $turnamenOngoing)
-    );
+    $hasPairApprove = $turnamen && $representativePemain && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
+    $hasPairReject = $turnamen && $representativePemain && ! $turnamenOngoing
+        && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'approved'], true);
     $hasDelete = $turnamen && ! $turnamenOngoing;
 @endphp
 
@@ -44,6 +42,11 @@
                 </a>
             </li>
         @endif
+
+        @include('admin.pemain.partials.bukti-bayar-dropdown-item', [
+            'peserta' => $peserta ?? null,
+            'turnamen' => $turnamen ?? null,
+        ])
 
         @if ($hasPairApprove)
             <li><hr class="dropdown-divider"></li>

@@ -51,45 +51,112 @@
         bindRefreshButton();
     };
 
-    const renderMahjongStandings = (rows) => {
-        if (!rows || rows.length === 0) {
+    const renderMahjongStandings = (payload) => {
+        const sections = payload?.sections || payload || [];
+        const overall = payload?.overall || [];
+
+        if ((!sections || sections.length === 0) && (!overall || overall.length === 0)) {
             renderEmpty('Klasemen Mahjong');
             return;
         }
 
-        const body = rows.map((row) => `
+        const renderMahjongRow = (row) => `
             <tr class="${row.rank === 1 ? 'table-success' : ''}">
                 <td class="text-center fw-bold">
                     ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
                 </td>
                 <td class="fw-semibold">${renderNameCell(row)}</td>
-                <td class="text-center text-muted d-none d-md-table-cell">${row.grup_nama || '—'}</td>
-                <td class="text-center text-muted">${row.poin_akumulasi ?? 0}</td>
-                <td class="text-center"><span class="badge text-bg-secondary">${row.poin_didapat ?? 0}</span></td>
-                <td class="text-center"><span class="badge text-bg-primary">${row.total_poin ?? 0}</span></td>
-            </tr>
-        `).join('');
+                <td class="text-center">
+                    <span class="badge text-bg-secondary">${row.poin_babak ?? row.poin_didapat ?? 0}</span>
+                </td>
+                <td class="text-center">
+                    <span class="badge text-bg-primary">${row.total_poin ?? 0}</span>
+                </td>
+            </tr>`;
 
-        container.innerHTML = renderHeader('Klasemen Mahjong') + `
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th class="text-center" style="width:3rem">#</th>
-                                    <th>Pemain</th>
-                                    <th class="text-center d-none d-md-table-cell">Grup</th>
-                                    <th class="text-center">Akumulasi</th>
-                                    <th class="text-center">Babak</th>
-                                    <th class="text-center">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>${body}</tbody>
-                        </table>
+        const sectionHtml = (sections || []).map((section) => {
+            const groups = section.groups || [];
+            const groupCards = groups.map((grup) => `
+                <div class="col-lg-6">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-header bg-white fw-semibold py-3">
+                            <i class="bi bi-diagram-3 me-2 text-primary"></i>${grup.nama}
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="text-center" style="width:3rem">#</th>
+                                            <th>Pemain</th>
+                                            <th class="text-center">Poin Babak</th>
+                                            <th class="text-center">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${(grup.standings || []).map(renderMahjongRow).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            `).join('');
+
+            return `
+                <div class="mb-4">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <h6 class="mb-0 fw-semibold">
+                            <i class="bi bi-layers me-1 text-primary"></i>Babak ${section.babak}
+                        </h6>
+                        ${section.is_active ? '<span class="badge text-bg-success">Berlangsung</span>' : ''}
+                    </div>
+                    ${groups.length
+                        ? `<div class="row g-4">${groupCards}</div>`
+                        : '<div class="alert alert-light border mb-0">Belum ada data pemain pada babak ini.</div>'}
+                </div>`;
+        }).join('');
+
+        const overallHtml = (overall || []).length
+            ? `
+                <div class="mt-2">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="bi bi-trophy me-1 text-warning"></i>Klasemen Akumulasi
+                    </h6>
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="text-center" style="width:3rem">#</th>
+                                            <th>Pemain</th>
+                                            <th class="text-center d-none d-md-table-cell">Grup</th>
+                                            <th class="text-center">Total Poin</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${overall.map((row) => `
+                                            <tr class="${row.rank === 1 ? 'table-success' : ''}">
+                                                <td class="text-center fw-bold">
+                                                    ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
+                                                </td>
+                                                <td class="fw-semibold">${renderNameCell(row)}</td>
+                                                <td class="text-center text-muted d-none d-md-table-cell">${row.grup_nama || '—'}</td>
+                                                <td class="text-center">
+                                                    <span class="badge text-bg-primary">${row.total_poin ?? 0}</span>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>`
+            : '';
+
+        container.innerHTML = renderHeader('Klasemen Mahjong') + sectionHtml + overallHtml + `
             <p class="text-muted small text-end mt-2 mb-0">
                 <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
             </p>`;

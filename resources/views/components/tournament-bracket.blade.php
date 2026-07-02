@@ -98,16 +98,16 @@
 @once
 @push('styles')
 <style>
-    .bracket-tree { min-height: 320px; }
-    .bracket-rounds { min-width: max-content; padding: 1rem 0; }
+    .bracket-tree { min-height: 320px; padding-top: 0.25rem; }
+    .bracket-rounds { min-width: max-content; padding: 1.25rem 0 1rem; }
     .bracket-round { width: 220px; min-height: 100%; }
     .bracket-round-title { letter-spacing: 0.06em; }
-    .bracket-matches { gap: 2.5rem; min-height: 280px; }
+    .bracket-matches { gap: 2.5rem; min-height: 280px; padding-top: 0.5rem; }
     .bracket-match {
         background: #fff;
         border: 1px solid #dee2e6;
         border-radius: 0.5rem;
-        overflow: hidden;
+        overflow: visible;
         box-shadow: 0 2px 8px rgba(0,0,0,.04);
         position: relative;
         min-width: 200px;
@@ -122,13 +122,17 @@
         font-size: 0.875rem;
         border-bottom: 1px solid #f0f0f0;
         gap: 0.5rem;
+        background: #fff;
     }
-    .bracket-player:last-of-type { border-bottom: none; }
+    .bracket-player:first-of-type { border-radius: 0.5rem 0.5rem 0 0; }
+    .bracket-player:last-of-type { border-bottom: none; border-radius: 0 0 0.5rem 0.5rem; }
+    .bracket-player:only-of-type { border-radius: 0.5rem; }
     .bracket-player.is-winner { background: #f5ecd4; font-weight: 600; }
     .bracket-player.is-tbd { color: #adb5bd; font-style: italic; }
     .bracket-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bracket-score-badge { font-size: 0.75rem; color: #6c757d; font-weight: 600; flex-shrink: 0; }
-    .bracket-match-status { position: absolute; top: -0.65rem; right: 0.5rem; }
+    .bracket-match-status { position: absolute; top: -0.65rem; right: 0.5rem; z-index: 1; line-height: 1; }
+    .bracket-match-status .badge { white-space: nowrap; }
     .bracket-connector {
         width: 40px;
         align-self: stretch;

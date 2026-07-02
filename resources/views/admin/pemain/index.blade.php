@@ -190,6 +190,7 @@
                             <td class="text-end text-nowrap">
                                 @include('admin.pemain.partials.pemain-row-actions', [
                                     'pemain' => $item,
+                                    'peserta' => $peserta,
                                     'turnamen' => $turnamen,
                                     'registrationStatus' => $registrationStatus,
                                     'turnamenOngoing' => $turnamenOngoing,
@@ -217,6 +218,34 @@
             {{ ! empty($isDoubleView) ? $peserta->links() : $pemain->links() }}
         </div>
     @endif
+</div>
+
+<div class="modal fade" id="buktiBayarModal" tabindex="-1" aria-labelledby="buktiBayarModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="buktiBayarModalLabel">
+                    <i class="bi bi-receipt me-2"></i>Bukti Pembayaran
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p id="bukti-bayar-modal-label" class="small text-muted mb-3"></p>
+                <img id="bukti-bayar-image" src="" alt="Bukti pembayaran" class="img-fluid rounded border d-none">
+                <iframe id="bukti-bayar-pdf" title="Bukti pembayaran PDF" class="d-none w-100 rounded border" style="height: 70vh;"></iframe>
+                <div id="bukti-bayar-empty" class="text-muted py-4 d-none">
+                    <i class="bi bi-file-earmark-x display-6 d-block mb-2"></i>
+                    Belum ada bukti bayar yang diunggah.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a id="bukti-bayar-open-tab" href="#" target="_blank" rel="noopener" class="btn btn-outline-primary d-none">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Buka di Tab Baru
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
 </div>
 @endsection
 

@@ -93,11 +93,13 @@ class PemainRegistrationService
             throw new RuntimeException('Nomor HP sudah terdaftar pada turnamen ini.');
         }
 
+        $buktiPath = $this->storeBuktiBayar($buktiBayar);
+
         TurnamenPeserta::create([
             'id_turnamen' => $turnamen->id,
             'id_pemain1' => $pemain->id,
-            'status' => 'pending',
-            'bukti_bayar' => $this->storeBuktiBayar($buktiBayar),
+            'status' => $this->resolveRegistrationStatusFromBukti($buktiPath),
+            'bukti_bayar' => $buktiPath,
         ]);
 
         return $pemain->fresh();
@@ -129,12 +131,14 @@ class PemainRegistrationService
             throw new RuntimeException('Nomor HP pemain 2 sudah terdaftar pada turnamen ini.');
         }
 
+        $buktiPath = $this->storeBuktiBayar($buktiBayar);
+
         TurnamenPeserta::create([
             'id_turnamen' => $turnamen->id,
             'id_pemain1' => $pemain->id,
             'id_pemain2' => $partner->id,
-            'status' => 'pending',
-            'bukti_bayar' => $this->storeBuktiBayar($buktiBayar),
+            'status' => $this->resolveRegistrationStatusFromBukti($buktiPath),
+            'bukti_bayar' => $buktiPath,
         ]);
 
         return [
@@ -222,9 +226,18 @@ class PemainRegistrationService
             return;
         }
 
-        $updates['status'] = 'pending';
+        $updates['status'] = $this->resolveRegistrationStatusFromBukti($peserta->bukti_bayar);
 
         $peserta->update($updates);
+    }
+
+    public function resolveRegistrationStatusFromBukti(?string $buktiBayarPath = null, ?UploadedFile $buktiBayar = null): string
+    {
+        if ($buktiBayar || $buktiBayarPath) {
+            return 'paid';
+        }
+
+        return 'unpaid';
     }
 
     public function storeBuktiBayar(?UploadedFile $buktiBayar): ?string
@@ -243,6 +256,14 @@ class PemainRegistrationService
         }
 
         $this->paymentReceiptService->delete($peserta->bukti_bayar);
-        $peserta->update(['bukti_bayar' => $this->paymentReceiptService->store($buktiBayar)]);
+        $updates = [
+            'bukti_bayar' => $this->paymentReceiptService->store($buktiBayar),
+        ];
+
+        if (in_array($peserta->status, ['unpaid', 'pending'], true)) {
+            $updates['status'] = 'paid';
+        }
+
+        $peserta->update($updates);
     }
 }

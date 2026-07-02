@@ -1,9 +1,6 @@
 @php
-    $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'rejected', 'unpaid', 'paid'], true);
-    $hasReject = $turnamen && (
-        ($registrationStatus === 'pending' && ! $turnamenOngoing)
-        || ($registrationStatus === 'approved' && ! $turnamenOngoing)
-    );
+    $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
+    $hasReject = $turnamen && ! $turnamenOngoing && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'approved'], true);
     $hasDelete = $turnamen && ! $turnamenOngoing;
 @endphp
 
@@ -22,6 +19,12 @@
                 <i class="bi bi-pencil me-2"></i> Edit
             </a>
         </li>
+
+        @include('admin.pemain.partials.bukti-bayar-dropdown-item', [
+            'peserta' => $peserta ?? null,
+            'turnamen' => $turnamen ?? null,
+            'label' => $pemain->nama,
+        ])
 
         @if ($hasApprove)
             <li>

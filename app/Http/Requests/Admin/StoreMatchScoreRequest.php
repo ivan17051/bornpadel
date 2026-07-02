@@ -16,7 +16,12 @@ class StoreMatchScoreRequest extends FormRequest
     public function rules()
     {
         return [
-            'sets' => ['required', 'array', 'min:3', 'max:5'],
+            'sets' => [
+                'required',
+                'array',
+                'min:' . MatchScoringService::MIN_SETS,
+                'max:' . MatchScoringService::MAX_SETS,
+            ],
             'sets.*.skor_pemain1' => ['required', 'integer', 'min:0', 'max:99'],
             'sets.*.skor_pemain2' => ['required', 'integer', 'min:0', 'max:99'],
         ];
@@ -26,8 +31,8 @@ class StoreMatchScoreRequest extends FormRequest
     {
         return [
             'sets.required' => 'Skor set wajib diisi.',
-            'sets.min' => 'Minimal 3 set diperlukan untuk menyelesaikan pertandingan (Best of 5).',
-            'sets.max' => 'Maksimal 5 set diperbolehkan.',
+            'sets.min' => 'Minimal 2 set diperlukan untuk menyelesaikan pertandingan (Best of 3).',
+            'sets.max' => 'Maksimal 3 set diperbolehkan.',
             'sets.*.skor_pemain1.required' => 'Skor pemain 1 wajib diisi.',
             'sets.*.skor_pemain2.required' => 'Skor pemain 2 wajib diisi.',
         ];

@@ -201,6 +201,58 @@ const BornPadelAdmin = (function () {
                 }
             });
         });
+
+        const buktiBayarModalEl = document.getElementById('buktiBayarModal');
+        if (buktiBayarModalEl) {
+            const buktiBayarModal = new bootstrap.Modal(buktiBayarModalEl);
+            const imageEl = document.getElementById('bukti-bayar-image');
+            const pdfEl = document.getElementById('bukti-bayar-pdf');
+            const emptyEl = document.getElementById('bukti-bayar-empty');
+            const labelEl = document.getElementById('bukti-bayar-modal-label');
+            const openTabEl = document.getElementById('bukti-bayar-open-tab');
+
+            const resetBuktiBayarModal = () => {
+                imageEl.classList.add('d-none');
+                imageEl.removeAttribute('src');
+                pdfEl.classList.add('d-none');
+                pdfEl.removeAttribute('src');
+                emptyEl.classList.add('d-none');
+                openTabEl.classList.add('d-none');
+                openTabEl.setAttribute('href', '#');
+                labelEl.textContent = '';
+            };
+
+            buktiBayarModalEl.addEventListener('hidden.bs.modal', resetBuktiBayarModal);
+
+            document.querySelectorAll('.btn-view-bukti-bayar').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const url = btn.dataset.url || '';
+                    const label = btn.dataset.label || 'Pendaftaran';
+
+                    resetBuktiBayarModal();
+                    labelEl.textContent = label;
+
+                    if (!url) {
+                        emptyEl.classList.remove('d-none');
+                        buktiBayarModal.show();
+                        return;
+                    }
+
+                    openTabEl.href = url;
+                    openTabEl.classList.remove('d-none');
+
+                    if (url.toLowerCase().includes('.pdf')) {
+                        pdfEl.src = url;
+                        pdfEl.classList.remove('d-none');
+                    } else {
+                        imageEl.src = url;
+                        imageEl.classList.remove('d-none');
+                    }
+
+                    buktiBayarModal.show();
+                });
+            });
+        }
     };
 
     const initMatchmakingActions = () => {
@@ -332,7 +384,7 @@ const BornPadelAdmin = (function () {
                         if (isMahjong) {
                             reloadPage();
                         } else {
-                            goTo('/admin/bracket');
+                            goTo(data.redirect_url || endGroupBtn.dataset.bracketUrl);
                         }
                     } catch (e) {
                         showToast(e.message, 'error');
@@ -511,8 +563,8 @@ const BornPadelAdmin = (function () {
         const saveBtn = document.getElementById('btn-save-score');
         const metaEl = document.getElementById('score-modal-meta');
         const readonlyEl = document.getElementById('score-modal-readonly');
-        const MIN_SETS = 3;
-        const MAX_SETS = 5;
+        const MIN_SETS = 2;
+        const MAX_SETS = 3;
         let storeUrl = null;
         let isReadonly = false;
 

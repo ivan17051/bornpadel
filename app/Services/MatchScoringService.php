@@ -10,6 +10,10 @@ use RuntimeException;
 
 class MatchScoringService
 {
+    public const SETS_TO_WIN = 2;
+    public const MIN_SETS = 2;
+    public const MAX_SETS = 3;
+
     protected $knockoutBracketService;
     protected $pointRewardService;
 
@@ -104,14 +108,14 @@ class MatchScoringService
             }
         }
 
-        $setsToWin = 3;
+        $setsToWin = self::SETS_TO_WIN;
 
         if ($setsWonP1 < $setsToWin && $setsWonP2 < $setsToWin) {
-            throw new RuntimeException('Pemenang harus memenangkan minimal 3 set (Best of 5).');
+            throw new RuntimeException('Pemenang harus memenangkan minimal 2 set (Best of 3).');
         }
 
         if ($setsWonP1 >= $setsToWin && $setsWonP2 >= $setsToWin) {
-            throw new RuntimeException('Skor tidak valid. Hanya satu pihak yang boleh memenangkan 3 set.');
+            throw new RuntimeException('Skor tidak valid. Hanya satu pihak yang boleh memenangkan 2 set.');
         }
 
         $p1Won = $setsWonP1 >= $setsToWin;

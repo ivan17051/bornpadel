@@ -69,10 +69,12 @@
                                            class="btn btn-outline-success flex-grow-1">
                                             <i class="bi bi-bar-chart-steps me-1"></i> Klasemen
                                         </a>
-                                        <a href="{{ route('guest.bracket', ['id_turnamen' => $item->id]) }}"
-                                           class="btn btn-outline-primary flex-grow-1">
-                                            <i class="bi bi-diagram-2 me-1"></i> Bracket
-                                        </a>
+                                        @if (! $item->isMahjong())
+                                            <a href="{{ route('guest.bracket', ['id_turnamen' => $item->id]) }}"
+                                               class="btn btn-outline-primary flex-grow-1">
+                                                <i class="bi bi-diagram-2 me-1"></i> Bracket
+                                            </a>
+                                        @endif
                                     @endif
                                 </div>
                             </div>
