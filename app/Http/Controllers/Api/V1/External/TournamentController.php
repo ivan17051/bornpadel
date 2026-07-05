@@ -5,17 +5,17 @@ namespace App\Http\Controllers\Api\V1\External;
 use App\Http\Controllers\Controller;
 use App\Models\Turnamen;
 use App\Models\TurnamenPemenang;
-use App\Services\MahjongMatchmakingService;
+use App\Services\LeaderboardService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class TournamentController extends Controller
 {
-    protected $mahjongService;
+    protected $leaderboardService;
 
-    public function __construct(MahjongMatchmakingService $mahjongService)
+    public function __construct(LeaderboardService $leaderboardService)
     {
-        $this->mahjongService = $mahjongService;
+        $this->leaderboardService = $leaderboardService;
     }
 
     public function mahjongList(Request $request): JsonResponse
@@ -72,9 +72,21 @@ class TournamentController extends Controller
             ], 422);
         }
 
+        $standings = $this->leaderboardService->getMahjongStandingsByBabak($turnamen->id);
+
         return response()->json([
             'success' => true,
-            'data' => $this->mahjongService->getGroupStandingsPayload($turnamen),
+            'data' => [
+                'turnamen' => [
+                    'id' => $turnamen->id,
+                    'nama' => $turnamen->nama,
+                    'jenis' => $turnamen->jenis,
+                    'status' => $turnamen->status,
+                    'mahjong_is_final' => (bool) $turnamen->mahjong_is_final,
+                ],
+                'sections' => $standings['sections'],
+                'overall' => $standings['overall'],
+            ],
         ]);
     }
 

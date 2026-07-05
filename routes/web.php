@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\PemainController;
 use App\Http\Controllers\Admin\PertandinganController;
 use App\Http\Controllers\Admin\StandingsController as AdminStandingsController;
 use App\Http\Controllers\Admin\TurnamenController;
+use App\Http\Controllers\Admin\TurnamenOperasiController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Guest\BracketController;
 use App\Http\Controllers\Guest\LandingController;
@@ -56,6 +57,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::put('/pengguna/{user}', [UserController::class, 'update'])->name('pengguna.update');
             Route::delete('/pengguna/{user}', [UserController::class, 'destroy'])->name('pengguna.destroy');
         });
+
+        Route::get('/turnamen-operasi', [TurnamenOperasiController::class, 'index'])->name('turnamen-operasi.index');
 
         Route::get('/pemain', [PemainController::class, 'index'])->name('pemain.index');
         Route::get('/pemain/directory', [PemainController::class, 'directory'])->name('pemain.directory');

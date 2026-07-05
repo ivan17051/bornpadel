@@ -3,51 +3,34 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Pemain;
-use App\Models\Pertandingan;
-use App\Models\TurnamenPeserta;
-use App\Services\GroupMatchmakingService;
+use App\Services\DashboardService;
 use App\Services\TournamentAccessService;
 
 class DashboardController extends Controller
 {
     public function index(
-        GroupMatchmakingService $matchmakingService,
-        TournamentAccessService $tournamentAccess
+        TournamentAccessService $tournamentAccess,
+        DashboardService $dashboardService
     ) {
-        $turnamen = $matchmakingService->resolveTournament(
-            request()->filled('id_turnamen') ? (int) request('id_turnamen') : null
-        );
+        $isAdmin = $tournamentAccess->isAdmin();
+        $scopedTurnamenId = $tournamentAccess->isPanitia()
+            ? $tournamentAccess->assignedTurnamenId()
+            : null;
 
-        $pendingPemain = 0;
-        $approvedPemain = 0;
-        $totalPemain = Pemain::count();
-
-        if ($turnamen) {
-            $pendingPemain = TurnamenPeserta::where('id_turnamen', $turnamen->id)
-                ->where('status', 'paid')
-                ->count();
-            $approvedPemain = $matchmakingService->countApprovedPlayers($turnamen);
-        }
-
-        $totalPertandingan = $turnamen
-            ? Pertandingan::where('id_turnamen', $turnamen->id)->count()
-            : Pertandingan::count();
-
-        if ($tournamentAccess->isPanitia()) {
-            $totalPemain = $turnamen
-                ? TurnamenPeserta::where('id_turnamen', $turnamen->id)->count()
-                : 0;
-        }
+        $globalStats = $dashboardService->getGlobalStats($isAdmin);
+        $registrationStats = $dashboardService->getGlobalRegistrationStats($scopedTurnamenId);
+        $recentTurnamen = $isAdmin
+            ? $dashboardService->getRecentTurnamen(20)
+            : collect();
+        $recentRegistrations = $dashboardService->getAllRecentRegistrations($scopedTurnamenId);
 
         return view('admin.dashboard', [
-            'stats' => [
-                'total_pemain' => $totalPemain,
-                'pending_pemain' => $pendingPemain,
-                'approved_pemain' => $approvedPemain,
-                'total_pertandingan' => $totalPertandingan,
-            ],
-            'turnamen' => $turnamen,
+            'globalStats' => $globalStats,
+            'registrationStats' => $registrationStats,
+            'recentTurnamen' => $recentTurnamen,
+            'recentRegistrations' => $recentRegistrations,
+            'isAdmin' => $isAdmin,
+            'assignedTurnamen' => $tournamentAccess->assignedTurnamen(),
         ]);
     }
 }

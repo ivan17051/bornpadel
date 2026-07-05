@@ -52,15 +52,9 @@
 
                 <div class="nav-header">TURNAMEN</div>
                 <li class="nav-item">
-                    <a href="{{ route('admin.pemain.index') }}" class="nav-link {{ request()->routeIs('admin.pemain.index') || request()->routeIs('admin.pemain.create') || request()->routeIs('admin.pemain.edit') ? 'active' : '' }}">
-                        <i class="nav-icon bi bi-people"></i>
-                        <p>Pemain Terdaftar</p>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.matchmaking.index') }}" class="nav-link {{ request()->routeIs('admin.matchmaking.*') ? 'active' : '' }}">
-                        <i class="nav-icon bi bi-shuffle"></i>
-                        <p>Matchmaking Grup</p>
+                    <a href="{{ route('admin.turnamen-operasi.index') }}" class="nav-link {{ request()->routeIs('admin.turnamen-operasi.*') || request()->routeIs('admin.pemain.index') || request()->routeIs('admin.pemain.create') || request()->routeIs('admin.pemain.edit') || request()->routeIs('admin.matchmaking.*') ? 'active' : '' }}">
+                        <i class="nav-icon bi bi-gear-wide-connected"></i>
+                        <p>Kelola Turnamen</p>
                     </a>
                 </li>
                 <li class="nav-item">

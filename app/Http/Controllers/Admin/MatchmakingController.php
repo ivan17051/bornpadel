@@ -64,6 +64,10 @@ class MatchmakingController extends Controller
                     'pertandingan.peserta2.pemain2',
                     'pertandingan.pemain1',
                     'pertandingan.pemain2',
+                    'pertandingan.skor',
+                    'pertandingan.pemenang',
+                    'pertandingan.pesertaPemenang.pemain1',
+                    'pertandingan.pesertaPemenang.pemain2',
                 ])
                 ->orderBy('nama')
                 ->get();
