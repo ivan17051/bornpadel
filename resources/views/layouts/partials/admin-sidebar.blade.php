@@ -14,15 +14,9 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ route('admin.standings.index') }}" class="nav-link {{ request()->routeIs('admin.standings.*') ? 'active' : '' }}">
-                        <i class="nav-icon bi bi-bar-chart-steps"></i>
-                        <p>Klasemen Grup</p>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.bracket.index') }}" class="nav-link {{ request()->routeIs('admin.bracket.*') ? 'active' : '' }}">
-                        <i class="nav-icon bi bi-diagram-2"></i>
-                        <p>Bracket Knockout</p>
+                    <a href="{{ route('admin.turnamen-operasi.index') }}" class="nav-link {{ request()->routeIs('admin.turnamen-operasi.*') || request()->routeIs('admin.pemain.index') || request()->routeIs('admin.pemain.create') || request()->routeIs('admin.pemain.edit') || request()->routeIs('admin.matchmaking.*') ? 'active' : '' }}">
+                        <i class="nav-icon bi bi-gear-wide-connected"></i>
+                        <p>Kelola Turnamen</p>
                     </a>
                 </li>
                 
@@ -51,10 +45,17 @@
                 @endif
 
                 <div class="nav-header">TURNAMEN</div>
+                
                 <li class="nav-item">
-                    <a href="{{ route('admin.turnamen-operasi.index') }}" class="nav-link {{ request()->routeIs('admin.turnamen-operasi.*') || request()->routeIs('admin.pemain.index') || request()->routeIs('admin.pemain.create') || request()->routeIs('admin.pemain.edit') || request()->routeIs('admin.matchmaking.*') ? 'active' : '' }}">
-                        <i class="nav-icon bi bi-gear-wide-connected"></i>
-                        <p>Kelola Turnamen</p>
+                    <a href="{{ route('admin.standings.index') }}" class="nav-link {{ request()->routeIs('admin.standings.*') ? 'active' : '' }}">
+                        <i class="nav-icon bi bi-bar-chart-steps"></i>
+                        <p>Klasemen Grup</p>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ route('admin.bracket.index') }}" class="nav-link {{ request()->routeIs('admin.bracket.*') ? 'active' : '' }}">
+                        <i class="nav-icon bi bi-diagram-2"></i>
+                        <p>Bracket Knockout</p>
                     </a>
                 </li>
                 <li class="nav-item">

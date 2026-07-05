@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\GroupMatchmakingService;
+use App\Services\KnockoutBracketService;
+use App\Services\LeaderboardService;
 use App\Services\MatchmakingPageService;
 use App\Services\RegisteredPemainListingService;
 use Illuminate\Http\Request;
@@ -14,7 +16,9 @@ class TurnamenOperasiController extends Controller
         Request $request,
         GroupMatchmakingService $matchmakingService,
         RegisteredPemainListingService $pemainListingService,
-        MatchmakingPageService $matchmakingPageService
+        MatchmakingPageService $matchmakingPageService,
+        LeaderboardService $leaderboardService,
+        KnockoutBracketService $bracketService
     ) {
         $turnamenList = $matchmakingService->listForFilter();
         $turnamen = $matchmakingService->resolveTournament(
@@ -22,12 +26,37 @@ class TurnamenOperasiController extends Controller
             false
         );
 
+        $activeTab = $request->query('tab', 'pemain');
+        $allowedTabs = ['pemain', 'matchmaking', 'klasemen'];
+
+        if ($turnamen && ! $turnamen->isMahjong()) {
+            $allowedTabs[] = 'bracket';
+        }
+
+        if (! in_array($activeTab, $allowedTabs, true)) {
+            $activeTab = 'pemain';
+        }
+
         $listing = $pemainListingService->paginate($request, $turnamen);
         $matchmaking = $matchmakingPageService->getIndexData($request, $turnamen);
 
-        $activeTab = $request->query('tab', 'pemain');
-        if (! in_array($activeTab, ['pemain', 'matchmaking'], true)) {
-            $activeTab = 'pemain';
+        $standings = collect();
+        $mahjongOverall = collect();
+        $bracket = [];
+
+        if ($turnamen && $activeTab === 'klasemen') {
+            if ($turnamen->isMahjong()) {
+                $mahjongStandings = $leaderboardService->getMahjongStandingsByBabak($turnamen->id);
+                $standings = $mahjongStandings['sections'];
+                $mahjongOverall = $mahjongStandings['overall'];
+            } else {
+                $standings = $leaderboardService->getStandings($turnamen->id);
+                $mahjongOverall = collect();
+            }
+        }
+
+        if ($turnamen && $activeTab === 'bracket' && ! $turnamen->isMahjong()) {
+            $bracket = $bracketService->getBracketTree($turnamen);
         }
 
         return view('admin.turnamen-operasi.index', array_merge(
@@ -36,6 +65,9 @@ class TurnamenOperasiController extends Controller
                 'turnamen' => $turnamen,
                 'activeTab' => $activeTab,
                 'filterRoute' => route('admin.turnamen-operasi.index'),
+                'standings' => $standings,
+                'mahjongOverall' => $mahjongOverall,
+                'bracket' => $bracket,
             ],
             $listing,
             $matchmaking

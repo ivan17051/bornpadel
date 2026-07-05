@@ -16,11 +16,7 @@
 ])
 
 @if ($turnamen)
-    @if ($turnamen->isMahjong())
-        <x-mahjong-leaderboard :standings="$standings" :turnamen="$turnamen" :overall="$mahjongOverall ?? collect()" :refreshable="true" />
-    @else
-        <x-group-leaderboard :standings="$standings" :turnamen="$turnamen" :refreshable="true" />
-    @endif
+    @include('admin.standings.partials.standings-panel')
 @else
     <div class="alert alert-light border text-center mb-0">
         <i class="bi bi-funnel text-muted d-block mb-2 fs-4"></i>

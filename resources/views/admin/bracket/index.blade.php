@@ -16,7 +16,7 @@
 ])
 
 @if ($turnamen)
-    <x-tournament-bracket :bracket="$bracket" :turnamen="$turnamen" :refreshable="true" />
+    @include('admin.bracket.partials.bracket-panel')
 @else
     <div class="alert alert-light border text-center mb-0">
         <i class="bi bi-funnel text-muted d-block mb-2 fs-4"></i>

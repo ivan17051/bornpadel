@@ -18,7 +18,7 @@ class StandingsController extends Controller
         if ($turnamen && $turnamen->isMahjong()) {
             $mahjongStandings = $leaderboardService->getMahjongStandingsByBabak($turnamen->id);
 
-            if ($mahjongStandings['sections']->isEmpty() && $mahjongStandings['overall']->isEmpty()) {
+            if ($mahjongStandings['sections']->isEmpty() && $mahjongStandings['overall']->isEmpty() && $mahjongStandings['recap']->isEmpty()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Belum ada data klasemen.',

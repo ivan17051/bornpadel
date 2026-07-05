@@ -42,6 +42,54 @@
             ?.addEventListener('click', fetchStandings);
     };
 
+    const renderMahjongBabakRecap = (babak, rows) => {
+        if (!rows || rows.length === 0) {
+            return '';
+        }
+
+        const renderRecapRow = (row) => `
+            <tr class="${row.rank === 1 ? 'table-success' : ''}">
+                <td class="text-center fw-bold">
+                    ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
+                </td>
+                <td class="fw-semibold">${renderNameCell(row)}</td>
+                <td class="text-center text-muted d-none d-md-table-cell">${row.grup_nama || '—'}</td>
+                <td class="text-center">
+                    <span class="badge text-bg-secondary">${row.poin_babak ?? row.poin_didapat ?? 0}</span>
+                </td>
+                <td class="text-center">
+                    <span class="badge text-bg-primary">${row.total_poin ?? 0}</span>
+                </td>
+            </tr>`;
+
+        return `
+            <div class="mt-3">
+                <h6 class="fw-semibold mb-3">
+                    <i class="bi bi-table me-1 text-primary"></i>Rekap Babak ${babak}
+                </h6>
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center" style="width:3rem">#</th>
+                                        <th>Pemain</th>
+                                        <th class="text-center d-none d-md-table-cell">Grup</th>
+                                        <th class="text-center">Poin Babak</th>
+                                        <th class="text-center">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rows.map(renderRecapRow).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    };
+
     const renderEmpty = (title) => {
         container.innerHTML = renderHeader(title) + `
             <div class="alert alert-light border text-center mb-0">
@@ -53,9 +101,8 @@
 
     const renderMahjongStandings = (payload) => {
         const sections = payload?.sections || payload || [];
-        const overall = payload?.overall || [];
 
-        if ((!sections || sections.length === 0) && (!overall || overall.length === 0)) {
+        if (!sections || sections.length === 0) {
             renderEmpty('Klasemen Mahjong');
             return;
         }
@@ -103,6 +150,9 @@
                 </div>
             `).join('');
 
+            const recapRows = section.recap || [];
+            const recapHtml = renderMahjongBabakRecap(section.babak, recapRows);
+
             return `
                 <div class="mb-4">
                     <div class="d-flex align-items-center gap-2 mb-3">
@@ -112,51 +162,12 @@
                         ${section.is_active ? '<span class="badge text-bg-success">Berlangsung</span>' : ''}
                     </div>
                     ${groups.length
-                        ? `<div class="row g-4">${groupCards}</div>`
+                        ? `<div class="row g-4">${groupCards}</div>${recapHtml}`
                         : '<div class="alert alert-light border mb-0">Belum ada data pemain pada babak ini.</div>'}
                 </div>`;
         }).join('');
 
-        const overallHtml = (overall || []).length
-            ? `
-                <div class="mt-2">
-                    <h6 class="fw-semibold mb-3">
-                        <i class="bi bi-trophy me-1 text-warning"></i>Klasemen Akumulasi
-                    </h6>
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0 align-middle">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="text-center" style="width:3rem">#</th>
-                                            <th>Pemain</th>
-                                            <th class="text-center d-none d-md-table-cell">Grup</th>
-                                            <th class="text-center">Total Poin</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${overall.map((row) => `
-                                            <tr class="${row.rank === 1 ? 'table-success' : ''}">
-                                                <td class="text-center fw-bold">
-                                                    ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
-                                                </td>
-                                                <td class="fw-semibold">${renderNameCell(row)}</td>
-                                                <td class="text-center text-muted d-none d-md-table-cell">${row.grup_nama || '—'}</td>
-                                                <td class="text-center">
-                                                    <span class="badge text-bg-primary">${row.total_poin ?? 0}</span>
-                                                </td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>`
-            : '';
-
-        container.innerHTML = renderHeader('Klasemen Mahjong') + sectionHtml + overallHtml + `
+        container.innerHTML = renderHeader('Klasemen Mahjong') + sectionHtml + `
             <p class="text-muted small text-end mt-2 mb-0">
                 <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
             </p>`;

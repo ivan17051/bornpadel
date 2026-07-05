@@ -33,6 +33,20 @@
                 <i class="bi bi-shuffle me-1"></i> Matchmaking Grup
             </a>
         </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ $activeTab === 'klasemen' ? 'active' : '' }}"
+               href="{{ route('admin.turnamen-operasi.index', ['id_turnamen' => $turnamen->id, 'tab' => 'klasemen']) }}">
+                <i class="bi bi-bar-chart-steps me-1"></i> Klasemen
+            </a>
+        </li>
+        @if (! $turnamen->isMahjong())
+            <li class="nav-item" role="presentation">
+                <a class="nav-link {{ $activeTab === 'bracket' ? 'active' : '' }}"
+                   href="{{ route('admin.turnamen-operasi.index', ['id_turnamen' => $turnamen->id, 'tab' => 'bracket']) }}">
+                    <i class="bi bi-diagram-2 me-1"></i> Bracket
+                </a>
+            </li>
+        @endif
     </ul>
 
     <div class="tab-content">
@@ -41,14 +55,18 @@
                 'filterRoute' => $filterRoute,
                 'preserveTab' => 'pemain',
             ])
-        @else
+        @elseif ($activeTab === 'matchmaking')
             @include('admin.matchmaking.partials.workspace')
+        @elseif ($activeTab === 'klasemen')
+            @include('admin.standings.partials.standings-panel')
+        @elseif ($activeTab === 'bracket')
+            @include('admin.bracket.partials.bracket-panel')
         @endif
     </div>
 @else
     <div class="alert alert-light border text-center mb-0">
         <i class="bi bi-funnel text-muted d-block mb-2 fs-4"></i>
-        Pilih turnamen untuk mengelola pemain dan matchmaking.
+        Pilih turnamen untuk mengelola pemain, matchmaking, klasemen, dan bracket.
     </div>
 @endif
 @endsection
@@ -67,6 +85,12 @@
 @endpush
 
 @push('scripts')
+@if ($turnamen && $activeTab === 'klasemen')
+    <script src="{{ asset('public/js/leaderboard.js') }}"></script>
+@endif
+@if ($turnamen && $activeTab === 'bracket')
+    <script src="{{ asset('public/js/bracket.js') }}"></script>
+@endif
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     BornPadelAdmin.initPemainActions();

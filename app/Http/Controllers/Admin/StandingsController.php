@@ -21,7 +21,7 @@ class StandingsController extends Controller
         );
         $mahjongStandings = $turnamen && $turnamen->isMahjong()
             ? $leaderboardService->getMahjongStandingsByBabak($turnamen->id)
-            : ['sections' => collect(), 'overall' => collect()];
+            : ['sections' => collect(), 'overall' => collect(), 'recap' => collect(), 'babak_numbers' => collect()];
         $standings = $turnamen
             ? ($turnamen->isMahjong()
                 ? $mahjongStandings['sections']
@@ -31,6 +31,11 @@ class StandingsController extends Controller
             ? $mahjongStandings['overall']
             : collect();
 
-        return view('admin.standings.index', compact('turnamen', 'turnamenList', 'standings', 'mahjongOverall'));
+        return view('admin.standings.index', compact(
+            'turnamen',
+            'turnamenList',
+            'standings',
+            'mahjongOverall'
+        ));
     }
 }

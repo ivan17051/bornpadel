@@ -1,4 +1,9 @@
-@props(['standings', 'turnamen' => null, 'refreshable' => false, 'overall' => collect()])
+@props([
+    'standings',
+    'turnamen' => null,
+    'refreshable' => false,
+    'overall' => collect(),
+])
 
 <div class="mahjong-leaderboard"
      @if($refreshable)
@@ -20,7 +25,7 @@
         </div>
     @endif
 
-    @if ($standings->isEmpty() && $overall->isEmpty())
+    @if ($standings->isEmpty())
         <div class="alert alert-light border text-center mb-0">
             <i class="bi bi-trophy text-muted d-block mb-2 fs-4"></i>
             Belum ada data klasemen.
@@ -87,55 +92,16 @@
                             </div>
                         @endforeach
                     </div>
+
+                    @if (($section['recap'] ?? collect())->isNotEmpty())
+                        @include('components.partials.mahjong-points-recap', [
+                            'babak' => $section['babak'],
+                            'standings' => $section['recap'],
+                        ])
+                    @endif
                 @endif
             </div>
         @endforeach
-
-        @if ($overall->isNotEmpty())
-            <!-- <div class="mt-2">
-                <h6 class="fw-semibold mb-3">
-                    <i class="bi bi-trophy me-1 text-warning"></i>Klasemen Akumulasi
-                </h6>
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="text-center" style="width:3rem">#</th>
-                                        <th>Pemain</th>
-                                        <th class="text-center d-none d-md-table-cell">Grup</th>
-                                        <th class="text-center">Total Poin</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach ($overall as $row)
-                                        <tr class="{{ $row['rank'] === 1 ? 'table-success' : '' }}">
-                                            <td class="text-center fw-bold">
-                                                @if ($row['rank'] === 1)
-                                                    <i class="bi bi-trophy-fill text-warning"></i>
-                                                @else
-                                                    {{ $row['rank'] }}
-                                                @endif
-                                            </td>
-                                            <td class="fw-semibold">
-                                                <x-pemain-names :pemain-ids="$row['pemain_ids'] ?? []" :nama="$row['nama']" />
-                                            </td>
-                                            <td class="text-center text-muted d-none d-md-table-cell">
-                                                {{ $row['grup_nama'] ?? '—' }}
-                                            </td>
-                                            <td class="text-center">
-                                                <span class="badge text-bg-primary">{{ $row['total_poin'] ?? 0 }}</span>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div> -->
-        @endif
 
         @if ($refreshable)
             <p class="text-muted small text-end mt-2 mb-0">

@@ -65,12 +65,14 @@ class MahjongMatchmakingService
         }
 
         return DB::transaction(function () use ($turnamen, $mode) {
+            $this->commitCurrentRoundPoints($turnamen);
+
             $entries = $this->collectEntriesFromActiveGroups($turnamen);
             $babak = (int) $turnamen->activeGrup()->max('babak') ?: 1;
 
             $this->deactivateActiveGroups($turnamen);
 
-            return $this->createGroupsFromEntries($turnamen, $entries, $babak, $mode);
+            return $this->createGroupsFromEntries($turnamen, $entries, $babak, $mode, false);
         });
     }
 

@@ -123,17 +123,11 @@
                                 <td class="text-center d-none d-lg-table-cell">{{ $item->grup_count }}</td>
                                 <td class="text-center d-none d-xl-table-cell">{{ $item->isMahjong() ? '—' : $item->pertandingan_count }}</td>
                                 <td class="text-end">
-                                    <div class="d-flex flex-wrap gap-1 justify-content-end">
-                                        <a href="{{ route('admin.pemain.index', ['id_turnamen' => $item->id]) }}" class="btn btn-sm btn-outline-secondary" title="Pemain">
-                                            <i class="bi bi-people"></i>
-                                        </a>
-                                        <a href="{{ route('admin.matchmaking.index', ['id_turnamen' => $item->id]) }}" class="btn btn-sm btn-outline-secondary" title="Matchmaking">
-                                            <i class="bi bi-shuffle"></i>
-                                        </a>
-                                        <a href="{{ route('admin.standings.index', ['id_turnamen' => $item->id]) }}" class="btn btn-sm btn-outline-primary" title="Klasemen">
-                                            <i class="bi bi-bar-chart-steps"></i>
-                                        </a>
-                                    </div>
+                                    <a href="{{ route('admin.turnamen-operasi.index', ['id_turnamen' => $item->id]) }}"
+                                       class="btn btn-sm btn-outline-primary"
+                                       title="Kelola turnamen">
+                                        <i class="bi bi-gear-wide-connected me-1"></i> Kelola
+                                    </a>
                                 </td>
                             </tr>
                         @endforeach

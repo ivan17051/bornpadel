@@ -409,6 +409,7 @@ const BornPadelAdmin = (function () {
                 setButtonLoading(reshuffleBtn, true);
 
                 try {
+                    await saveAllMahjongPoints();
                     const data = await apiRequest(reshuffleBtn.dataset.url, 'POST', {
                         id_turnamen: parseInt(reshuffleBtn.dataset.turnamen, 10),
                         mode: 'random',
@@ -420,6 +421,16 @@ const BornPadelAdmin = (function () {
                     setButtonLoading(reshuffleBtn, false, original);
                 }
             });
+        }
+
+        async function saveAllMahjongPoints() {
+            const inputs = document.querySelectorAll('.mahjong-poin-input');
+
+            for (const input of inputs) {
+                await apiRequest(input.dataset.url, 'PATCH', {
+                    poin_didapat: parseInt(input.value || '0', 10),
+                });
+            }
         }
 
         document.querySelectorAll('.btn-save-mahjong-poin').forEach((btn) => {

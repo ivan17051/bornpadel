@@ -86,6 +86,8 @@ class TournamentController extends Controller
                 ],
                 'sections' => $standings['sections'],
                 'overall' => $standings['overall'],
+                'recap' => $standings['recap'],
+                'babak_numbers' => $standings['babak_numbers'],
             ],
         ]);
     }
