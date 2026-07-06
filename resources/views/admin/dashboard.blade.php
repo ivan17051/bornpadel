@@ -40,7 +40,7 @@
         <div class="small-box text-bg-info">
             <div class="inner">
                 <h3>{{ $globalStats['total_pemain_directory'] }}</h3>
-                <p>Pemain (Direktori)</p>
+                <p>Semua Pemain</p>
             </div>
             <i class="small-box-icon bi bi-database"></i>
             <a href="{{ route('admin.pemain.directory') }}" class="small-box-footer link-light">
@@ -76,13 +76,17 @@
 
 @if ($isAdmin && $recentTurnamen->isNotEmpty())
     <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <h5 class="card-title mb-0">
-                <i class="bi bi-calendar-event me-2 text-primary"></i>Semua Turnamen
-            </h5>
-            <a href="{{ route('admin.turnamen.index') }}" class="btn btn-sm btn-outline-primary">
-                Kelola turnamen
-            </a>
+        <div class="card-header bg-white d-flex justify-content-between align-items-center row">
+            <div class="col-md-6">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-calendar-event me-2 text-primary"></i>Semua Turnamen
+                </h5>
+            </div>
+            <div class="col-md-6 text-end">
+                <a href="{{ route('admin.turnamen.index') }}" class="btn btn-sm btn-outline-primary">
+                    Kelola turnamen
+                </a>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -143,13 +147,22 @@
         @if ($recentRegistrations->isNotEmpty())
             <div class="col-lg-{{ $isAdmin ? '8' : '12' }}">
                 <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-clock-history me-2 text-primary"></i>Pendaftaran Perlu Tindakan
-                        </h5>
-                        <a href="{{ route('admin.pemain.index', array_filter(['status' => 'paid', 'id_turnamen' => optional($assignedTurnamen)->id])) }}" class="btn btn-sm btn-outline-primary">
-                            Lihat semua
-                        </a>
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center row">
+                        <div class="col-md-6">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-clock-history me-2 text-primary"></i>Pendaftaran Perlu Tindakan
+                            </h5>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'paid', 'id_turnamen' => optional($assignedTurnamen)->id])) }}" class="btn btn-sm btn-outline-primary">
+                                Lihat semua
+                            </a>
+                        </div>
+                        <!-- <div class="col-md-6 text-end">
+                            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'paid', 'id_turnamen' => optional($assignedTurnamen)->id])) }}" class="btn btn-sm btn-outline-primary">
+                                Lihat semua
+                            </a>
+                        </div> -->
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -160,7 +173,6 @@
                                             <th>Turnamen</th>
                                         @endif
                                         <th>Pemain</th>
-                                        <th class="d-none d-md-table-cell">No. HP</th>
                                         <th>Status</th>
                                         <th class="d-none d-lg-table-cell">Diperbarui</th>
                                         <th class="text-end">Aksi</th>
@@ -175,7 +187,6 @@
                                                 </td>
                                             @endif
                                             <td class="fw-semibold">{{ $peserta->display_name }}</td>
-                                            <td class="d-none d-md-table-cell text-muted">{{ optional($peserta->pemain1)->no_hp ?? '—' }}</td>
                                             <td>
                                                 <span class="badge status-badge-{{ $peserta->status }}">{{ ucfirst($peserta->status) }}</span>
                                             </td>

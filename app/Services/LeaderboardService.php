@@ -168,7 +168,8 @@ class LeaderboardService
                 return [
                     'babak' => $section['babak'],
                     'is_active' => $section['is_active'],
-                    'standings' => $section['recap'],
+                    'rounds' => $section['rounds'],
+                    'standings' => $section['rows'],
                 ];
             })->values(),
             'babak_numbers' => $babakNumbers->values(),
@@ -287,16 +288,15 @@ class LeaderboardService
             ->where('id_turnamen', $turnamen->id)
             ->where('babak', $babak)
             ->with(['members.pemain', 'members.turnamenPeserta.pemain1', 'members.turnamenPeserta.pemain2'])
-            ->orderBy('created_at')
+            ->orderBy('ronde')
             ->orderBy('id')
             ->get();
 
         return $groups
             ->groupBy(function (Grup $grup) {
-                return $grup->created_at
-                    ? $grup->created_at->format('Y-m-d H:i:s')
-                    : (string) $grup->id;
+                return (int) ($grup->ronde ?: 1);
             })
+            ->sortKeys()
             ->values();
     }
 
@@ -320,6 +320,10 @@ class LeaderboardService
         int $babak,
         Turnamen $turnamen
     ): int {
+        if ($member->grup && $member->grup->is_aktif) {
+            return (int) $member->poin_didapat;
+        }
+
         if ((int) $member->poin_didapat !== 0) {
             return (int) $member->poin_didapat;
         }
@@ -332,7 +336,7 @@ class LeaderboardService
             $turnamen
         );
 
-        return max(0, (int) $member->poin_akumulasi - $startTotal);
+        return (int) $member->poin_akumulasi - $startTotal;
     }
 
     protected function resolveMahjongRoundStartTotal(

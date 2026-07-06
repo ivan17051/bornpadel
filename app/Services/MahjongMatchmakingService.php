@@ -232,13 +232,15 @@ class MahjongMatchmakingService
     ): array {
         $ordered = $this->orderEntries($entries, $mode);
         $chunks = $ordered->chunk(self::PLAYERS_PER_GROUP)->values();
-        $result = ['groups' => [], 'babak' => $babak, 'mode' => $mode];
+        $ronde = $this->nextMahjongRonde($turnamen, $babak);
+        $result = ['groups' => [], 'babak' => $babak, 'ronde' => $ronde, 'mode' => $mode];
 
         foreach ($chunks as $index => $groupEntries) {
             $grup = Grup::create([
                 'id_turnamen' => $turnamen->id,
                 'nama' => 'Grup ' . $this->groupLabel($index + 1),
                 'babak' => $babak,
+                'ronde' => $ronde,
                 'is_aktif' => true,
             ]);
 
@@ -339,5 +341,15 @@ class MahjongMatchmakingService
     protected function groupLabel(int $index): string
     {
         return chr(64 + $index);
+    }
+
+    protected function nextMahjongRonde(Turnamen $turnamen, int $babak): int
+    {
+        $maxRonde = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('babak', $babak)
+            ->max('ronde');
+
+        return $maxRonde ? ((int) $maxRonde + 1) : 1;
     }
 }

@@ -12,6 +12,7 @@ class Grup extends Model
         'id_turnamen',
         'nama',
         'babak',
+        'ronde',
         'is_aktif',
     ];
 

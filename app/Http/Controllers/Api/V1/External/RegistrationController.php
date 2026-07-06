@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api\V1\External;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\External\RegisterPlayerRequest;
+use App\Http\Requests\Api\External\UploadPaymentReceiptRequest;
+use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenPeserta;
 use App\Services\PemainRegistrationService;
 use Illuminate\Http\JsonResponse;
 use RuntimeException;
@@ -65,5 +68,63 @@ class RegistrationController extends Controller
                 'status' => optional($pemain->pesertaForTurnamen($turnamen))->status,
             ],
         ], 201);
+    }
+
+    public function uploadPaymentReceipt(UploadPaymentReceiptRequest $request): JsonResponse
+    {
+        $peserta = $this->resolvePesertaForPaymentReceipt($request);
+
+        if (! $peserta) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pendaftaran turnamen tidak ditemukan.',
+            ], 404);
+        }
+
+        try {
+            $this->registrationService->updateBuktiBayar(
+                $peserta,
+                $request->file('bukti_bayar')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $peserta->refresh();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bukti bayar berhasil diunggah.',
+            'data' => [
+                'peserta_id' => $peserta->id,
+                'turnamen_id' => $peserta->id_turnamen,
+                'pemain_id' => $peserta->id_pemain1,
+                'nama' => $peserta->display_name,
+                'status' => $peserta->status,
+                'bukti_bayar' => $peserta->bukti_bayar,
+                'bukti_bayar_url' => $peserta->bukti_bayar_url,
+            ],
+        ]);
+    }
+
+    protected function resolvePesertaForPaymentReceipt(UploadPaymentReceiptRequest $request): ?TurnamenPeserta
+    {
+        if ($request->filled('peserta_id')) {
+            return TurnamenPeserta::query()->find($request->peserta_id);
+        }
+
+        $pemain = Pemain::where('no_hp', $request->no_hp)->first();
+
+        if (! $pemain) {
+            return null;
+        }
+
+        return TurnamenPeserta::query()
+            ->forTurnamen((int) $request->id_turnamen)
+            ->involvingPemain($pemain->id)
+            ->first();
     }
 }
