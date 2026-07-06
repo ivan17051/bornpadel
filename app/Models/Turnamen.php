@@ -19,6 +19,7 @@ class Turnamen extends Model
         'jenis',
         'status',
         'mahjong_is_final',
+        'registration_paired_at',
     ];
 
     protected $casts = [
@@ -27,6 +28,7 @@ class Turnamen extends Model
         'doc' => 'datetime',
         'dom' => 'datetime',
         'mahjong_is_final' => 'boolean',
+        'registration_paired_at' => 'datetime',
     ];
 
     public function scopeOpen($query)
@@ -56,6 +58,11 @@ class Turnamen extends Model
     public function isRegistrationClosed(): bool
     {
         return in_array($this->status, ['ongoing', 'completed'], true);
+    }
+
+    public function isRegistrationPaired(): bool
+    {
+        return $this->isDouble() && $this->registration_paired_at !== null;
     }
 
     public function isSingle(): bool

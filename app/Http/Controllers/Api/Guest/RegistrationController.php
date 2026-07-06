@@ -33,50 +33,6 @@ class RegistrationController extends Controller
         $buktiBayar = $request->file('bukti_bayar');
 
         try {
-            if ($turnamen->isDouble()) {
-                $result = $this->registrationService->registerPair(
-                    $turnamen,
-                    $validated,
-                    $request->file('foto'),
-                    [
-                        'no_hp' => $validated['partner_no_hp'],
-                        'nama' => $validated['partner_nama'],
-                        'tgl_lahir' => $validated['partner_tgl_lahir'],
-                        'gender' => $validated['partner_gender'],
-                        'rating' => $validated['partner_rating'] ?? null,
-                    ],
-                    $request->file('partner_foto'),
-                    $buktiBayar
-                );
-
-                $pemain = $result['pemain'];
-                $partner = $result['partner'];
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Pendaftaran berhasil! Tim kami akan memverifikasi data Anda.',
-                    'data' => [
-                        'pemain' => [
-                            'id' => $pemain->id,
-                            'nama' => $pemain->nama,
-                            'no_hp' => $pemain->no_hp,
-                            'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
-                        ],
-                        'partner' => [
-                            'id' => $partner->id,
-                            'nama' => $partner->nama,
-                            'no_hp' => $partner->no_hp,
-                            'status' => $this->registrationService->getRegistrationStatus($partner, $turnamen),
-                        ],
-                        'turnamen' => [
-                            'id' => $turnamen->id,
-                            'nama' => $turnamen->nama,
-                            'jenis' => $turnamen->jenis,
-                        ],
-                    ],
-                ], 201);
-            }
-
             $pemain = $this->registrationService->register(
                 $turnamen,
                 $validated,
@@ -92,7 +48,9 @@ class RegistrationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Pendaftaran berhasil! Tim kami akan memverifikasi data Anda.',
+            'message' => $turnamen->isDouble()
+                ? 'Pendaftaran individu berhasil! Pasangan akan dibuat otomatis setelah pendaftaran ditutup.'
+                : 'Pendaftaran berhasil! Tim kami akan memverifikasi data Anda.',
             'data' => [
                 'id' => $pemain->id,
                 'nama' => $pemain->nama,

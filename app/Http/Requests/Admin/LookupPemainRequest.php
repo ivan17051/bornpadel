@@ -30,10 +30,6 @@ class LookupPemainRequest extends FormRequest
 
         $turnamen = Turnamen::find($this->input('id_turnamen'));
 
-        if ($turnamen && $turnamen->isDouble()) {
-            $rules['partner_no_hp'] = ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp'];
-        }
-
         return $rules;
     }
 

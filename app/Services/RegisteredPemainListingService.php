@@ -11,7 +11,7 @@ class RegisteredPemainListingService
 {
     public function paginate(Request $request, ?Turnamen $turnamen): array
     {
-        $isDoubleView = $turnamen && $turnamen->isDouble();
+        $isDoubleView = $turnamen && $turnamen->isDouble() && $turnamen->isRegistrationClosed();
 
         if (! $turnamen) {
             return [

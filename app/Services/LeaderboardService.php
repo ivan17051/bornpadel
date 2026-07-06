@@ -144,34 +144,18 @@ class LeaderboardService
             ->pluck('babak');
 
         $sections = $babakNumbers->map(function ($babak) use ($turnamen) {
+            $table = $this->buildMahjongBabakTable($turnamen, (int) $babak);
             $groups = $this->resolveMahjongGrupBatchForBabak($turnamen, (int) $babak);
-
-            $mappedGroups = $groups->map(function (Grup $grup) use ($turnamen) {
-                $standings = $grup->orderedStandings()->get()->values()->map(function (GrupMember $member, $index) use ($turnamen, $grup) {
-                    $poinBabak = $this->resolveMahjongBabakPoints($member, (int) $grup->babak, $turnamen);
-
-                    return array_merge($this->formatMahjongStandingRow($member, $index + 1), [
-                        'grup_nama' => $grup->nama,
-                        'poin_babak' => $poinBabak,
-                        'poin_didapat' => $poinBabak,
-                        'total_poin' => $this->resolveMahjongTotalPoints($member, $poinBabak, (int) $grup->babak, $turnamen),
-                    ]);
-                });
-
-                return [
-                    'id' => $grup->id,
-                    'nama' => $grup->nama,
-                    'standings' => $standings,
-                ];
-            })->values();
 
             return [
                 'babak' => (int) $babak,
                 'is_active' => $groups->contains(function (Grup $grup) {
                     return $grup->is_aktif;
                 }),
-                'groups' => $mappedGroups,
-                'recap' => $this->buildMahjongBabakRecap($mappedGroups),
+                'rounds' => $table['rounds'],
+                'rows' => $table['rows'],
+                'groups' => collect(),
+                'recap' => $table['rows'],
             ];
         })->values();
 
@@ -188,6 +172,88 @@ class LeaderboardService
                 ];
             })->values(),
             'babak_numbers' => $babakNumbers->values(),
+        ];
+    }
+
+    public function buildMahjongBabakTable(Turnamen $turnamen, int $babak): array
+    {
+        $roundBatches = $this->getMahjongRoundBatchesForBabak($turnamen, $babak);
+
+        if ($roundBatches->isEmpty()) {
+            return [
+                'rounds' => collect(),
+                'rows' => collect(),
+            ];
+        }
+
+        $rounds = $roundBatches->values()->map(function ($batch, int $index) {
+            return [
+                'round' => $index + 1,
+                'label' => 'Ronde ' . ($index + 1),
+            ];
+        });
+
+        $pesertaIds = $roundBatches
+            ->flatMap(function (Collection $batch) {
+                return $batch->flatMap(function (Grup $grup) {
+                    return $grup->members->pluck('id_turnamen_peserta');
+                });
+            })
+            ->unique()
+            ->filter()
+            ->values();
+
+        $rows = $pesertaIds->map(function ($pesertaId) use ($roundBatches, $babak, $turnamen) {
+            $roundScores = [];
+            $latestMember = null;
+
+            foreach ($roundBatches as $roundIndex => $batch) {
+                $member = $this->findMahjongMemberInBatch($batch, (int) $pesertaId);
+
+                if ($member) {
+                    $latestMember = $member;
+                    $roundScores[] = $this->resolveMahjongRoundPoints(
+                        $member,
+                        $roundBatches,
+                        (int) $roundIndex,
+                        $babak,
+                        $turnamen
+                    );
+                } else {
+                    $roundScores[] = 0;
+                }
+            }
+
+            if (! $latestMember) {
+                return null;
+            }
+
+            $totalBabak = array_sum($roundScores);
+
+            return array_merge($this->formatMahjongStandingRow($latestMember, 0), [
+                'round_scores' => $roundScores,
+                'total_babak' => $totalBabak,
+                'poin_babak' => $totalBabak,
+                'total_poin' => $this->resolveMahjongTotalPoints(
+                    $latestMember,
+                    $totalBabak,
+                    $babak,
+                    $turnamen
+                ),
+            ]);
+        })
+            ->filter()
+            ->sortByDesc('total_babak')
+            ->values()
+            ->map(function (array $row, int $index) {
+                $row['rank'] = $index + 1;
+
+                return $row;
+            });
+
+        return [
+            'rounds' => $rounds,
+            'rows' => $rows,
         ];
     }
 
@@ -213,6 +279,86 @@ class LeaderboardService
                     'total_poin' => (int) ($row['total_poin'] ?? 0),
                 ];
             });
+    }
+
+    protected function getMahjongRoundBatchesForBabak(Turnamen $turnamen, int $babak): Collection
+    {
+        $groups = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('babak', $babak)
+            ->with(['members.pemain', 'members.turnamenPeserta.pemain1', 'members.turnamenPeserta.pemain2'])
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        return $groups
+            ->groupBy(function (Grup $grup) {
+                return $grup->created_at
+                    ? $grup->created_at->format('Y-m-d H:i:s')
+                    : (string) $grup->id;
+            })
+            ->values();
+    }
+
+    protected function findMahjongMemberInBatch(Collection $batch, int $pesertaId): ?GrupMember
+    {
+        foreach ($batch as $grup) {
+            $member = $grup->members->firstWhere('id_turnamen_peserta', $pesertaId);
+
+            if ($member) {
+                return $member;
+            }
+        }
+
+        return null;
+    }
+
+    protected function resolveMahjongRoundPoints(
+        GrupMember $member,
+        Collection $roundBatches,
+        int $roundIndex,
+        int $babak,
+        Turnamen $turnamen
+    ): int {
+        if ((int) $member->poin_didapat !== 0) {
+            return (int) $member->poin_didapat;
+        }
+
+        $startTotal = $this->resolveMahjongRoundStartTotal(
+            $member->id_turnamen_peserta,
+            $roundBatches,
+            $roundIndex,
+            $babak,
+            $turnamen
+        );
+
+        return max(0, (int) $member->poin_akumulasi - $startTotal);
+    }
+
+    protected function resolveMahjongRoundStartTotal(
+        ?int $pesertaId,
+        Collection $roundBatches,
+        int $roundIndex,
+        int $babak,
+        Turnamen $turnamen
+    ): int {
+        if ($roundIndex > 0) {
+            $prevBatch = $roundBatches->get($roundIndex - 1);
+
+            if ($prevBatch && $pesertaId) {
+                $prevMember = $this->findMahjongMemberInBatch($prevBatch, $pesertaId);
+
+                if ($prevMember) {
+                    if ((int) $prevMember->poin_didapat !== 0) {
+                        return (int) $prevMember->poin_akumulasi;
+                    }
+
+                    return (int) $prevMember->poin_akumulasi;
+                }
+            }
+        }
+
+        return $this->getMahjongCarryPointsBeforeBabak($pesertaId, $babak, $turnamen);
     }
 
     protected function resolveMahjongGrupBatchForBabak(Turnamen $turnamen, int $babak): Collection

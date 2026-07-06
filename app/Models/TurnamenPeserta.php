@@ -16,6 +16,11 @@ class TurnamenPeserta extends Model
         'id_pemain2',
         'status',
         'bukti_bayar',
+        'paired_at',
+    ];
+
+    protected $casts = [
+        'paired_at' => 'datetime',
     ];
 
     public function turnamen()
@@ -101,6 +106,11 @@ class TurnamenPeserta extends Model
     public function scopeCompletePairs($query)
     {
         return $query->whereNotNull('id_pemain1')->whereNotNull('id_pemain2');
+    }
+
+    public function scopeSoloEntries($query)
+    {
+        return $query->whereNotNull('id_pemain1')->whereNull('id_pemain2');
     }
 
     public function isCompletePair(): bool

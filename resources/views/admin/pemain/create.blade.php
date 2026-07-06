@@ -9,10 +9,6 @@
 @endsection
 
 @section('content')
-@php
-    $isDoubleForm = $showForm && $selectedTurnamen && $selectedTurnamen->isDouble();
-@endphp
-
 <div class="row justify-content-center">
     @if ($showForm)
         <div class="col-lg-5 mb-4 mb-lg-0">
@@ -27,15 +23,9 @@
                         <span class="badge text-bg-light text-dark border ms-1">{{ $selectedTurnamen->jenis_label }}</span>
                     </div>
                     <div class="mb-2">
-                        <div class="text-muted small text-uppercase">No. HP Pemain 1</div>
+                        <div class="text-muted small text-uppercase">No. HP</div>
                         <strong>{{ $noHp }}</strong>
                     </div>
-                    @if ($isDoubleForm)
-                        <div class="mb-2">
-                            <div class="text-muted small text-uppercase">No. HP Pemain 2</div>
-                            <strong>{{ $partnerNoHp }}</strong>
-                        </div>
-                    @endif
                     <div>
                         <div class="text-muted small text-uppercase">Status Pendaftaran</div>
                         <strong>{{ ucfirst(old('status', request('status', 'approved'))) }}</strong>
@@ -60,10 +50,7 @@
                             'selectedTurnamen' => $selectedTurnamen,
                             'showForm' => true,
                             'noHp' => $noHp,
-                            'partnerNoHp' => $partnerNoHp,
                             'existingPemain' => $existingPemain,
-                            'existingPartner' => $existingPartner,
-                            'isPartnerExisting' => $isPartnerExisting ?? false,
                         ])
                         <div class="d-flex gap-2 mt-4">
                             <button type="submit" class="btn btn-primary">

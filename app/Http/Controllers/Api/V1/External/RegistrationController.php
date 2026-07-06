@@ -30,13 +30,6 @@ class RegistrationController extends Controller
             ], 422);
         }
 
-        if ($turnamen->isDouble()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Turnamen double memerlukan pendaftaran pasangan melalui admin.',
-            ], 422);
-        }
-
         try {
             $pemain = $this->registrationService->register(
                 $turnamen,

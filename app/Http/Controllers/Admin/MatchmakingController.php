@@ -45,6 +45,14 @@ class MatchmakingController extends Controller
         $approvedCount = $turnamen
             ? $this->matchmakingService->countApprovedPlayers($turnamen)
             : 0;
+        $pairingSummary = $turnamen
+            ? $this->matchmakingService->getDoublePairingSummary($turnamen)
+            : null;
+        $groupingUnitCount = $turnamen && $turnamen->isDouble()
+            ? ($turnamen->isRegistrationOpen()
+                ? (int) ($pairingSummary['pairs_preview'] ?? 0)
+                : $this->matchmakingService->countApprovedPairs($turnamen))
+            : $approvedCount;
 
         $grup = collect();
         $groupSplitPreview = null;
@@ -83,7 +91,7 @@ class MatchmakingController extends Controller
                     : null;
             } else {
                 $groupSplitPreview = $this->matchmakingService->previewGroupSplit(
-                    $approvedCount,
+                    $groupingUnitCount,
                     $this->matchmakingService->getDefaultMinPerGroup(),
                     $this->matchmakingService->getDefaultMaxPerGroup()
                 );
@@ -101,6 +109,8 @@ class MatchmakingController extends Controller
             'turnamen' => $turnamen,
             'turnamenList' => $turnamenList,
             'approvedCount' => $approvedCount,
+            'groupingUnitCount' => $groupingUnitCount,
+            'pairingSummary' => $pairingSummary,
             'isMahjong' => $isMahjong,
             'unitLabel' => $turnamen ? $this->matchmakingService->unitLabel($turnamen) : 'pemain',
             'grup' => $grup,
@@ -269,15 +279,27 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
-            $turnamen = $this->matchmakingService->closeRegistration($turnamen);
+            $result = $this->matchmakingService->closeRegistration($turnamen);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
 
+        $message = 'Pendaftaran berhasil ditutup. Status turnamen: ongoing.';
+
+        if ($result['pairing'] && ($result['pairing']['pairs_created'] ?? 0) > 0) {
+            $message = sprintf(
+                'Pendaftaran ditutup. %d pasangan dibuat secara acak dari pemain approved.',
+                $result['pairing']['pairs_created']
+            );
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Pendaftaran berhasil ditutup. Status turnamen: ongoing.',
-            'data' => $turnamen,
+            'message' => $message,
+            'data' => [
+                'turnamen' => $result['turnamen'],
+                'pairing' => $result['pairing'],
+            ],
         ]);
     }
 

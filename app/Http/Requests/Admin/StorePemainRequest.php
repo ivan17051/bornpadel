@@ -52,15 +52,6 @@ class StorePemainRequest extends FormRequest
 
         $turnamen = Turnamen::find($this->input('id_turnamen'));
 
-        if ($turnamen && $turnamen->isDouble()) {
-            $rules['partner_no_hp'] = ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp'];
-            $rules['partner_nama'] = ['required', 'string', 'max:255'];
-            $rules['partner_tgl_lahir'] = ['nullable', 'date', 'before:today'];
-            $rules['partner_gender'] = ['required', 'in:male,female'];
-            $rules['partner_rating'] = ['nullable', 'numeric', 'min:0', 'max:10'];
-            $rules['partner_foto'] = ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'];
-        }
-
         return $rules;
     }
 

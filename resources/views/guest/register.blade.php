@@ -44,12 +44,10 @@
             </div>
             <div class="card-body p-4">
                 <p class="text-muted small mb-4">
+                    Masukkan nomor HP / WhatsApp Anda terlebih dahulu. Jika sudah pernah terdaftar,
+                    data Anda akan ditampilkan untuk diperiksa dan diperbarui.
                     @if ($turnamen->isDouble())
-                        Masukkan nomor HP / WhatsApp untuk <strong>pemain 1</strong> dan <strong>pemain 2</strong>.
-                        Pada langkah berikutnya, data yang sudah ada akan ditampilkan; jika belum terdaftar, Anda akan mengisi form untuk masing-masing pemain.
-                    @else
-                        Masukkan nomor HP / WhatsApp Anda terlebih dahulu. Jika sudah pernah terdaftar,
-                        data Anda akan ditampilkan untuk diperiksa dan diperbarui.
+                        <span class="d-block mt-2">Turnamen double: setiap peserta mendaftar individu; pasangan dibuat otomatis setelah pendaftaran ditutup.</span>
                     @endif
                 </p>
 
@@ -60,20 +58,10 @@
                     <div class="mb-4">
                         <x-phone-input name="no_hp"
                                        id="guest_no_hp"
-                                       label="Nomor HP / WhatsApp Pemain 1"
+                                       label="Nomor HP / WhatsApp"
                                        :value="old('no_hp')"
                                        size="lg" />
                     </div>
-
-                    @if ($turnamen->isDouble())
-                        <div class="mb-4">
-                            <x-phone-input name="partner_no_hp"
-                                           id="guest_partner_no_hp"
-                                           label="Nomor HP / WhatsApp Pemain 2"
-                                           :value="old('partner_no_hp')"
-                                           size="lg" />
-                        </div>
-                    @endif
 
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-bp btn-lg">

@@ -16,6 +16,13 @@ class GroupMatchmakingService
     const DEFAULT_MIN_PER_GROUP = 3;
     const DEFAULT_MAX_PER_GROUP = 4;
 
+    protected $pairingService;
+
+    public function __construct(DoublePairingService $pairingService)
+    {
+        $this->pairingService = $pairingService;
+    }
+
     public function getDefaultMinPerGroup(): int
     {
         return self::DEFAULT_MIN_PER_GROUP;
@@ -107,18 +114,45 @@ class GroupMatchmakingService
 
     public function canCloseRegistration(Turnamen $turnamen): bool
     {
-        return $turnamen->status === 'open';
+        if ($turnamen->status !== 'open') {
+            return false;
+        }
+
+        if ($turnamen->isDouble()) {
+            $summary = $this->pairingService->getSummary($turnamen);
+
+            return ! $summary['odd_player_warning'];
+        }
+
+        return true;
     }
 
-    public function closeRegistration(Turnamen $turnamen): Turnamen
+    /**
+     * @return array{turnamen: Turnamen, pairing: array<string, mixed>|null}
+     */
+    public function closeRegistration(Turnamen $turnamen): array
     {
-        if (! $this->canCloseRegistration($turnamen)) {
+        if (! $turnamen->isRegistrationOpen()) {
             throw new RuntimeException('Pendaftaran sudah ditutup atau turnamen belum dibuka.');
         }
 
-        $turnamen->update(['status' => 'ongoing']);
+        $pairingResult = null;
 
-        return $turnamen->fresh();
+        if ($turnamen->isDouble()) {
+            $pairingResult = $this->pairingService->pairApprovedPlayers($turnamen);
+
+            $turnamen->update([
+                'status' => 'ongoing',
+                'registration_paired_at' => now(),
+            ]);
+        } else {
+            $turnamen->update(['status' => 'ongoing']);
+        }
+
+        return [
+            'turnamen' => $turnamen->fresh(),
+            'pairing' => $pairingResult,
+        ];
     }
 
     public function canGenerateRandomGroups(Turnamen $turnamen): bool
@@ -147,7 +181,33 @@ class GroupMatchmakingService
 
     public function countApprovedPlayers(Turnamen $turnamen): int
     {
+        if ($turnamen->isDouble() && $turnamen->isRegistrationOpen()) {
+            return $this->pairingService->countApprovedSolos($turnamen);
+        }
+
         return $this->getApprovedEntries($turnamen)->count();
+    }
+
+    public function countApprovedPairs(Turnamen $turnamen): int
+    {
+        if (! $turnamen->isDouble()) {
+            return $this->getApprovedEntries($turnamen)->count();
+        }
+
+        if ($turnamen->isRegistrationOpen()) {
+            return intdiv($this->pairingService->countApprovedSolos($turnamen), 2);
+        }
+
+        return $this->getApprovedEntries($turnamen)->count();
+    }
+
+    public function getDoublePairingSummary(Turnamen $turnamen): ?array
+    {
+        if (! $turnamen->isDouble()) {
+            return null;
+        }
+
+        return $this->pairingService->getSummary($turnamen);
     }
 
     /** @deprecated Use getApprovedEntries() */

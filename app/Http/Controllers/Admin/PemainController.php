@@ -47,7 +47,7 @@ class PemainController extends Controller
             false
         );
 
-        $isDoubleView = $turnamen && $turnamen->isDouble();
+        $isDoubleView = $turnamen && $turnamen->isDouble() && $turnamen->isRegistrationClosed();
 
         if (! $turnamen) {
             $peserta = null;
@@ -189,44 +189,17 @@ class PemainController extends Controller
     {
         $turnamenList = $this->matchmakingService->listForFilter();
         $noHp = trim((string) $request->get('no_hp', old('no_hp', '')));
-        $partnerNoHp = trim((string) $request->get('partner_no_hp', old('partner_no_hp', '')));
         $selectedTurnamen = $request->filled('id_turnamen')
             ? Turnamen::find($request->id_turnamen)
             : null;
         $showForm = $noHp !== '' && $selectedTurnamen;
 
-        if ($showForm && $selectedTurnamen->isDouble() && $partnerNoHp === '') {
-            return redirect()->route('admin.pemain.create', $request->only('id_turnamen'));
-        }
-
         $existingPemain = null;
-        $existingPartner = null;
-        $isPartnerExisting = false;
 
         if ($showForm) {
             $existingPemain = Pemain::where('no_hp', $noHp)->first();
 
-            if ($selectedTurnamen->isDouble()) {
-                if ($noHp === $partnerNoHp) {
-                    return redirect()->route('admin.pemain.create', $request->only('id_turnamen'))
-                        ->withErrors(['partner_no_hp' => 'Nomor HP pemain 2 harus berbeda dari pemain 1.']);
-                }
-
-                $existingPartner = Pemain::where('no_hp', $partnerNoHp)->first();
-                $isPartnerExisting = (bool) $existingPartner;
-
-                if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $selectedTurnamen)) {
-                    return redirect()->route('admin.pemain.create', $request->only('id_turnamen'))
-                        ->withInput()
-                        ->withErrors(['no_hp' => 'Pemain 1 sudah terdaftar pada turnamen ini.']);
-                }
-
-                if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $selectedTurnamen)) {
-                    return redirect()->route('admin.pemain.create', $request->only('id_turnamen'))
-                        ->withInput()
-                        ->withErrors(['partner_no_hp' => 'Pemain 2 sudah terdaftar pada turnamen ini.']);
-                }
-            } elseif ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $selectedTurnamen)) {
+            if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $selectedTurnamen)) {
                 return redirect()->route('admin.pemain.create', $request->only('id_turnamen'))
                     ->withInput()
                     ->withErrors(['no_hp' => 'Pemain sudah terdaftar pada turnamen ini.']);
@@ -238,10 +211,7 @@ class PemainController extends Controller
             'selectedTurnamen',
             'showForm',
             'noHp',
-            'partnerNoHp',
-            'existingPemain',
-            'existingPartner',
-            'isPartnerExisting'
+            'existingPemain'
         ));
     }
 
@@ -262,22 +232,7 @@ class PemainController extends Controller
         if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $turnamen)) {
             return back()
                 ->withInput()
-                ->withErrors(['no_hp' => $turnamen->isDouble()
-                    ? 'Pemain 1 sudah terdaftar pada turnamen ini.'
-                    : 'Pemain sudah terdaftar pada turnamen ini.']);
-        }
-
-        if ($turnamen->isDouble()) {
-            $partnerNoHp = trim($request->partner_no_hp);
-            $existingPartner = Pemain::where('no_hp', $partnerNoHp)->first();
-
-            if ($existingPartner && $this->registrationService->isRegisteredForTournament($existingPartner, $turnamen)) {
-                return back()
-                    ->withInput()
-                    ->withErrors(['partner_no_hp' => 'Pemain 2 sudah terdaftar pada turnamen ini.']);
-            }
-
-            $params['partner_no_hp'] = $partnerNoHp;
+                ->withErrors(['no_hp' => 'Pemain sudah terdaftar pada turnamen ini.']);
         }
 
         return redirect()->route('admin.pemain.create', $params);
@@ -292,64 +247,31 @@ class PemainController extends Controller
         $buktiBayar = $request->file('bukti_bayar');
 
         try {
-            if ($turnamen->isDouble()) {
-                $pemain1 = $this->registrationService->upsertPemain([
-                    'no_hp' => $data['no_hp'],
-                    'nama' => $data['nama'],
-                    'tgl_lahir' => $data['tgl_lahir'] ?? null,
-                    'gender' => $data['gender'],
-                    'rating' => $data['rating'] ?? null,
-                ], $request->file('foto'));
+            $pemain = $this->registrationService->upsertPemain([
+                'no_hp' => $data['no_hp'],
+                'nama' => $data['nama'],
+                'tgl_lahir' => $data['tgl_lahir'] ?? null,
+                'gender' => $data['gender'],
+                'rating' => $data['rating'] ?? null,
+            ], $request->file('foto'));
 
-                $pemain2 = $this->registrationService->upsertPemain([
-                    'no_hp' => $data['partner_no_hp'],
-                    'nama' => $data['partner_nama'],
-                    'tgl_lahir' => $data['partner_tgl_lahir'] ?? null,
-                    'gender' => $data['partner_gender'],
-                    'rating' => $data['partner_rating'] ?? null,
-                ], $request->file('partner_foto'));
-
-                if ($this->registrationService->isRegisteredForTournament($pemain1, $turnamen)
-                    || $this->registrationService->isRegisteredForTournament($pemain2, $turnamen)) {
-                    throw new \RuntimeException('Salah satu pemain sudah terdaftar pada turnamen ini.');
-                }
-
-                TurnamenPeserta::create([
-                    'id_turnamen' => $turnamen->id,
-                    'id_pemain1' => $pemain1->id,
-                    'id_pemain2' => $pemain2->id,
-                    'status' => $status,
-                    'bukti_bayar' => $this->registrationService->storeBuktiBayar($buktiBayar),
-                ]);
-            } else {
-                $pemain = $this->registrationService->upsertPemain([
-                    'no_hp' => $data['no_hp'],
-                    'nama' => $data['nama'],
-                    'tgl_lahir' => $data['tgl_lahir'] ?? null,
-                    'gender' => $data['gender'],
-                    'rating' => $data['rating'] ?? null,
-                ], $request->file('foto'));
-
-                if ($this->registrationService->isRegisteredForTournament($pemain, $turnamen)) {
-                    throw new \RuntimeException('Pemain sudah terdaftar pada turnamen ini.');
-                }
-
-                TurnamenPeserta::create([
-                    'id_turnamen' => $turnamen->id,
-                    'id_pemain1' => $pemain->id,
-                    'status' => $status,
-                    'bukti_bayar' => $this->registrationService->storeBuktiBayar($buktiBayar),
-                ]);
+            if ($this->registrationService->isRegisteredForTournament($pemain, $turnamen)) {
+                throw new \RuntimeException('Pemain sudah terdaftar pada turnamen ini.');
             }
-        } catch (\RuntimeException $e) {
-            $field = str_contains($e->getMessage(), 'pemain 2') ? 'partner_no_hp' : 'no_hp';
 
-            return back()->withInput()->withErrors([$field => $e->getMessage()]);
+            TurnamenPeserta::create([
+                'id_turnamen' => $turnamen->id,
+                'id_pemain1' => $pemain->id,
+                'status' => $status,
+                'bukti_bayar' => $this->registrationService->storeBuktiBayar($buktiBayar),
+            ]);
+        } catch (\RuntimeException $e) {
+            return back()->withInput()->withErrors(['no_hp' => $e->getMessage()]);
         }
 
         return redirect()
             ->route('admin.pemain.index', ['id_turnamen' => $turnamen->id])
-            ->with('success', $turnamen->isDouble() ? 'Pasangan pemain berhasil ditambahkan.' : 'Pemain berhasil ditambahkan.');
+            ->with('success', 'Pemain berhasil ditambahkan.');
     }
 
     protected function otherPemainForSlot(TurnamenPeserta $peserta, int $slot): ?Pemain
@@ -594,34 +516,16 @@ class PemainController extends Controller
             $peserta->refresh();
         }
 
-        if ($request->status === 'approved'
-            && $peserta->turnamen
-            && $peserta->turnamen->isDouble()
-            && ! $peserta->isCompletePair()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Pasangan belum lengkap. Tambahkan pemain 2 sebelum disetujui.',
-            ], 422);
-        }
-
         $peserta->update(['status' => $request->status]);
 
+        $isPairEntry = $peserta->turnamen && $peserta->turnamen->isDouble() && $peserta->isCompletePair();
+
         $messages = [
-            'approved' => $peserta->turnamen && $peserta->turnamen->isDouble()
-                ? 'Pasangan berhasil disetujui.'
-                : 'Pemain berhasil disetujui.',
-            'rejected' => $peserta->turnamen && $peserta->turnamen->isDouble()
-                ? 'Pasangan ditolak.'
-                : 'Pemain ditolak.',
-            'pending' => $peserta->turnamen && $peserta->turnamen->isDouble()
-                ? 'Status pasangan dikembalikan ke pending.'
-                : 'Status pemain dikembalikan ke pending.',
-            'unpaid' => $peserta->turnamen && $peserta->turnamen->isDouble()
-                ? 'Status pasangan diubah menjadi unpaid.'
-                : 'Status pemain diubah menjadi unpaid.',
-            'paid' => $peserta->turnamen && $peserta->turnamen->isDouble()
-                ? 'Status pasangan diubah menjadi paid.'
-                : 'Status pemain diubah menjadi paid.',
+            'approved' => $isPairEntry ? 'Pasangan berhasil disetujui.' : 'Pemain berhasil disetujui.',
+            'rejected' => $isPairEntry ? 'Pasangan ditolak.' : 'Pemain ditolak.',
+            'pending' => $isPairEntry ? 'Status pasangan dikembalikan ke pending.' : 'Status pemain dikembalikan ke pending.',
+            'unpaid' => $isPairEntry ? 'Status pasangan diubah menjadi unpaid.' : 'Status pemain diubah menjadi unpaid.',
+            'paid' => $isPairEntry ? 'Status pasangan diubah menjadi paid.' : 'Status pemain diubah menjadi paid.',
         ];
 
         return response()->json([

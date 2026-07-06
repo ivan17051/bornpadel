@@ -4,6 +4,9 @@
         $unitLabelTitle = ucfirst($unitLabel);
         $sideLabel = $turnamen->isDouble() ? 'Pasangan' : 'Pemain';
         $isMahjong = $isMahjong ?? $turnamen->isMahjong();
+        $groupingUnitCount = $groupingUnitCount ?? $approvedCount;
+        $pairingSummary = $pairingSummary ?? null;
+        $isDoubleOpen = $turnamen->isDouble() && $turnamen->isRegistrationOpen();
     @endphp
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -18,7 +21,11 @@
                             Status: {{ strtoupper($turnamen->status) }}
                         </span>
                         <span class="badge text-bg-secondary fs-6">
-                            {{ $approvedCount }} {{ $unitLabel }} approved
+                            @if ($isDoubleOpen)
+                                {{ $approvedCount }} pemain approved
+                            @else
+                                {{ $approvedCount }} {{ $unitLabel }} approved
+                            @endif
                         </span>
                         @if ($isMahjong && ($mahjongIsFinal ?? false))
                             <span class="badge bg-warning text-dark fs-6">Grup Final</span>
@@ -26,7 +33,14 @@
                     </div>
                     <p class="text-muted mb-0 small">
                         @if ($turnamen->isRegistrationOpen())
-                            Pendaftaran masih dibuka. Tutup pendaftaran sebelum membuat grup.
+                            @if ($isDoubleOpen && ($pairingSummary['odd_player_warning'] ?? false))
+                                Pendaftaran masih dibuka. <strong class="text-danger">Jumlah pemain approved ganjil ({{ $pairingSummary['approved_individuals'] }}).</strong>
+                                Tolak satu pemain atau tambahkan pemain baru sebelum menutup pendaftaran.
+                            @elseif ($isDoubleOpen)
+                                Pendaftaran masih dibuka. Setiap peserta mendaftar individu; saat ditutup, sistem akan memasangkan {{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan secara acak dari pemain approved.
+                            @else
+                                Pendaftaran masih dibuka. Tutup pendaftaran sebelum membuat grup.
+                            @endif
                         @elseif ($isMahjong && ($mahjongIsFinal ?? false))
                             Grup final aktif. Input poin babak final lalu selesaikan turnamen untuk menentukan juara.
                         @elseif ($isMahjong && $canReshuffle)
@@ -73,9 +87,9 @@
                                 </div>
                                 <div id="group-split-preview"
                                      class="small text-muted"
-                                     data-approved="{{ $approvedCount }}">
+                                     data-approved="{{ $groupingUnitCount }}">
                                     @if ($groupSplitPreview)
-                                        {{ $approvedCount }} {{ $unitLabel }} → {{ $groupSplitPreview['group_count'] }} grup ({{ $groupSplitPreview['label'] }})
+                                        {{ $groupingUnitCount }} {{ $unitLabel }} → {{ $groupSplitPreview['group_count'] }} grup ({{ $groupSplitPreview['label'] }})
                                     @else
                                         {{ ucfirst($unitLabel) }} tidak cukup untuk pembagian grup dengan batas ini.
                                     @endif
@@ -99,15 +113,41 @@
                             </div>
                         </div>
                     @endif
+                    @if ($isDoubleOpen)
+                        <div class="card bg-light border-0 mb-3">
+                            <div class="card-body py-3">
+                                <h6 class="text-muted text-uppercase small mb-2">Pemasangan Otomatis</h6>
+                                <ul class="small text-muted mb-0 ps-3">
+                                    <li>{{ $pairingSummary['approved_individuals'] ?? 0 }} pemain individual approved</li>
+                                    <li>{{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan akan dibuat saat pendaftaran ditutup</li>
+                                    @if ($pairingSummary['odd_player_warning'] ?? false)
+                                        <li class="text-danger">Perbaiki jumlah ganjil sebelum menutup pendaftaran</li>
+                                    @endif
+                                </ul>
+                                <a href="{{ route('admin.pemain.index', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-sm btn-outline-secondary mt-3">
+                                    <i class="bi bi-people me-1"></i> Kelola Pemain
+                                </a>
+                            </div>
+                        </div>
+                    @elseif ($turnamen->isDouble() && ($pairingSummary['is_paired'] ?? false))
+                        <div class="alert alert-success py-2 small mb-3">
+                            <i class="bi bi-check-circle me-1"></i>
+                            Pemasangan selesai — {{ $approvedCount }} pasangan siap untuk pembagian grup.
+                        </div>
+                    @endif
                     <div class="d-grid gap-2">
+                        @if ($turnamen->isRegistrationOpen())
                         <button type="button"
                                 id="btn-close-registration"
-                                class="btn btn-warning {{ $canCloseRegistration ? '' : 'd-none' }}"
+                                class="btn btn-warning"
                                 data-url="{{ route('admin.matchmaking.close-registration') }}"
                                 data-turnamen="{{ $turnamen->id }}"
-                                {{ $canCloseRegistration ? '' : 'd-none' }}>
+                                data-double="{{ $turnamen->isDouble() ? '1' : '0' }}"
+                                data-pairs-preview="{{ $pairingSummary['pairs_preview'] ?? 0 }}"
+                                @if (! $canCloseRegistration) disabled @endif>
                             <i class="bi bi-lock me-1"></i> Tutup Pendaftaran
                         </button>
+                        @endif
                         <button type="button"
                                 class="btn btn-primary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'd-none' }}"
                                 data-url="{{ route('admin.matchmaking.random-grup') }}"

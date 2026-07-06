@@ -32,13 +32,22 @@
                     @endif
                 </p>
 
+                @if ($isDouble)
+                    <div class="alert alert-light border text-start mb-4">
+                        <i class="bi bi-shuffle me-2"></i>
+                        Pasangan untuk turnamen double akan ditentukan secara acak setelah pendaftaran ditutup oleh panitia.
+                    </div>
+                @endif
+
                 @foreach ($players as $index => $player)
                     @php
                         $playerStatus = $player['status'] ?? 'unpaid';
                     @endphp
                     <div class="card bg-light border-0 text-start {{ $loop->last ? 'mb-4' : 'mb-3' }}">
                         <div class="card-body py-3">
-                            @if ($isDouble)
+                            @if ($isDouble && count($players) === 1)
+                                <div class="small text-muted text-uppercase fw-semibold mb-2">Peserta</div>
+                            @elseif ($isDouble)
                                 <div class="small text-muted text-uppercase fw-semibold mb-2">
                                     {{ $playerLabels[$index] ?? 'Pemain ' . ($index + 1) }}
                                 </div>
