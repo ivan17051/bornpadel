@@ -2,9 +2,16 @@
 
 namespace Database\Seeders;
 
+use App\Models\GrupMember;
 use App\Models\Pemain;
+use App\Models\Pertandingan;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
+use App\Services\GroupMatchmakingService;
+use App\Services\KnockoutBracketService;
+use App\Services\MahjongMatchmakingService;
+use App\Services\MatchScoringService;
+use App\Services\TournamentCompletionService;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -12,42 +19,69 @@ use Illuminate\Support\Facades\Schema;
 
 class BornPadelFreshSeeder extends Seeder
 {
+    /** @var GroupMatchmakingService */
+    protected $groupService;
+
+    /** @var MahjongMatchmakingService */
+    protected $mahjongService;
+
+    /** @var KnockoutBracketService */
+    protected $bracketService;
+
+    /** @var MatchScoringService */
+    protected $scoringService;
+
+    /** @var TournamentCompletionService */
+    protected $completionService;
+
+    /** Running counter used to generate unique phone numbers. */
+    protected $phoneSeq = 0;
+
+    /** @var Pemain[] Shared players that appear in more than one turnamen. */
+    protected $veterans = [];
+
+    /** Pointer used to rotate through the veteran pool. */
+    protected $veteranCursor = 0;
+
     public function run()
     {
+        $this->groupService = app(GroupMatchmakingService::class);
+        $this->mahjongService = app(MahjongMatchmakingService::class);
+        $this->bracketService = app(KnockoutBracketService::class);
+        $this->scoringService = app(MatchScoringService::class);
+        $this->completionService = app(TournamentCompletionService::class);
+
         $this->truncateApplicationData();
 
-        $singleTurnamen = $this->createTurnamen(
-            'Born Padel Singles Cup 2026',
-            'single',
-            '2026-08-05',
-            175000,
-            'Turnamen single padel terbuka untuk semua level.'
-        );
+        $this->veterans = $this->createVeteranPool(10);
 
-        $doubleTurnamen = $this->createTurnamen(
-            'Born Padel Double Open 2026',
-            'double',
-            '2026-06-15',
-            300000,
-            'Turnamen double: setiap peserta mendaftar individu. Pasangan dibuat otomatis saat pendaftaran ditutup.'
-        );
+        $definitions = [
+            'single' => [
+                'label' => 'Padel Singles',
+                'harga' => 175000,
+                'syarat' => 'Turnamen single padel terbuka untuk semua level.',
+            ],
+            'double' => [
+                'label' => 'Padel Doubles',
+                'harga' => 300000,
+                'syarat' => 'Turnamen double: peserta mendaftar individu, pasangan dibuat otomatis saat pendaftaran ditutup.',
+            ],
+            'mahjong' => [
+                'label' => 'Mahjong',
+                'harga' => 200000,
+                'syarat' => 'Turnamen Mahjong poin akumulasi. Pemain dibagi ke grup berisi 4.',
+            ],
+        ];
 
-        $mahjongTurnamen = $this->createTurnamen(
-            'Born Mahjong Championship 2026',
-            'mahjong',
-            '2026-07-10',
-            200000,
-            'Turnamen Mahjong poin akumulasi. Pemain terdaftar akan dibagi grup 4.'
-        );
-
-        $this->seedIndividualRegistrations($singleTurnamen, 'single', 20);
-        $this->seedIndividualRegistrations($doubleTurnamen, 'double', 20);
-        $this->seedIndividualRegistrations($mahjongTurnamen, 'mahjong', 20);
+        foreach ($definitions as $jenis => $meta) {
+            $this->seedOpenTurnamen($jenis, $meta);
+            $this->seedOngoingTurnamen($jenis, $meta);
+            $this->seedCompletedTurnamen($jenis, $meta);
+        }
 
         $this->command->info('Fresh seed completed (m_users preserved).');
-        $this->command->info("  - Single: {$singleTurnamen->nama} — 20 pemain");
-        $this->command->info("  - Double: {$doubleTurnamen->nama} — 20 pemain (individu, belum dipasangkan)");
-        $this->command->info("  - Mahjong: {$mahjongTurnamen->nama} — 20 pemain");
+        $this->command->info('  9 turnamen created: single/double/mahjong x open/ongoing/completed.');
+        $this->command->info('  ' . count($this->veterans) . ' veteran pemain reused across multiple turnamen.');
     }
 
     protected function truncateApplicationData(): void
@@ -81,12 +115,263 @@ class BornPadelFreshSeeder extends Seeder
         $this->command->warn('Application data truncated (m_users kept).');
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Open turnamen (registration still open, mixed statuses)             */
+    /* ------------------------------------------------------------------ */
+
+    protected function seedOpenTurnamen(string $jenis, array $meta): void
+    {
+        $turnamen = $this->createTurnamen(
+            "Born {$meta['label']} — Pendaftaran Dibuka 2026",
+            $jenis,
+            '2026-09-12',
+            $meta['harga'],
+            $meta['syarat'],
+            'open'
+        );
+
+        // Veterans register here too so they span several turnamen.
+        foreach ($this->veterans as $index => $veteran) {
+            $this->registerPlayer($turnamen, $veteran, $this->rotatingStatus($index));
+        }
+
+        for ($i = 1; $i <= 12; $i++) {
+            $pemain = $this->createPemain(
+                "{$meta['label']} Peserta " . str_pad((string) $i, 2, '0', STR_PAD_LEFT),
+                $i % 2 === 1 ? 'male' : 'female',
+                $this->ratingFor($i)
+            );
+
+            $this->registerPlayer($turnamen, $pemain, $this->rotatingStatus($i));
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Ongoing turnamen (groups formed, matches partially/fully played)    */
+    /* ------------------------------------------------------------------ */
+
+    protected function seedOngoingTurnamen(string $jenis, array $meta): void
+    {
+        $turnamen = $this->createTurnamen(
+            "Born {$meta['label']} — Sedang Berlangsung 2026",
+            $jenis,
+            '2026-05-18',
+            $meta['harga'],
+            $meta['syarat'],
+            'open'
+        );
+
+        $this->registerApprovedRoster($turnamen, $jenis, $meta);
+
+        // Two extra pending registrations for realism (won't affect grouping).
+        $this->addPendingFillers($turnamen, $meta, 2);
+
+        $this->groupService->closeRegistration($turnamen);
+        $turnamen->refresh();
+
+        if ($turnamen->isMahjong()) {
+            $this->mahjongService->generateGroups($turnamen, 'random');
+            $this->applyMahjongPoints($turnamen);
+
+            return;
+        }
+
+        $this->groupService->generateRandomGroups($turnamen, 3, 4, 'by_rating');
+        $this->playGroupStage($turnamen);
+        // Left ongoing: group stage done, knockout not yet generated.
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Completed turnamen (full lifecycle to a champion)                   */
+    /* ------------------------------------------------------------------ */
+
+    protected function seedCompletedTurnamen(string $jenis, array $meta): void
+    {
+        $turnamen = $this->createTurnamen(
+            "Born {$meta['label']} — Selesai 2025",
+            $jenis,
+            '2025-12-08',
+            $meta['harga'],
+            $meta['syarat'],
+            'open'
+        );
+
+        $this->registerApprovedRoster($turnamen, $jenis, $meta);
+
+        $this->groupService->closeRegistration($turnamen);
+        $turnamen->refresh();
+
+        if ($turnamen->isMahjong()) {
+            $this->mahjongService->generateGroups($turnamen, 'random');
+            $this->applyMahjongPoints($turnamen);
+
+            $this->mahjongService->advanceRound($turnamen, MahjongMatchmakingService::PLAYERS_PER_GROUP);
+            $turnamen->refresh();
+            $this->applyMahjongPoints($turnamen);
+
+            $this->completionService->complete($turnamen);
+
+            return;
+        }
+
+        $this->groupService->generateRandomGroups($turnamen, 3, 4, 'by_rating');
+        $this->playGroupStage($turnamen);
+
+        $this->bracketService->generateKnockoutBracket($turnamen, 2);
+        $this->playKnockoutStage($turnamen);
+
+        $this->completionService->complete($turnamen);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Roster helpers                                                      */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Registers an approved roster sized so the lifecycle services can run:
+     * single/mahjong => 8 approved players, double => 16 approved individuals
+     * (=> 8 pairs). Two slots are filled by rotating veterans for cross-turnamen
+     * variation.
+     */
+    protected function registerApprovedRoster(Turnamen $turnamen, string $jenis, array $meta): void
+    {
+        $approvedTarget = $jenis === 'double' ? 16 : 8;
+        $veteranSlots = 2;
+        $dedicated = $approvedTarget - $veteranSlots;
+
+        foreach ($this->drawVeterans($veteranSlots) as $veteran) {
+            $this->registerPlayer($turnamen, $veteran, 'approved');
+        }
+
+        for ($i = 1; $i <= $dedicated; $i++) {
+            $pemain = $this->createPemain(
+                "{$meta['label']} {$this->statusTag($turnamen)} " . str_pad((string) $i, 2, '0', STR_PAD_LEFT),
+                $i % 2 === 1 ? 'male' : 'female',
+                $this->ratingFor($i)
+            );
+
+            $this->registerPlayer($turnamen, $pemain, 'approved');
+        }
+    }
+
+    protected function addPendingFillers(Turnamen $turnamen, array $meta, int $count): void
+    {
+        for ($i = 1; $i <= $count; $i++) {
+            $pemain = $this->createPemain(
+                "{$meta['label']} Waitlist " . str_pad((string) $i, 2, '0', STR_PAD_LEFT),
+                $i % 2 === 1 ? 'female' : 'male',
+                $this->ratingFor($i + 5)
+            );
+
+            $this->registerPlayer($turnamen, $pemain, 'pending');
+        }
+    }
+
+    protected function registerPlayer(Turnamen $turnamen, Pemain $pemain, string $status): void
+    {
+        TurnamenPeserta::firstOrCreate(
+            [
+                'id_turnamen' => $turnamen->id,
+                'id_pemain1' => $pemain->id,
+            ],
+            [
+                'id_pemain2' => null,
+                'status' => $status,
+                'bukti_bayar' => null,
+                'paired_at' => null,
+            ]
+        );
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Match play helpers                                                  */
+    /* ------------------------------------------------------------------ */
+
+    protected function playGroupStage(Turnamen $turnamen): void
+    {
+        $matches = Pertandingan::where('id_turnamen', $turnamen->id)
+            ->where('nama_ronde', 'Fase Grup')
+            ->where('status', 'scheduled')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($matches as $index => $match) {
+            $fresh = Pertandingan::find($match->id);
+
+            if (! $fresh || ! $fresh->isReadyForScoring() || $fresh->status === 'completed') {
+                continue;
+            }
+
+            $this->scoringService->recordScore($fresh, $this->setsForSide(($index % 2) + 1));
+        }
+    }
+
+    protected function playKnockoutStage(Turnamen $turnamen): void
+    {
+        $rounds = ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final'];
+
+        foreach ($rounds as $roundIndex => $round) {
+            $matches = Pertandingan::where('id_turnamen', $turnamen->id)
+                ->whereNull('id_grup')
+                ->where('nama_ronde', $round)
+                ->where('status', 'scheduled')
+                ->orderBy('id')
+                ->get();
+
+            foreach ($matches as $index => $match) {
+                $fresh = Pertandingan::find($match->id);
+
+                if (! $fresh || $fresh->status === 'completed' || ! $fresh->isReadyForScoring()) {
+                    continue;
+                }
+
+                // Higher seed (side 1) wins to keep results deterministic.
+                $this->scoringService->recordScore($fresh, $this->setsForSide(1));
+            }
+        }
+    }
+
+    protected function applyMahjongPoints(Turnamen $turnamen): void
+    {
+        $members = GrupMember::whereHas('grup', function ($query) use ($turnamen) {
+            $query->where('id_turnamen', $turnamen->id)->where('is_aktif', true);
+        })->get();
+
+        foreach ($members as $index => $member) {
+            // Spread of points so standings have a clear order.
+            $this->mahjongService->updateMemberPoints($member, 5 + (($index * 7) % 40));
+        }
+    }
+
+    /**
+     * @return array<int, array{skor_pemain1:int, skor_pemain2:int}>
+     */
+    protected function setsForSide(int $winnerSide): array
+    {
+        if ($winnerSide === 1) {
+            return [
+                ['skor_pemain1' => 6, 'skor_pemain2' => 2],
+                ['skor_pemain1' => 6, 'skor_pemain2' => 4],
+            ];
+        }
+
+        return [
+            ['skor_pemain1' => 2, 'skor_pemain2' => 6],
+            ['skor_pemain1' => 4, 'skor_pemain2' => 6],
+        ];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Player / turnamen factory helpers                                   */
+    /* ------------------------------------------------------------------ */
+
     protected function createTurnamen(
         string $nama,
         string $jenis,
         string $tanggal,
         int $harga,
-        string $syarat
+        string $syarat,
+        string $status
     ): Turnamen {
         return Turnamen::create([
             'nama' => $nama,
@@ -94,30 +379,48 @@ class BornPadelFreshSeeder extends Seeder
             'harga' => $harga,
             'syarat' => $syarat,
             'jenis' => $jenis,
-            'status' => 'open',
+            'status' => $status,
             'mahjong_is_final' => false,
             'registration_paired_at' => null,
         ]);
     }
 
-    protected function seedIndividualRegistrations(Turnamen $turnamen, string $prefix, int $count): void
+    /**
+     * @return Pemain[]
+     */
+    protected function createVeteranPool(int $count): array
     {
-        $label = ucfirst($prefix);
+        $pool = [];
 
         for ($i = 1; $i <= $count; $i++) {
-            $pemain = $this->createPemain(
-                "{$label} Pemain " . str_pad((string) $i, 2, '0', STR_PAD_LEFT),
-                $this->phoneFor($prefix, $i),
+            $pool[] = $this->createPemain(
+                'Veteran Pemain ' . str_pad((string) $i, 2, '0', STR_PAD_LEFT),
                 $i % 2 === 1 ? 'male' : 'female',
-                $this->ratingFor($i)
+                $this->ratingFor($i + 3)
             );
-
-            $this->registerIndividual($turnamen, $pemain, $this->registrationStatus($i));
         }
+
+        return $pool;
     }
 
-    protected function createPemain(string $nama, string $noHp, string $gender, float $rating): Pemain
+    /**
+     * @return Pemain[]
+     */
+    protected function drawVeterans(int $count): array
     {
+        $drawn = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $drawn[] = $this->veterans[$this->veteranCursor % count($this->veterans)];
+            $this->veteranCursor++;
+        }
+
+        return $drawn;
+    }
+
+    protected function createPemain(string $nama, string $gender, float $rating): Pemain
+    {
+        $noHp = $this->nextPhone();
         $birthYear = 1988 + (crc32($noHp) % 15);
         $tglLahir = Carbon::create($birthYear, (crc32($nama) % 12) + 1, (crc32($nama) % 27) + 1);
 
@@ -132,30 +435,11 @@ class BornPadelFreshSeeder extends Seeder
         ]);
     }
 
-    /**
-     * Individual registration — one turnamen_peserta row per player (current app logic).
-     */
-    protected function registerIndividual(Turnamen $turnamen, Pemain $pemain, string $status): void
+    protected function nextPhone(): string
     {
-        TurnamenPeserta::create([
-            'id_turnamen' => $turnamen->id,
-            'id_pemain1' => $pemain->id,
-            'id_pemain2' => null,
-            'status' => $status,
-            'bukti_bayar' => null,
-            'paired_at' => null,
-        ]);
-    }
+        $this->phoneSeq++;
 
-    protected function phoneFor(string $type, int $index): string
-    {
-        $prefix = [
-            'single' => '0823',
-            'double' => '0821',
-            'mahjong' => '0822',
-        ][$type] ?? '0829';
-
-        return $prefix . str_pad((string) $index, 8, '0', STR_PAD_LEFT);
+        return '08' . str_pad((string) $this->phoneSeq, 9, '0', STR_PAD_LEFT);
     }
 
     protected function ratingFor(int $index): float
@@ -165,7 +449,7 @@ class BornPadelFreshSeeder extends Seeder
         return round(min(5.0, max(2.0, $base)), 2);
     }
 
-    protected function registrationStatus(int $index): string
+    protected function rotatingStatus(int $index): string
     {
         $mod = $index % 10;
 
@@ -182,5 +466,14 @@ class BornPadelFreshSeeder extends Seeder
         }
 
         return 'approved';
+    }
+
+    protected function statusTag(Turnamen $turnamen): string
+    {
+        if ($turnamen->status === 'completed') {
+            return 'Juara';
+        }
+
+        return strpos($turnamen->nama, 'Selesai') !== false ? 'Juara' : 'Main';
     }
 }

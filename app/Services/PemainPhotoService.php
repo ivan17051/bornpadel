@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Pemain;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use RuntimeException;
 
 class PemainPhotoService
 {
@@ -15,29 +14,24 @@ class PemainPhotoService
     const MAX_WIDTH = 1200;
     const WEBP_QUALITY = 85;
 
+    protected $converter;
+
+    public function __construct(ImageWebpConverter $converter)
+    {
+        $this->converter = $converter;
+    }
+
     public function storeAsWebp(UploadedFile $file): string
     {
-        if (! function_exists('imagewebp')) {
-            throw new RuntimeException('Konversi WebP tidak didukung di server ini.');
-        }
-
-        $image = $this->createImageResource($file);
-        $image = $this->resizeIfNeeded($image);
         $filename = uniqid('pemain_', true) . '.webp';
         $relativePath = self::PUBLIC_DIR . '/' . $filename;
-        $fullPath = public_path($relativePath);
 
-        $directory = dirname($fullPath);
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        if (! imagewebp($image, $fullPath, self::WEBP_QUALITY)) {
-            imagedestroy($image);
-            throw new RuntimeException('Gagal menyimpan foto dalam format WebP.');
-        }
-
-        imagedestroy($image);
+        $this->converter->convert(
+            $file,
+            public_path($relativePath),
+            self::MAX_WIDTH,
+            self::WEBP_QUALITY
+        );
 
         return $relativePath;
     }
@@ -181,58 +175,5 @@ class PemainPhotoService
     protected function toPublicUrl(string $publicRelativePath): string
     {
         return asset('public/' . $this->normalizePath($publicRelativePath));
-    }
-
-    protected function createImageResource(UploadedFile $file)
-    {
-        $mime = $file->getMimeType();
-        $path = $file->getRealPath();
-
-        switch ($mime) {
-            case 'image/jpeg':
-                $image = imagecreatefromjpeg($path);
-                break;
-            case 'image/png':
-                $image = imagecreatefrompng($path);
-                imagepalettetotruecolor($image);
-                imagealphablending($image, true);
-                imagesavealpha($image, true);
-                break;
-            case 'image/webp':
-                $image = imagecreatefromwebp($path);
-                break;
-            default:
-                throw new RuntimeException('Format gambar harus JPEG, PNG, atau WebP.');
-        }
-
-        if (! $image) {
-            throw new RuntimeException('Gagal memproses gambar yang diunggah.');
-        }
-
-        return $image;
-    }
-
-    protected function resizeIfNeeded($image)
-    {
-        $width = imagesx($image);
-        $height = imagesy($image);
-
-        if ($width <= self::MAX_WIDTH) {
-            return $image;
-        }
-
-        $newWidth = self::MAX_WIDTH;
-        $newHeight = (int) round($height * ($newWidth / $width));
-        $resized = imagecreatetruecolor($newWidth, $newHeight);
-
-        imagealphablending($resized, false);
-        imagesavealpha($resized, true);
-        $transparent = imagecolorallocatealpha($resized, 0, 0, 0, 127);
-        imagefill($resized, 0, 0, $transparent);
-
-        imagecopyresampled($resized, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-        imagedestroy($image);
-
-        return $resized;
     }
 }

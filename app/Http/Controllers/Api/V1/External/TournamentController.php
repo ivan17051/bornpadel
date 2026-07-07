@@ -116,6 +116,7 @@ class TournamentController extends Controller
                 'label' => 'Juara ' . $row->peringkat,
                 'id_pemain' => $row->id_pemain,
                 'nama' => optional($row->pemain)->nama,
+                'foto_url' => optional($row->pemain)->foto_url,
                 'total_poin' => (int) $row->total_poin,
             ];
         })->values();

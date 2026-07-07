@@ -29,6 +29,16 @@ class RegisterPlayerRequest extends FormRequest
             'tgl_lahir' => ['nullable', 'date', 'before:today'],
             'rating' => ['nullable', 'numeric', 'min:0', 'max:10'],
             'status' => ['nullable', 'in:pending,approved,rejected,unpaid,paid'],
+            'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
+        ];
+    }
+
+    public function messages()
+    {
+        return [
+            'foto.image' => 'Foto harus berupa gambar.',
+            'foto.mimes' => 'Foto harus berformat JPG, PNG, atau WebP.',
+            'foto.max' => 'Ukuran foto maksimal 5 MB.',
         ];
     }
 }

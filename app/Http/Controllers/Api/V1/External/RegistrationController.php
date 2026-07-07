@@ -38,7 +38,7 @@ class RegistrationController extends Controller
             $pemain = $this->registrationService->register(
                 $turnamen,
                 $data,
-                null,
+                $request->file('foto'),
                 null
             );
         } catch (RuntimeException $e) {
@@ -66,6 +66,7 @@ class RegistrationController extends Controller
                 'pemain_id' => $pemain->id,
                 'nama' => $pemain->nama,
                 'no_hp' => $pemain->no_hp,
+                'foto_url' => $pemain->foto_url,
                 'status' => optional($pemain->pesertaForTurnamen($turnamen))->status,
             ],
         ], 201);
@@ -104,6 +105,7 @@ class RegistrationController extends Controller
                     'id' => $pemain->id,
                     'nama' => $pemain->nama,
                     'gender' => $pemain->gender,
+                    'foto_url' => $pemain->foto_url,
                 ],
                 'registration' => $peserta ? [
                     'peserta_id' => $peserta->id,
