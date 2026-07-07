@@ -23,6 +23,7 @@ Route::prefix('guest')->group(function () {
 // External integration API (API key / Bearer token)
 Route::prefix('v1/external')->middleware('external.api')->group(function () {
     Route::post('/register-player', [ExternalRegistrationController::class, 'registerPlayer']);
+    Route::get('/registration-check', [ExternalRegistrationController::class, 'checkRegistration']);
     Route::post('/payment-receipt', [ExternalRegistrationController::class, 'uploadPaymentReceipt']);
     Route::get('/tournaments/mahjong', [ExternalTournamentController::class, 'mahjongList']);
     Route::get('/tournaments/{id}/group-standings', [ExternalTournamentController::class, 'groupStandings']);

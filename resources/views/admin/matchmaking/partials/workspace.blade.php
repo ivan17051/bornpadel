@@ -7,6 +7,7 @@
         $groupingUnitCount = $groupingUnitCount ?? $approvedCount;
         $pairingSummary = $pairingSummary ?? null;
         $isDoubleOpen = $turnamen->isDouble() && $turnamen->isRegistrationOpen();
+        $bracketUrl = $bracketUrl ?? route('admin.bracket.index', ['id_turnamen' => $turnamen->id]);
     @endphp
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -118,15 +119,12 @@
                             <div class="card-body py-3">
                                 <h6 class="text-muted text-uppercase small mb-2">Pemasangan Otomatis</h6>
                                 <ul class="small text-muted mb-0 ps-3">
-                                    <li>{{ $pairingSummary['approved_individuals'] ?? 0 }} pemain individual approved</li>
+                                    <li>{{ $pairingSummary['approved_individuals'] ?? 0 }} pemain approved</li>
                                     <li>{{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan akan dibuat saat pendaftaran ditutup</li>
                                     @if ($pairingSummary['odd_player_warning'] ?? false)
-                                        <li class="text-danger">Perbaiki jumlah ganjil sebelum menutup pendaftaran</li>
+                                        <li class="text-danger">Jumlah pemain ganjil, mohon perbaiki data sebelum menutup pendaftaran</li>
                                     @endif
                                 </ul>
-                                <a href="{{ route('admin.pemain.index', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-sm btn-outline-secondary mt-3">
-                                    <i class="bi bi-people me-1"></i> Kelola Pemain
-                                </a>
                             </div>
                         </div>
                     @elseif ($turnamen->isDouble() && ($pairingSummary['is_paired'] ?? false))
@@ -180,7 +178,7 @@
                                 class="btn btn-success {{ $canEndGroupStage ? '' : 'd-none' }}"
                                 data-url="{{ route('admin.matchmaking.end-group-stage') }}"
                                 data-turnamen="{{ $turnamen->id }}"
-                                data-bracket-url="{{ route('admin.bracket.index', ['id_turnamen' => $turnamen->id]) }}"
+                                data-bracket-url="{{ $bracketUrl }}"
                                 data-jenis="{{ $turnamen->jenis }}"
                                 data-mahjong="{{ $isMahjong ? '1' : '0' }}"
                                 data-max-lolos="{{ $activePlayerCount ?? $approvedCount }}"
@@ -197,7 +195,7 @@
                             </button>
                         @endif
                         @if ($hasKnockoutBracket)
-                            <a href="{{ route('admin.bracket.index', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-outline-success">
+                            <a href="{{ $bracketUrl }}" class="btn btn-outline-success">
                                 <i class="bi bi-diagram-2 me-1"></i> Lihat Bracket
                             </a>
                         @endif

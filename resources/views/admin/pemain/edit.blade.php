@@ -3,11 +3,30 @@
 @section('title', 'Edit Pemain')
 @section('page-title', 'Edit Pemain')
 
+@php
+    $returnQuery = $returnQuery ?? ['from' => 'index'];
+    $returnFrom = $returnQuery['from'] ?? 'index';
+    $returnIndexParams = collect($returnQuery)->except('from')->all();
+    if ($returnFrom === 'directory') {
+        $returnUrl = route('admin.pemain.directory', $returnIndexParams);
+    } elseif ($returnFrom === 'dashboard') {
+        $returnUrl = route('admin.dashboard');
+    } elseif ($returnFrom === 'turnamen-operasi') {
+        $returnUrl = route('admin.turnamen-operasi.index', $returnIndexParams);
+    } else {
+        $returnUrl = route('admin.pemain.index', $returnIndexParams);
+    }
+@endphp
+
 @section('breadcrumb')
-    @if (request('from') === 'directory')
-        <li class="breadcrumb-item"><a href="{{ route('admin.pemain.directory', request()->only(['search', 'gender', 'registration', 'page'])) }}">Database Pemain</a></li>
+    @if ($returnFrom === 'directory')
+        <li class="breadcrumb-item"><a href="{{ route('admin.pemain.directory', collect($returnQuery)->except('from')->all()) }}">Database Pemain</a></li>
+    @elseif ($returnFrom === 'dashboard')
+        <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">Dashboard</a></li>
+    @elseif ($returnFrom === 'turnamen-operasi')
+        <li class="breadcrumb-item"><a href="{{ route('admin.turnamen-operasi.index', collect($returnQuery)->except('from')->all()) }}">Kelola Turnamen</a></li>
     @else
-        <li class="breadcrumb-item"><a href="{{ route('admin.pemain.index', request()->only('id_turnamen')) }}">Pemain</a></li>
+        <li class="breadcrumb-item"><a href="{{ route('admin.pemain.index', collect($returnQuery)->except('from')->all()) }}">Pemain</a></li>
     @endif
     <li class="breadcrumb-item active">Edit</li>
 @endsection
@@ -93,14 +112,9 @@
                       enctype="multipart/form-data">
                     @csrf
                     @method('PATCH')
-                    @if (request('from') === 'directory')
-                        <input type="hidden" name="from" value="directory">
-                        @foreach (request()->only(['search', 'gender', 'registration', 'page']) as $key => $value)
-                            <input type="hidden" name="{{ $key }}" value="{{ $value }}">
-                        @endforeach
-                    @elseif (request('id_turnamen'))
-                        <input type="hidden" name="id_turnamen" value="{{ request('id_turnamen') }}">
-                    @endif
+                    @foreach ($returnQuery as $key => $value)
+                        <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                    @endforeach
                     <x-pemain-photo-input
                         input-id="edit-foto"
                         preview-id="edit-foto-preview"
@@ -113,11 +127,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-lg me-1"></i> Simpan Perubahan
                         </button>
-                        @if (request('from') === 'directory')
-                            <a href="{{ route('admin.pemain.directory', request()->only(['search', 'gender', 'registration', 'page'])) }}" class="btn btn-outline-secondary">Batal</a>
-                        @else
-                            <a href="{{ route('admin.pemain.index', request()->only('id_turnamen')) }}" class="btn btn-outline-secondary">Batal</a>
-                        @endif
+                        <a href="{{ $returnUrl }}" class="btn btn-outline-secondary">Batal</a>
                     </div>
                 </form>
             </div>

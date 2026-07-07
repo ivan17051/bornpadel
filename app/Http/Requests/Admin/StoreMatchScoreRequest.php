@@ -31,8 +31,8 @@ class StoreMatchScoreRequest extends FormRequest
     {
         return [
             'sets.required' => 'Skor set wajib diisi.',
-            'sets.min' => 'Minimal 2 set diperlukan untuk menyelesaikan pertandingan (Best of 3).',
-            'sets.max' => 'Maksimal 3 set diperbolehkan.',
+            'sets.min' => 'Minimal 1 set diperlukan untuk menyelesaikan pertandingan.',
+            'sets.max' => 'Maksimal ' . MatchScoringService::MAX_SETS . ' set diperbolehkan.',
             'sets.*.skor_pemain1.required' => 'Skor pemain 1 wajib diisi.',
             'sets.*.skor_pemain2.required' => 'Skor pemain 2 wajib diisi.',
         ];

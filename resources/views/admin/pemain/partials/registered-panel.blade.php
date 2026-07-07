@@ -129,6 +129,7 @@
                                         'turnamen' => $turnamen,
                                         'registrationStatus' => $entry->status,
                                         'turnamenOngoing' => $turnamenOngoing,
+                                        'pemainEditFrom' => $pemainEditFrom ?? 'index',
                                     ])
                                 </td>
                             </tr>
@@ -177,6 +178,7 @@
                                         'turnamen' => $turnamen,
                                         'registrationStatus' => $registrationStatus,
                                         'turnamenOngoing' => $turnamenOngoing,
+                                        'pemainEditFrom' => $pemainEditFrom ?? 'index',
                                     ])
                                 </td>
                             </tr>

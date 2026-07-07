@@ -388,7 +388,7 @@ const BornPadelAdmin = (function () {
                         if (isMahjong) {
                             reloadPage();
                         } else {
-                            goTo(data.redirect_url || endGroupBtn.dataset.bracketUrl);
+                            goTo(endGroupBtn.dataset.bracketUrl || data.redirect_url);
                         }
                     } catch (e) {
                         showToast(e.message, 'error');
@@ -578,8 +578,8 @@ const BornPadelAdmin = (function () {
         const saveBtn = document.getElementById('btn-save-score');
         const metaEl = document.getElementById('score-modal-meta');
         const readonlyEl = document.getElementById('score-modal-readonly');
-        const MIN_SETS = 2;
-        const MAX_SETS = 3;
+        const MIN_SETS = 1;
+        const MAX_SETS = 7;
         let storeUrl = null;
         let isReadonly = false;
 
@@ -758,7 +758,7 @@ const BornPadelAdmin = (function () {
             });
 
             if (sets.length < MIN_SETS) {
-                errorEl.textContent = `Minimal ${MIN_SETS} set harus diisi.`;
+                errorEl.textContent = 'Minimal 1 set harus diisi.';
                 errorEl.classList.remove('d-none');
                 return;
             }

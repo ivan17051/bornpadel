@@ -22,7 +22,7 @@
                     </div>
                     <div class="alert alert-info small mt-3 mb-0">
                         <i class="bi bi-info-circle me-1"></i>
-                        Best of 3 — pemenang harus menang 2 set. Tambah set hingga maksimal 3 jika diperlukan.
+                        Pemenang ditentukan dari jumlah set yang dimenangkan. Tambah atau hapus set sesuai kebutuhan.
                     </div>
                     <div id="score-form-error" class="alert alert-danger small mt-2 d-none"></div>
                 </form>

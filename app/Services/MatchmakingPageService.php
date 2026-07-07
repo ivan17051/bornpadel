@@ -37,6 +37,16 @@ class MatchmakingPageService
             ? $this->matchmakingService->countApprovedPlayers($turnamen)
             : 0;
 
+        $pairingSummary = $turnamen
+            ? $this->matchmakingService->getDoublePairingSummary($turnamen)
+            : null;
+
+        $groupingUnitCount = $turnamen && $turnamen->isDouble()
+            ? ($turnamen->isRegistrationOpen()
+                ? (int) ($pairingSummary['pairs_preview'] ?? 0)
+                : $this->matchmakingService->countApprovedPairs($turnamen))
+            : $approvedCount;
+
         $grup = collect();
         $groupSplitPreview = null;
         $isMahjong = $turnamen ? $turnamen->isMahjong() : false;
@@ -74,7 +84,7 @@ class MatchmakingPageService
                     : null;
             } else {
                 $groupSplitPreview = $this->matchmakingService->previewGroupSplit(
-                    $approvedCount,
+                    $groupingUnitCount,
                     $this->matchmakingService->getDefaultMinPerGroup(),
                     $this->matchmakingService->getDefaultMaxPerGroup()
                 );
@@ -91,6 +101,8 @@ class MatchmakingPageService
         return [
             'turnamen' => $turnamen,
             'approvedCount' => $approvedCount,
+            'groupingUnitCount' => $groupingUnitCount,
+            'pairingSummary' => $pairingSummary,
             'isMahjong' => $isMahjong,
             'unitLabel' => $turnamen ? $this->matchmakingService->unitLabel($turnamen) : 'pemain',
             'grup' => $grup,

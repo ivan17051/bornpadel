@@ -195,7 +195,7 @@
                                             </td>
                                             <td class="text-end">
                                                 @if ($peserta->pemain1)
-                                                    <a href="{{ route('admin.pemain.edit', ['pemain' => $peserta->pemain1, 'from' => 'index', 'id_turnamen' => $peserta->id_turnamen]) }}"
+                                                    <a href="{{ route('admin.pemain.edit', ['pemain' => $peserta->pemain1, 'from' => 'dashboard', 'id_turnamen' => $peserta->id_turnamen]) }}"
                                                        class="btn btn-sm btn-outline-secondary">
                                                         Review
                                                     </a>

@@ -424,7 +424,7 @@ class PemainController extends Controller
         return $this->storePesertaSlot($request, $peserta, 2);
     }
 
-    public function edit(Pemain $pemain)
+    public function edit(Request $request, Pemain $pemain)
     {
         $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
 
@@ -432,9 +432,12 @@ class PemainController extends Controller
             ->with('turnamen', 'pemain1', 'pemain2')
             ->get();
 
+        $returnQuery = $this->pemainEditReturnQuery($request);
+
         return view('admin.pemain.edit', compact(
             'pemain',
-            'turnamenPesertaEntries'
+            'turnamenPesertaEntries',
+            'returnQuery'
         ));
     }
 
@@ -648,12 +651,59 @@ class PemainController extends Controller
             ->with('success', 'Profil pemain berhasil dihapus.');
     }
 
+    protected function pemainEditReturnQuery(Request $request): array
+    {
+        $from = $request->input('from', 'index');
+
+        if ($from === 'directory') {
+            return array_filter(array_merge(
+                ['from' => 'directory'],
+                $request->only(['search', 'gender', 'registration', 'page'])
+            ), function ($value) {
+                return $value !== null && $value !== '';
+            });
+        }
+
+        if ($from === 'dashboard') {
+            return ['from' => 'dashboard'];
+        }
+
+        if ($from === 'turnamen-operasi') {
+            return array_filter(array_merge(
+                ['from' => 'turnamen-operasi', 'tab' => 'pemain'],
+                $request->only(['id_turnamen', 'search', 'status'])
+            ), function ($value) {
+                return $value !== null && $value !== '';
+            });
+        }
+
+        return array_filter(array_merge(
+            ['from' => 'index'],
+            $request->only(['id_turnamen', 'search', 'status'])
+        ), function ($value) {
+            return $value !== null && $value !== '';
+        });
+    }
+
     protected function pemainReturnUrl(Request $request): string
     {
-        if ($request->input('from') === 'directory') {
+        $from = $request->input('from', 'index');
+
+        if ($from === 'directory') {
             return route('admin.pemain.directory', $request->only(['search', 'gender', 'registration', 'page']));
         }
 
-        return route('admin.pemain.index', $request->only('id_turnamen'));
+        if ($from === 'dashboard') {
+            return route('admin.dashboard');
+        }
+
+        if ($from === 'turnamen-operasi') {
+            return route('admin.turnamen-operasi.index', array_merge(
+                ['tab' => 'pemain'],
+                $request->only(['id_turnamen', 'search', 'status'])
+            ));
+        }
+
+        return route('admin.pemain.index', $request->only(['id_turnamen', 'search', 'status']));
     }
 }

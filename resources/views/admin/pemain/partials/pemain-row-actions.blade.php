@@ -1,4 +1,17 @@
 @php
+    $pemainEditFrom = $pemainEditFrom ?? 'index';
+    $pemainEditParams = array_filter(array_merge(
+        ['from' => $pemainEditFrom],
+        request()->only(['id_turnamen', 'search', 'status']),
+        $pemainEditFrom === 'turnamen-operasi' ? ['tab' => 'pemain'] : []
+    ), function ($value) {
+        return $value !== null && $value !== '';
+    });
+
+    if (empty($pemainEditParams['id_turnamen']) && ! empty($turnamen)) {
+        $pemainEditParams['id_turnamen'] = $turnamen->id;
+    }
+
     $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
     $hasReject = $turnamen && ! $turnamenOngoing && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'approved'], true);
     $hasDelete = $turnamen && ! $turnamenOngoing;
@@ -15,7 +28,7 @@
     <ul class="dropdown-menu dropdown-menu-end">
         <li>
             <a class="dropdown-item"
-               href="{{ route('admin.pemain.edit', array_merge([$pemain], request()->only('id_turnamen'))) }}">
+               href="{{ route('admin.pemain.edit', array_merge(['pemain' => $pemain], $pemainEditParams)) }}">
                 <i class="bi bi-pencil me-2"></i> Edit
             </a>
         </li>

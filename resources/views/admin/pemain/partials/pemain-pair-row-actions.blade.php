@@ -1,4 +1,17 @@
 @php
+    $pemainEditFrom = $pemainEditFrom ?? 'index';
+    $pemainEditParams = array_filter(array_merge(
+        ['from' => $pemainEditFrom],
+        request()->only(['id_turnamen', 'search', 'status']),
+        $pemainEditFrom === 'turnamen-operasi' ? ['tab' => 'pemain'] : []
+    ), function ($value) {
+        return $value !== null && $value !== '';
+    });
+
+    if (empty($pemainEditParams['id_turnamen']) && ! empty($turnamen)) {
+        $pemainEditParams['id_turnamen'] = $turnamen->id;
+    }
+
     $representativePemain = $pemain1 ?? $pemain2;
     $missingSlot = ! $pemain1 ? 1 : (! $pemain2 ? 2 : null);
     $hasPairApprove = $turnamen && $representativePemain && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
@@ -19,7 +32,7 @@
         @if ($pemain1)
             <li>
                 <a class="dropdown-item"
-                   href="{{ route('admin.pemain.edit', array_merge([$pemain1], request()->only('id_turnamen'))) }}">
+                   href="{{ route('admin.pemain.edit', array_merge(['pemain' => $pemain1], $pemainEditParams)) }}">
                     <i class="bi bi-pencil me-2"></i> Edit {{ $pemain1->nama }}
                 </a>
             </li>
@@ -28,7 +41,7 @@
         @if ($pemain2)
             <li>
                 <a class="dropdown-item"
-                   href="{{ route('admin.pemain.edit', array_merge([$pemain2], request()->only('id_turnamen'))) }}">
+                   href="{{ route('admin.pemain.edit', array_merge(['pemain' => $pemain2], $pemainEditParams)) }}">
                     <i class="bi bi-pencil me-2"></i> Edit {{ $pemain2->nama }}
                 </a>
             </li>

@@ -54,9 +54,15 @@
             @include('admin.pemain.partials.registered-panel', [
                 'filterRoute' => $filterRoute,
                 'preserveTab' => 'pemain',
+                'pemainEditFrom' => 'turnamen-operasi',
             ])
         @elseif ($activeTab === 'matchmaking')
-            @include('admin.matchmaking.partials.workspace')
+            @include('admin.matchmaking.partials.workspace', [
+                'bracketUrl' => route('admin.turnamen-operasi.index', [
+                    'id_turnamen' => $turnamen->id,
+                    'tab' => 'bracket',
+                ]),
+            ])
         @elseif ($activeTab === 'klasemen')
             @include('admin.standings.partials.standings-panel')
         @elseif ($activeTab === 'bracket')

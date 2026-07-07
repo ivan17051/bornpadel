@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\External;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\External\CheckRegistrationRequest;
 use App\Http\Requests\Api\External\RegisterPlayerRequest;
 use App\Http\Requests\Api\External\UploadPaymentReceiptRequest;
 use App\Models\Pemain;
@@ -68,6 +69,52 @@ class RegistrationController extends Controller
                 'status' => optional($pemain->pesertaForTurnamen($turnamen))->status,
             ],
         ], 201);
+    }
+
+    public function checkRegistration(CheckRegistrationRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+        $turnamen = Turnamen::findOrFail($data['id_turnamen']);
+        $pemain = $this->registrationService->findPemainByPhone($data['no_hp']);
+
+        if (! $pemain) {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'registered' => false,
+                    'turnamen_id' => $turnamen->id,
+                    'no_hp' => $data['no_hp'],
+                    'pemain_exists' => false,
+                    'pemain' => null,
+                    'registration' => null,
+                ],
+            ]);
+        }
+
+        $peserta = $pemain->pesertaForTurnamen($turnamen);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'registered' => $peserta !== null,
+                'turnamen_id' => $turnamen->id,
+                'no_hp' => $pemain->no_hp,
+                'pemain_exists' => true,
+                'pemain' => [
+                    'id' => $pemain->id,
+                    'nama' => $pemain->nama,
+                    'gender' => $pemain->gender,
+                ],
+                'registration' => $peserta ? [
+                    'peserta_id' => $peserta->id,
+                    'status' => $peserta->status,
+                    'bukti_bayar_url' => $peserta->bukti_bayar_url,
+                    'paired_at' => $peserta->paired_at
+                        ? $peserta->paired_at->toDateTimeString()
+                        : null,
+                ] : null,
+            ],
+        ]);
     }
 
     public function uploadPaymentReceipt(UploadPaymentReceiptRequest $request): JsonResponse

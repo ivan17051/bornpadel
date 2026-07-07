@@ -10,9 +10,8 @@ use RuntimeException;
 
 class MatchScoringService
 {
-    public const SETS_TO_WIN = 2;
-    public const MIN_SETS = 2;
-    public const MAX_SETS = 3;
+    public const MIN_SETS = 1;
+    public const MAX_SETS = 7;
 
     protected $knockoutBracketService;
     protected $pointRewardService;
@@ -85,6 +84,10 @@ class MatchScoringService
 
     public function calculateMatchResult(array $sets, int $pemain1Id, int $pemain2Id): array
     {
+        if ($sets === []) {
+            throw new RuntimeException('Minimal 1 set harus diisi.');
+        }
+
         $setsWonP1 = 0;
         $setsWonP2 = 0;
         $gamesP1 = 0;
@@ -108,17 +111,11 @@ class MatchScoringService
             }
         }
 
-        $setsToWin = self::SETS_TO_WIN;
-
-        if ($setsWonP1 < $setsToWin && $setsWonP2 < $setsToWin) {
-            throw new RuntimeException('Pemenang harus memenangkan minimal 2 set (Best of 3).');
+        if ($setsWonP1 === $setsWonP2) {
+            throw new RuntimeException('Pertandingan tidak boleh seri. Salah satu pemain harus memenangkan lebih banyak set.');
         }
 
-        if ($setsWonP1 >= $setsToWin && $setsWonP2 >= $setsToWin) {
-            throw new RuntimeException('Skor tidak valid. Hanya satu pihak yang boleh memenangkan 2 set.');
-        }
-
-        $p1Won = $setsWonP1 >= $setsToWin;
+        $p1Won = $setsWonP1 > $setsWonP2;
 
         return [
             'winner_id' => $p1Won ? $pemain1Id : $pemain2Id,
