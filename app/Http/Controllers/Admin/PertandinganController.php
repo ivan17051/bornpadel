@@ -77,7 +77,7 @@ class PertandinganController extends Controller
             ? Grup::where('id_turnamen', $turnamen->id)->orderBy('nama')->get()
             : collect();
 
-        $rondeOptions = ['Fase Grup', 'Perempatfinal', 'Semifinal', 'Final'];
+        $rondeOptions = ['Fase Grup', 'Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final', 'Perebutan Juara 3'];
 
         return view('admin.pertandingan.index', compact(
             'pertandingan',

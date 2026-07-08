@@ -20,18 +20,14 @@ class StandingsController extends Controller
 
         $mahjongStandings = $turnamen && $turnamen->isMahjong()
             ? $leaderboardService->getMahjongStandingsByBabak($turnamen->id)
-            : ['sections' => collect(), 'overall' => collect(), 'recap' => collect(), 'babak_numbers' => collect()];
+            : ['sections' => collect(), 'recap' => collect(), 'babak_numbers' => collect()];
         $standings = $turnamen && $turnamen->isMahjong()
             ? $mahjongStandings['sections']
             : $leaderboardService->getStandings(optional($turnamen)->id);
-        $mahjongOverall = $turnamen && $turnamen->isMahjong()
-            ? $mahjongStandings['overall']
-            : collect();
 
         return view('guest.standings', compact(
             'turnamen',
-            'standings',
-            'mahjongOverall'
+            'standings'
         ));
     }
 }

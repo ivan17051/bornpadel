@@ -47,7 +47,7 @@
                     Masukkan nomor HP / WhatsApp Anda terlebih dahulu. Jika sudah pernah terdaftar,
                     data Anda akan ditampilkan untuk diperiksa dan diperbarui.
                     @if ($turnamen->isDouble())
-                        <span class="d-block mt-2">Turnamen double: setiap peserta mendaftar individu; pasangan dibuat otomatis setelah pendaftaran ditutup.</span>
+                        <span class="d-block mt-2">Turnamen double: pasangan dibuat otomatis setelah pendaftaran ditutup.</span>
                     @endif
                 </p>
 

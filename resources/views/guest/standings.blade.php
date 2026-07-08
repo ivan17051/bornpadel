@@ -16,7 +16,6 @@
             <x-mahjong-leaderboard
                 :standings="$standings"
                 :turnamen="$turnamen"
-                :overall="$mahjongOverall ?? collect()"
                 :refreshable="true"
             />
         @else

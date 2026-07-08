@@ -131,7 +131,6 @@ class LeaderboardService
         if (! $turnamen || ! $turnamen->isMahjong()) {
             return [
                 'sections' => collect(),
-                'overall' => collect(),
                 'recap' => collect(),
                 'babak_numbers' => collect(),
             ];
@@ -140,7 +139,7 @@ class LeaderboardService
         $babakNumbers = Grup::query()
             ->where('id_turnamen', $turnamen->id)
             ->distinct()
-            ->orderBy('babak')
+            ->orderByDesc('babak')
             ->pluck('babak');
 
         $sections = $babakNumbers->map(function ($babak) use ($turnamen) {
@@ -157,13 +156,10 @@ class LeaderboardService
                 'groups' => collect(),
                 'recap' => $table['rows'],
             ];
-        })->values();
-
-        $overall = $this->getMahjongGlobalStandings($turnamen->id);
+        })->sortByDesc('babak')->values();
 
         return [
             'sections' => $sections,
-            'overall' => $overall,
             'recap' => $sections->map(function (array $section) {
                 return [
                     'babak' => $section['babak'],

@@ -10,23 +10,43 @@ class AdminUserSeeder extends Seeder
 {
     public function run()
     {
-        $user = User::where('username', 'admin')
-            ->orWhere('email', 'admin@bornpadel.com')
-            ->first();
-
-        $attributes = [
-            'name' => 'Admin Born Padel',
-            'username' => 'admin',
-            'email' => 'admin@bornpadel.com',
-            'password' => Hash::make('password'),
-            'role' => 'admin',
-            'id_turnamen' => null,
+        $accounts = [
+            [
+                'name' => 'Admin Born Padel',
+                'username' => 'admin',
+                'email' => 'admin@bornpadel.com',
+                'role' => 'admin',
+                'id_turnamen' => null,
+            ],
+            [
+                'name' => 'Panitia Born Padel',
+                'username' => 'panitia',
+                'email' => 'panitia@bornpadel.com',
+                'role' => 'panitia',
+                'id_turnamen' => null,
+            ],
         ];
 
-        if ($user) {
-            $user->update($attributes);
-        } else {
-            User::create($attributes);
+        $password = Hash::make('12345678');
+
+        foreach ($accounts as $account) {
+            $user = User::where('username', $account['username'])
+                ->orWhere('email', $account['email'])
+                ->first();
+
+            $attributes = array_merge($account, [
+                'password' => $password,
+            ]);
+
+            if ($user) {
+                $user->update($attributes);
+            } else {
+                User::create($attributes);
+            }
+        }
+
+        if ($this->command) {
+            $this->command->info('Users seeded: admin / panitia (password: 12345678)');
         }
     }
 }

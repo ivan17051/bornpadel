@@ -27,6 +27,6 @@
 
 @push('scripts')
 @if ($turnamen)
-<script src="{{ asset('public/js/bracket.js') }}"></script>
+<script src="{{ asset('public/js/bracket.js') }}?v={{ @filemtime(base_path('public/js/bracket.js')) }}"></script>
 @endif
 @endpush

@@ -30,7 +30,19 @@ class TournamentCompletionService
 
         $final = $this->getFinalMatch($turnamen);
 
-        return $final && $final->status === 'completed';
+        if (! $final || $final->status !== 'completed') {
+            return false;
+        }
+
+        // If a third-place playoff has both participants set, it must be played
+        // before the tournament can be finalised.
+        $thirdPlace = $this->getThirdPlaceMatch($turnamen);
+
+        if ($thirdPlace && $thirdPlace->isReadyForScoring() && $thirdPlace->status !== 'completed') {
+            return false;
+        }
+
+        return true;
     }
 
     public function complete(Turnamen $turnamen): array
@@ -83,6 +95,15 @@ class TournamentCompletionService
             ->first();
     }
 
+    protected function getThirdPlaceMatch(Turnamen $turnamen): ?Pertandingan
+    {
+        return Pertandingan::where('id_turnamen', $turnamen->id)
+            ->whereNull('id_grup')
+            ->where('nama_ronde', 'Perebutan Juara 3')
+            ->orderByDesc('id')
+            ->first();
+    }
+
     /**
      * @return array<int, int[]>
      */
@@ -126,6 +147,17 @@ class TournamentCompletionService
 
     protected function resolveThirdPlaceIds(Turnamen $turnamen, Pertandingan $final, array $secondPlaceIds): array
     {
+        // Prefer the explicit third-place playoff winner when it has been played.
+        $thirdPlace = $this->getThirdPlaceMatch($turnamen);
+
+        if ($thirdPlace && $thirdPlace->status === 'completed') {
+            $winnerIds = $this->pointRewardService->resolveWinnerPemainIds($thirdPlace);
+
+            if ($winnerIds !== []) {
+                return $winnerIds;
+            }
+        }
+
         $semifinals = Pertandingan::where('id_turnamen', $turnamen->id)
             ->whereNull('id_grup')
             ->where('nama_ronde', 'Semifinal')

@@ -92,6 +92,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament'])->name('matchmaking.complete-tournament');
 
         Route::get('/bracket', [AdminBracketController::class, 'index'])->name('bracket.index');
+        Route::patch('/bracket/swap', [AdminBracketController::class, 'swap'])->name('bracket.swap');
         Route::get('/pertandingan', [PertandinganController::class, 'index'])->name('pertandingan.index');
         Route::get('/pertandingan/{pertandingan}', [PertandinganController::class, 'show'])->name('pertandingan.show');
         Route::post('/pertandingan/{pertandingan}/score', [PertandinganController::class, 'storeScore'])->name('pertandingan.score');

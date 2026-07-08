@@ -6,6 +6,8 @@ namespace App\Services;
 
 
 
+use App\Models\Pemain;
+
 use App\Models\Pertandingan;
 
 use App\Models\Turnamen;
@@ -220,6 +222,8 @@ class KnockoutBracketService
 
         $this->linkRounds($roundMatches, $rounds);
 
+        $this->createThirdPlaceMatch($turnamen, $roundMatches);
+
         $byeCount = $this->assignFirstRoundSeeding($roundMatches, $rounds, $qualifiers, $bracketSize);
 
 
@@ -386,6 +390,38 @@ class KnockoutBracketService
 
 
 
+    /**
+     * Create the third-place playoff and wire both semifinal matches so their
+     * losers advance into it. Only relevant when a Semifinal round exists.
+     */
+    protected function createThirdPlaceMatch(Turnamen $turnamen, array $roundMatches): void
+    {
+        if (! isset($roundMatches['Semifinal'])) {
+            return;
+        }
+
+        $semifinals = $roundMatches['Semifinal'];
+
+        if (count($semifinals) < 2) {
+            return;
+        }
+
+        $thirdPlace = Pertandingan::create([
+            'id_turnamen' => $turnamen->id,
+            'id_grup' => null,
+            'nama_ronde' => 'Perebutan Juara 3',
+            'id_pemain1' => null,
+            'id_pemain2' => null,
+            'status' => 'scheduled',
+        ]);
+
+        foreach ($semifinals as $semifinal) {
+            $semifinal->update(['id_next_pertandingan_kalah' => $thirdPlace->id]);
+        }
+    }
+
+
+
     protected function assignFirstRoundSeeding(
 
         array $roundMatches,
@@ -522,11 +558,54 @@ class KnockoutBracketService
 
 
 
+    /**
+     * Return knockout matches grouped by round (as Eloquent models) in bracket
+     * order, ready for score-input tables.
+     *
+     * @return \Illuminate\Support\Collection<int, array{nama_ronde: string, matches: \Illuminate\Support\Collection}>
+     */
+    public function getKnockoutRoundsWithMatches(Turnamen $turnamen): Collection
+    {
+        $roundOrder = ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final', 'Perebutan Juara 3'];
+
+        $matchesByRound = Pertandingan::where('id_turnamen', $turnamen->id)
+            ->whereNull('id_grup')
+            ->with([
+                'peserta1.pemain1',
+                'peserta1.pemain2',
+                'peserta2.pemain1',
+                'peserta2.pemain2',
+                'pemain1',
+                'pemain2',
+                'skor',
+                'pemenang',
+                'pesertaPemenang.pemain1',
+                'pesertaPemenang.pemain2',
+            ])
+            ->orderBy('id')
+            ->get()
+            ->groupBy('nama_ronde');
+
+        return collect($roundOrder)
+            ->filter(fn ($round) => $matchesByRound->has($round))
+            ->map(fn ($round) => [
+                'nama_ronde' => $round,
+                'matches' => $matchesByRound->get($round),
+            ])
+            ->values();
+    }
+
+
+
     public function getBracketTree(Turnamen $turnamen): array
 
     {
 
+        // The third-place playoff is not rendered as its own column; it is
+        // appended into the Final column (below the final match) further down.
         $roundOrder = ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final'];
+
+        $relations = ['pemain1', 'pemain2', 'peserta1.pemain1', 'peserta1.pemain2', 'peserta2.pemain1', 'peserta2.pemain2', 'pemenang', 'pesertaPemenang.pemain1', 'pesertaPemenang.pemain2', 'skor'];
 
         $result = [];
 
@@ -540,7 +619,7 @@ class KnockoutBracketService
 
                 ->where('nama_ronde', $round)
 
-                ->with(['pemain1', 'pemain2', 'peserta1.pemain1', 'peserta1.pemain2', 'peserta2.pemain1', 'peserta2.pemain2', 'pemenang', 'pesertaPemenang.pemain1', 'pesertaPemenang.pemain2', 'skor'])
+                ->with($relations)
 
                 ->orderBy('id')
 
@@ -572,6 +651,46 @@ class KnockoutBracketService
 
 
 
+        $thirdPlaceMatches = Pertandingan::where('id_turnamen', $turnamen->id)
+
+            ->whereNull('id_grup')
+
+            ->where('nama_ronde', 'Perebutan Juara 3')
+
+            ->with($relations)
+
+            ->orderBy('id')
+
+            ->get();
+
+
+
+        if ($thirdPlaceMatches->isNotEmpty()) {
+
+            $formatted = $thirdPlaceMatches->map(function (Pertandingan $m) {
+
+                return $this->formatMatchForBracket($m);
+
+            })->values()->all();
+
+
+
+            foreach ($result as $index => $round) {
+
+                if ($round['nama_ronde'] === 'Final') {
+
+                    $result[$index]['matches'] = array_merge($result[$index]['matches'], $formatted);
+
+                    break;
+
+                }
+
+            }
+
+        }
+
+
+
         return $result;
 
     }
@@ -596,6 +715,11 @@ class KnockoutBracketService
 
 
 
+        $side1Players = $this->formatSidePlayers($m, 1);
+        $side2Players = $this->formatSidePlayers($m, 2);
+        $winnerSide = $this->resolveWinnerSide($m);
+        $loserSide = $winnerSide === 1 ? 2 : ($winnerSide === 2 ? 1 : null);
+
         return [
 
             'id' => $m->id,
@@ -612,6 +736,10 @@ class KnockoutBracketService
 
             'pemain2_ids' => $this->resolveSidePemainIds($m, 2),
 
+            'pemain1_players' => $side1Players,
+
+            'pemain2_players' => $side2Players,
+
             'peserta1_id' => $m->id_peserta1,
 
             'peserta2_id' => $m->id_peserta2,
@@ -622,16 +750,94 @@ class KnockoutBracketService
 
             'peserta_pemenang_id' => $m->id_peserta_pemenang,
 
+            'pemenang_players' => $winnerSide === 1 ? $side1Players : ($winnerSide === 2 ? $side2Players : []),
+
+            'runner_up' => $loserSide === 1 ? $m->side1_label : ($loserSide === 2 ? $m->side2_label : null),
+
+            'runner_up_players' => $loserSide === 1 ? $side1Players : ($loserSide === 2 ? $side2Players : []),
+
             'status' => $m->status,
 
             'is_bye' => $isBye,
+
+            'is_third_place' => $m->nama_ronde === 'Perebutan Juara 3',
+
+            'nama_ronde' => $m->nama_ronde,
 
             'skor' => $skorSummary,
 
             'id_next_pertandingan' => $m->id_next_pertandingan,
 
+            'id_next_pertandingan_kalah' => $m->id_next_pertandingan_kalah,
+
         ];
 
+    }
+
+    /**
+     * @return array<int, array{id: int, nama: string, foto_url: string}>
+     */
+    protected function formatSidePlayers(Pertandingan $match, int $side): array
+    {
+        $ids = $this->resolveSidePemainIds($match, $side);
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $photoService = app(PemainPhotoService::class);
+        $playersById = Pemain::whereIn('id', $ids)->get()->keyBy('id');
+
+        $formatted = [];
+
+        foreach ($ids as $id) {
+            $pemain = $playersById->get($id);
+
+            if (! $pemain) {
+                continue;
+            }
+
+            $formatted[] = [
+                'id' => (int) $pemain->id,
+                'nama' => $pemain->nama,
+                'foto_url' => $photoService->url($pemain->foto),
+            ];
+        }
+
+        return $formatted;
+    }
+
+    protected function resolveWinnerSide(Pertandingan $match): ?int
+    {
+        if (! $match->id_pemenang && ! $match->id_peserta_pemenang) {
+            return null;
+        }
+
+        if ($match->id_peserta_pemenang) {
+            if ((int) $match->id_peserta1 === (int) $match->id_peserta_pemenang) {
+                return 1;
+            }
+
+            if ((int) $match->id_peserta2 === (int) $match->id_peserta_pemenang) {
+                return 2;
+            }
+        }
+
+        if ($match->id_pemenang) {
+            $side1Ids = $this->resolveSidePemainIds($match, 1);
+            $side2Ids = $this->resolveSidePemainIds($match, 2);
+            $winnerId = (int) $match->id_pemenang;
+
+            if (in_array($winnerId, $side1Ids, true)) {
+                return 1;
+            }
+
+            if (in_array($winnerId, $side2Ids, true)) {
+                return 2;
+            }
+        }
+
+        return null;
     }
 
 
@@ -702,6 +908,44 @@ class KnockoutBracketService
 
     }
 
+    /**
+     * Advance the losing side of a knockout match into the third-place playoff.
+     * Uses the dedicated loser link so only semifinal losers are propagated.
+     */
+    public function advanceLoser(Pertandingan $pertandingan, int $loserId, ?int $loserPesertaId = null): void
+    {
+        if ($pertandingan->id_grup || ! $pertandingan->id_next_pertandingan_kalah) {
+            return;
+        }
+
+        $next = Pertandingan::find($pertandingan->id_next_pertandingan_kalah);
+
+        if (! $next) {
+            return;
+        }
+
+        $loserPesertaId = $loserPesertaId ?? $pertandingan->resolvePesertaIdForPemain($loserId);
+
+        $feeders = Pertandingan::where('id_next_pertandingan_kalah', $next->id)
+            ->orderBy('id')
+            ->pluck('id')
+            ->values();
+
+        $slot = $feeders->search($pertandingan->id);
+
+        if ($slot === 0) {
+            $next->update([
+                'id_pemain1' => $loserId,
+                'id_peserta1' => $loserPesertaId,
+            ]);
+        } elseif ($slot === 1) {
+            $next->update([
+                'id_pemain2' => $loserId,
+                'id_peserta2' => $loserPesertaId,
+            ]);
+        }
+    }
+
     protected function resolveSidePemainIds(Pertandingan $match, int $side): array
     {
         $pesertaId = $side === 1 ? $match->id_peserta1 : $match->id_peserta2;
@@ -720,6 +964,174 @@ class KnockoutBracketService
         }
 
         return $pemainId ? [(int) $pemainId] : [];
+    }
+
+    /**
+     * Swap two participants between (or within) first-round knockout matches.
+     *
+     * Only slots on directly-seeded matches (no feeder matches, not yet played)
+     * can be swapped, so downstream matches never desync. Bye participants can
+     * also be swapped; their auto-advanced winner is recomputed afterwards.
+     *
+     * @return array{bracket: array<int, mixed>}
+     */
+    public function swapParticipants(
+        Turnamen $turnamen,
+        int $sourceMatchId,
+        int $sourceSlot,
+        int $targetMatchId,
+        int $targetSlot
+    ): array {
+        if (! in_array($sourceSlot, [1, 2], true) || ! in_array($targetSlot, [1, 2], true)) {
+            throw new RuntimeException('Slot peserta tidak valid.');
+        }
+
+        if ($sourceMatchId === $targetMatchId && $sourceSlot === $targetSlot) {
+            throw new RuntimeException('Pilih peserta yang berbeda untuk ditukar.');
+        }
+
+        return DB::transaction(function () use ($turnamen, $sourceMatchId, $sourceSlot, $targetMatchId, $targetSlot) {
+            $sourceMatch = $this->findSwappableMatch($turnamen, $sourceMatchId);
+            $targetMatch = $sourceMatchId === $targetMatchId
+                ? $sourceMatch
+                : $this->findSwappableMatch($turnamen, $targetMatchId);
+
+            $sourceOccupant = $this->readBracketSlot($sourceMatch, $sourceSlot);
+            $targetOccupant = $this->readBracketSlot($targetMatch, $targetSlot);
+
+            if (! $sourceOccupant['id_pemain'] || ! $targetOccupant['id_pemain']) {
+                throw new RuntimeException('Kedua slot yang dipilih harus berisi peserta.');
+            }
+
+            // Byes have already advanced a winner; block the swap if the next
+            // match has started so we never overwrite a played result.
+            $this->assertByeAdvancementEditable($sourceMatch);
+            $this->assertByeAdvancementEditable($targetMatch);
+
+            if ($sourceMatch->is($targetMatch)) {
+                $payload = [];
+                $this->fillBracketSlot($payload, $sourceSlot, $targetOccupant);
+                $this->fillBracketSlot($payload, $targetSlot, $sourceOccupant);
+                $sourceMatch->update($payload);
+            } else {
+                $sourcePayload = [];
+                $this->fillBracketSlot($sourcePayload, $sourceSlot, $targetOccupant);
+                $sourceMatch->update($sourcePayload);
+
+                $targetPayload = [];
+                $this->fillBracketSlot($targetPayload, $targetSlot, $sourceOccupant);
+                $targetMatch->update($targetPayload);
+            }
+
+            $this->reconcileByeMatch($sourceMatch->fresh());
+
+            if (! $sourceMatch->is($targetMatch)) {
+                $this->reconcileByeMatch($targetMatch->fresh());
+            }
+
+            return [
+                'bracket' => $this->getBracketTree($turnamen),
+            ];
+        });
+    }
+
+    protected function findSwappableMatch(Turnamen $turnamen, int $matchId): Pertandingan
+    {
+        $match = Pertandingan::where('id_turnamen', $turnamen->id)
+            ->whereNull('id_grup')
+            ->where('id', $matchId)
+            ->first();
+
+        if (! $match) {
+            throw new RuntimeException('Pertandingan bracket tidak ditemukan.');
+        }
+
+        // A recorded score means the match was actually played; byes have none.
+        if ($match->skor()->exists()) {
+            throw new RuntimeException('Pertandingan yang sudah dimainkan tidak dapat diubah.');
+        }
+
+        if ($match->feederMatches()->exists()) {
+            throw new RuntimeException('Hanya peserta pada babak pertama yang dapat ditukar.');
+        }
+
+        return $match;
+    }
+
+    protected function isByeMatch(Pertandingan $match): bool
+    {
+        $hasSlot1 = ! is_null($match->id_pemain1);
+        $hasSlot2 = ! is_null($match->id_pemain2);
+
+        return $hasSlot1 xor $hasSlot2;
+    }
+
+    protected function assertByeAdvancementEditable(Pertandingan $match): void
+    {
+        if (! $this->isByeMatch($match) || ! $match->id_next_pertandingan) {
+            return;
+        }
+
+        $next = Pertandingan::find($match->id_next_pertandingan);
+
+        if (! $next) {
+            return;
+        }
+
+        if ($next->status === 'completed' || $next->skor()->exists()) {
+            throw new RuntimeException('Peserta bye tidak dapat ditukar karena pertandingan babak berikutnya sudah dimulai.');
+        }
+    }
+
+    protected function reconcileByeMatch(Pertandingan $match): void
+    {
+        if (! $this->isByeMatch($match)) {
+            return;
+        }
+
+        $winnerOnSlot1 = ! is_null($match->id_pemain1);
+        $winnerPemain = $winnerOnSlot1 ? $match->id_pemain1 : $match->id_pemain2;
+        $winnerPeserta = $winnerOnSlot1 ? $match->id_peserta1 : $match->id_peserta2;
+
+        $match->update([
+            'status' => 'completed',
+            'id_pemenang' => $winnerPemain,
+            'id_peserta_pemenang' => $winnerPeserta,
+        ]);
+
+        $this->advanceWinner(
+            $match->fresh(),
+            (int) $winnerPemain,
+            $winnerPeserta ? (int) $winnerPeserta : null
+        );
+    }
+
+    protected function readBracketSlot(Pertandingan $match, int $slot): array
+    {
+        if ($slot === 1) {
+            return [
+                'id_pemain' => $match->id_pemain1,
+                'id_peserta' => $match->id_peserta1,
+            ];
+        }
+
+        return [
+            'id_pemain' => $match->id_pemain2,
+            'id_peserta' => $match->id_peserta2,
+        ];
+    }
+
+    protected function fillBracketSlot(array &$payload, int $slot, array $occupant): void
+    {
+        if ($slot === 1) {
+            $payload['id_pemain1'] = $occupant['id_pemain'];
+            $payload['id_peserta1'] = $occupant['id_peserta'];
+
+            return;
+        }
+
+        $payload['id_pemain2'] = $occupant['id_pemain'];
+        $payload['id_peserta2'] = $occupant['id_peserta'];
     }
 
 }

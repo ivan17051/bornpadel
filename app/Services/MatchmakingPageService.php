@@ -98,6 +98,14 @@ class MatchmakingPageService
                 : $this->knockoutBracketService->canEndGroupStage($turnamen);
         }
 
+        $hasKnockoutBracket = $turnamen && ! $isMahjong
+            ? $this->knockoutBracketService->hasKnockoutBracket($turnamen)
+            : false;
+
+        $knockoutRounds = $hasKnockoutBracket
+            ? $this->knockoutBracketService->getKnockoutRoundsWithMatches($turnamen)
+            : collect();
+
         return [
             'turnamen' => $turnamen,
             'approvedCount' => $approvedCount,
@@ -113,7 +121,8 @@ class MatchmakingPageService
             'canRandomGrup' => $turnamen ? $this->matchmakingService->canGenerateRandomGroups($turnamen) : false,
             'canReshuffle' => $turnamen && $isMahjong ? $this->mahjongService->canReshuffle($turnamen) : false,
             'canEndGroupStage' => $canEndGroupStage,
-            'hasKnockoutBracket' => $turnamen && ! $isMahjong ? $this->knockoutBracketService->hasKnockoutBracket($turnamen) : false,
+            'hasKnockoutBracket' => $hasKnockoutBracket,
+            'knockoutRounds' => $knockoutRounds,
             'canCompleteTournament' => $turnamen ? $this->tournamentCompletionService->canComplete($turnamen) : false,
             'mahjongIsFinal' => $turnamen && $isMahjong ? (bool) $turnamen->mahjong_is_final : false,
             'activePlayerCount' => $isMahjong && $turnamen

@@ -2,7 +2,6 @@
     'standings',
     'turnamen' => null,
     'refreshable' => false,
-    'overall' => collect(),
 ])
 
 <div class="mahjong-leaderboard"
@@ -49,48 +48,6 @@
                 ])
             </div>
         @endforeach
-
-        @if ($overall->isNotEmpty())
-            <div class="mb-2">
-                <h6 class="fw-semibold mb-3">
-                    <i class="bi bi-trophy me-1 text-primary"></i>Klasemen Akumulasi
-                </h6>
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="text-center" style="width:3rem">#</th>
-                                        <th>Pemain</th>
-                                        <th class="text-center">Total Poin</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach ($overall as $row)
-                                        <tr class="{{ ($row['rank'] ?? 0) === 1 ? 'table-success' : '' }}">
-                                            <td class="text-center fw-bold">
-                                                @if (($row['rank'] ?? 0) === 1)
-                                                    <i class="bi bi-trophy-fill text-warning"></i>
-                                                @else
-                                                    {{ $row['rank'] }}
-                                                @endif
-                                            </td>
-                                            <td class="fw-semibold">
-                                                <x-pemain-names :pemain-ids="$row['pemain_ids'] ?? []" :nama="$row['nama']" />
-                                            </td>
-                                            <td class="text-center">
-                                                <span class="badge text-bg-primary">{{ $row['total_poin'] ?? 0 }}</span>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        @endif
 
         @if ($refreshable)
             <p class="text-muted small text-end mt-2 mb-0">

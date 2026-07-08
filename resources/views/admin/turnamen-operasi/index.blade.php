@@ -95,7 +95,7 @@
     <script src="{{ asset('public/js/leaderboard.js') }}"></script>
 @endif
 @if ($turnamen && $activeTab === 'bracket')
-    <script src="{{ asset('public/js/bracket.js') }}"></script>
+    <script src="{{ asset('public/js/bracket.js') }}?v={{ @filemtime(base_path('public/js/bracket.js')) }}"></script>
 @endif
 <script>
 document.addEventListener('DOMContentLoaded', function () {

@@ -41,17 +41,14 @@ class TurnamenOperasiController extends Controller
         $matchmaking = $matchmakingPageService->getIndexData($request, $turnamen);
 
         $standings = collect();
-        $mahjongOverall = collect();
         $bracket = [];
 
         if ($turnamen && $activeTab === 'klasemen') {
             if ($turnamen->isMahjong()) {
                 $mahjongStandings = $leaderboardService->getMahjongStandingsByBabak($turnamen->id);
                 $standings = $mahjongStandings['sections'];
-                $mahjongOverall = $mahjongStandings['overall'];
             } else {
                 $standings = $leaderboardService->getStandings($turnamen->id);
-                $mahjongOverall = collect();
             }
         }
 
@@ -66,7 +63,6 @@ class TurnamenOperasiController extends Controller
                 'activeTab' => $activeTab,
                 'filterRoute' => route('admin.turnamen-operasi.index'),
                 'standings' => $standings,
-                'mahjongOverall' => $mahjongOverall,
                 'bracket' => $bracket,
             ],
             $listing,

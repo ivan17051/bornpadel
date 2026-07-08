@@ -74,6 +74,12 @@ class MatchScoringService
                     $result['winner_id'],
                     $winnerPesertaId
                 );
+
+                $this->knockoutBracketService->advanceLoser(
+                    $pertandingan,
+                    $result['loser_id'],
+                    $pertandingan->resolvePesertaIdForPemain($result['loser_id'])
+                );
             }
 
             $this->pointRewardService->awardMatchWin($pertandingan->fresh());

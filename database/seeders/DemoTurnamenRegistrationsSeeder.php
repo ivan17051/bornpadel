@@ -146,14 +146,14 @@ class DemoTurnamenRegistrationsSeeder extends Seeder
         if ($type === 'double') {
             $sequence = (($index - 1) * 2) + $slot;
 
-            return '0821' . str_pad((string) $sequence, 8, '0', STR_PAD_LEFT);
+            return '+62821' . str_pad((string) $sequence, 8, '0', STR_PAD_LEFT);
         }
 
         if ($type === 'mahjong') {
-            return '0822' . str_pad((string) $index, 8, '0', STR_PAD_LEFT);
+            return '+62822' . str_pad((string) $index, 8, '0', STR_PAD_LEFT);
         }
 
-        return '0823' . str_pad((string) $index, 8, '0', STR_PAD_LEFT);
+        return '+62823' . str_pad((string) $index, 8, '0', STR_PAD_LEFT);
     }
 
     protected function ratingFor(int $index, int $slot = 0): float

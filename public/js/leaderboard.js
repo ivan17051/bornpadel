@@ -97,47 +97,6 @@
             </div>`;
     };
 
-    const renderMahjongOverall = (overall) => {
-        if (!overall || overall.length === 0) {
-            return '';
-        }
-
-        const rows = overall.map((row) => `
-            <tr class="${row.rank === 1 ? 'table-success' : ''}">
-                <td class="text-center fw-bold">
-                    ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
-                </td>
-                <td class="fw-semibold">${renderNameCell(row)}</td>
-                <td class="text-center">
-                    <span class="badge text-bg-primary">${row.total_poin ?? 0}</span>
-                </td>
-            </tr>
-        `).join('');
-
-        return `
-            <div class="mb-2">
-                <h6 class="fw-semibold mb-3">
-                    <i class="bi bi-trophy me-1 text-primary"></i>Klasemen Akumulasi
-                </h6>
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="text-center" style="width:3rem">#</th>
-                                        <th>Pemain</th>
-                                        <th class="text-center">Total Poin</th>
-                                    </tr>
-                                </thead>
-                                <tbody>${rows}</tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-    };
-
     const renderEmpty = (title) => {
         container.innerHTML = renderHeader(title) + `
             <div class="alert alert-light border text-center mb-0">
@@ -149,14 +108,14 @@
 
     const renderMahjongStandings = (payload) => {
         const sections = payload?.sections || payload || [];
-        const overall = payload?.overall || [];
 
         if (!sections || sections.length === 0) {
             renderEmpty('Klasemen Mahjong');
             return;
         }
 
-        const sectionHtml = (sections || []).map((section) => `
+        const sortedSections = [...sections].sort((a, b) => (b.babak || 0) - (a.babak || 0));
+        const sectionHtml = sortedSections.map((section) => `
             <div class="mb-4">
                 <div class="d-flex align-items-center gap-2 mb-3">
                     <h6 class="mb-0 fw-semibold">
@@ -168,7 +127,7 @@
             </div>
         `).join('');
 
-        container.innerHTML = renderHeader('Klasemen Mahjong') + sectionHtml + renderMahjongOverall(overall) + `
+        container.innerHTML = renderHeader('Klasemen Mahjong') + sectionHtml + `
             <p class="text-muted small text-end mt-2 mb-0">
                 <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
             </p>`;

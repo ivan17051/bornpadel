@@ -1,4 +1,4 @@
-﻿@if ($turnamen)
+@if ($turnamen)
     @php
         $unitLabel = $unitLabel ?? ($turnamen->isDouble() ? 'pasangan' : 'pemain');
         $unitLabelTitle = ucfirst($unitLabel);
@@ -361,6 +361,88 @@
                 </div>
             @endforeach
         @endif
+    @endif
+
+    @if (! ($isMahjong ?? false) && ! empty($knockoutRounds) && collect($knockoutRounds)->isNotEmpty())
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="bi bi-diagram-2 me-2"></i>Pertandingan Knockout</h5>
+                <a href="{{ $bracketUrl }}" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-diagram-2 me-1"></i> Lihat Bracket
+                </a>
+            </div>
+            <div class="card-body">
+                @foreach ($knockoutRounds as $round)
+                    <h6 class="text-muted text-uppercase small {{ $loop->first ? '' : 'mt-4' }}">{{ $round['nama_ronde'] }}</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ $sideLabel }} 1</th>
+                                    <th>vs</th>
+                                    <th>{{ $sideLabel }} 2</th>
+                                    <th>Skor</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($round['matches'] as $match)
+                                    <tr>
+                                        <td>@include('admin.pertandingan.partials.match-side-label', ['match' => $match, 'side' => 1])</td>
+                                        <td class="text-center">vs</td>
+                                        <td>@include('admin.pertandingan.partials.match-side-label', ['match' => $match, 'side' => 2])</td>
+                                        <td>
+                                            @if ($match->skor->isNotEmpty())
+                                                @foreach ($match->skor as $s)
+                                                    <span class="badge text-bg-light text-dark border me-1">
+                                                        {{ $s->skor_pemain1 }}-{{ $s->skor_pemain2 }}
+                                                    </span>
+                                                @endforeach
+                                                @if ($match->pemenang || $match->pesertaPemenang)
+                                                    <i class="bi bi-trophy-fill text-warning ms-1" title="{{ $match->winner_label }}"></i>
+                                                @endif
+                                            @elseif ($match->status === 'completed' && ($match->pemenang || $match->pesertaPemenang))
+                                                <i class="bi bi-fast-forward-fill text-muted" title="BYE — {{ $match->winner_label }}"></i>
+                                                <span class="text-muted small">BYE</span>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ $match->status === 'completed' ? 'success' : ($match->status === 'ongoing' ? 'warning' : 'secondary') }}">
+                                                {{ $match->status }}
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            @if ($match->status !== 'completed' && $match->isReadyForScoring())
+                                                <button type="button"
+                                                        class="btn btn-sm btn-primary btn-input-score"
+                                                        data-id="{{ $match->id }}"
+                                                        data-show-url="{{ route('admin.pertandingan.show', $match) }}"
+                                                        data-store-url="{{ route('admin.pertandingan.score', $match) }}">
+                                                    <i class="bi bi-pencil-square me-1"></i> Input Skor
+                                                </button>
+                                            @elseif ($match->status !== 'completed')
+                                                <span class="badge text-bg-light text-dark border">Menunggu Pemain</span>
+                                            @elseif ($match->skor->isNotEmpty())
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-secondary btn-view-score"
+                                                        data-show-url="{{ route('admin.pertandingan.show', $match) }}">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                            @else
+                                                <span class="badge text-bg-light text-dark border">BYE</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endforeach
+            </div>
+        </div>
     @endif
 @endif
 

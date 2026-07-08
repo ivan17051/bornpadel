@@ -20,6 +20,7 @@ class Pertandingan extends Model
         'id_peserta_pemenang',
         'status',
         'id_next_pertandingan',
+        'id_next_pertandingan_kalah',
     ];
 
     public function turnamen()
@@ -67,6 +68,11 @@ class Pertandingan extends Model
         return $this->belongsTo(Pertandingan::class, 'id_next_pertandingan');
     }
 
+    public function nextPertandinganKalah()
+    {
+        return $this->belongsTo(Pertandingan::class, 'id_next_pertandingan_kalah');
+    }
+
     public function skor()
     {
         return $this->hasMany(PertandinganSkor::class, 'id_pertandingan')->orderBy('set_ke');
@@ -80,7 +86,7 @@ class Pertandingan extends Model
     public function isKnockout(): bool
     {
         return is_null($this->id_grup)
-            && in_array($this->nama_ronde, ['Perempatfinal', 'Semifinal', 'Final'], true);
+            && in_array($this->nama_ronde, ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final', 'Perebutan Juara 3'], true);
     }
 
     public function isReadyForScoring(): bool

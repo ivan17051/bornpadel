@@ -85,7 +85,6 @@ class TournamentController extends Controller
                     'mahjong_is_final' => (bool) $turnamen->mahjong_is_final,
                 ],
                 'sections' => $standings['sections'],
-                'overall' => $standings['overall'],
                 'recap' => $standings['recap'],
                 'babak_numbers' => $standings['babak_numbers'],
             ],
