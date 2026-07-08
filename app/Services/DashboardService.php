@@ -112,7 +112,7 @@ class DashboardService
     public function getAllRecentRegistrations(?int $turnamenId = null, int $limit = 10): Collection
     {
         $query = TurnamenPeserta::query()
-            ->with(['pemain1', 'pemain2', 'turnamen'])
+            ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'turnamen'])
             ->whereIn('status', ['pending', 'paid', 'unpaid']);
 
         if ($turnamenId) {
@@ -143,7 +143,7 @@ class DashboardService
     {
         return TurnamenPeserta::query()
             ->forTurnamen($turnamen->id)
-            ->with(['pemain1', 'pemain2'])
+            ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1'])
             ->whereIn('status', ['pending', 'paid', 'unpaid'])
             ->latest('updated_at')
             ->limit($limit)

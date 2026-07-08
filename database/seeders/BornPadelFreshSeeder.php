@@ -125,6 +125,7 @@ class BornPadelFreshSeeder extends Seeder
             'pertandingan',
             'grup_member',
             'turnamen_pemenang',
+            'turnamen_pasangan',
             'grup',
             'turnamen_peserta',
             'm_pemain',
@@ -328,10 +329,9 @@ class BornPadelFreshSeeder extends Seeder
                 'id_pemain1' => $pemain->id,
             ],
             [
-                'id_pemain2' => null,
                 'status' => $status,
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
                 'bukti_bayar' => null,
-                'paired_at' => null,
             ]
         );
     }

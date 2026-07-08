@@ -12,6 +12,8 @@ use App\Models\Pertandingan;
 
 use App\Models\Turnamen;
 
+use App\Models\TurnamenPeserta;
+
 use Illuminate\Support\Collection;
 
 use Illuminate\Support\Facades\DB;
@@ -570,18 +572,15 @@ class KnockoutBracketService
 
         $matchesByRound = Pertandingan::where('id_turnamen', $turnamen->id)
             ->whereNull('id_grup')
-            ->with([
+            ->with(array_merge([
                 'peserta1.pemain1',
-                'peserta1.pemain2',
                 'peserta2.pemain1',
-                'peserta2.pemain2',
                 'pemain1',
                 'pemain2',
                 'skor',
                 'pemenang',
                 'pesertaPemenang.pemain1',
-                'pesertaPemenang.pemain2',
-            ])
+            ], TurnamenPeserta::partnerPemainEagerLoadsFor('peserta1'), TurnamenPeserta::partnerPemainEagerLoadsFor('peserta2'), TurnamenPeserta::partnerPemainEagerLoadsFor('pesertaPemenang')))
             ->orderBy('id')
             ->get()
             ->groupBy('nama_ronde');
@@ -605,7 +604,12 @@ class KnockoutBracketService
         // appended into the Final column (below the final match) further down.
         $roundOrder = ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final'];
 
-        $relations = ['pemain1', 'pemain2', 'peserta1.pemain1', 'peserta1.pemain2', 'peserta2.pemain1', 'peserta2.pemain2', 'pemenang', 'pesertaPemenang.pemain1', 'pesertaPemenang.pemain2', 'skor'];
+        $relations = array_merge(
+            ['pemain1', 'pemain2', 'peserta1.pemain1', 'peserta2.pemain1', 'pemenang', 'pesertaPemenang.pemain1', 'skor'],
+            TurnamenPeserta::partnerPemainEagerLoadsFor('peserta1'),
+            TurnamenPeserta::partnerPemainEagerLoadsFor('peserta2'),
+            TurnamenPeserta::partnerPemainEagerLoadsFor('pesertaPemenang')
+        );
 
         $result = [];
 

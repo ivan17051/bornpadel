@@ -30,7 +30,7 @@
         <li class="nav-item" role="presentation">
             <a class="nav-link {{ $activeTab === 'matchmaking' ? 'active' : '' }}"
                href="{{ route('admin.turnamen-operasi.index', ['id_turnamen' => $turnamen->id, 'tab' => 'matchmaking']) }}">
-                <i class="bi bi-shuffle me-1"></i> Matchmaking Grup
+                <i class="bi bi-shuffle me-1"></i> Matchmaking & Skor
             </a>
         </li>
         <li class="nav-item" role="presentation">

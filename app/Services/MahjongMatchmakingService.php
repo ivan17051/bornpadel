@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Grup;
 use App\Models\GrupMember;
+use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
 use Illuminate\Support\Collection;
@@ -13,6 +14,15 @@ use RuntimeException;
 class MahjongMatchmakingService
 {
     const PLAYERS_PER_GROUP = 4;
+
+    protected $leaderboardService;
+    protected $mahjongRanker;
+
+    public function __construct(LeaderboardService $leaderboardService, MahjongStandingRanker $mahjongRanker)
+    {
+        $this->leaderboardService = $leaderboardService;
+        $this->mahjongRanker = $mahjongRanker;
+    }
 
     public function canGenerateGroups(Turnamen $turnamen): bool
     {
@@ -89,31 +99,42 @@ class MahjongMatchmakingService
         return DB::transaction(function () use ($turnamen, $jumlahLolos) {
             $this->commitCurrentRoundPoints($turnamen);
 
-            $qualifiers = $this->getGlobalRankings($turnamen)->take($jumlahLolos)->values();
+            $currentBabak = (int) $turnamen->activeGrup()->max('babak') ?: 1;
+            $qualifierRows = $this->leaderboardService
+                ->buildMahjongBabakTable($turnamen, $currentBabak)['rows']
+                ->take($jumlahLolos)
+                ->values();
 
-            if ($qualifiers->count() < self::PLAYERS_PER_GROUP) {
+            if ($qualifierRows->count() < self::PLAYERS_PER_GROUP) {
                 throw new RuntimeException('Pemain lolos tidak cukup untuk membentuk grup.');
             }
 
-            if ($qualifiers->count() > self::PLAYERS_PER_GROUP
-                && $qualifiers->count() % self::PLAYERS_PER_GROUP !== 0) {
+            if ($qualifierRows->count() > self::PLAYERS_PER_GROUP
+                && $qualifierRows->count() % self::PLAYERS_PER_GROUP !== 0) {
                 throw new RuntimeException('Jumlah pemain lolos harus kelipatan ' . self::PLAYERS_PER_GROUP . '.');
             }
 
-            $babak = ((int) $turnamen->activeGrup()->max('babak') ?: 0) + 1;
+            $babak = $currentBabak + 1;
             $this->deactivateActiveGroups($turnamen);
 
-            $isFinal = $qualifiers->count() === self::PLAYERS_PER_GROUP;
-            $entries = $qualifiers->map(function (array $row) {
-                return $row['peserta'];
-            });
+            $isFinal = $qualifierRows->count() === self::PLAYERS_PER_GROUP;
 
-            $result = $this->createGroupsFromEntries($turnamen, $entries, $babak, 'by_points', false);
+            $entries = $qualifierRows->map(function (array $row) {
+                $peserta = TurnamenPeserta::find($row['id_peserta']);
+
+                if ($peserta) {
+                    $peserta->mahjong_carry_points = (int) ($row['total_babak'] ?? $row['total_poin'] ?? 0);
+                }
+
+                return $peserta;
+            })->filter();
+
+            $result = $this->createGroupsFromEntries($turnamen, $entries, $babak, 'by_points', true);
             $turnamen->update(['mahjong_is_final' => $isFinal]);
 
             $result['is_final'] = $isFinal;
             $result['babak'] = $babak;
-            $result['qualifiers'] = $qualifiers->count();
+            $result['qualifiers'] = $qualifierRows->count();
 
             return $result;
         });
@@ -138,6 +159,21 @@ class MahjongMatchmakingService
 
     public function getGlobalRankings(Turnamen $turnamen): Collection
     {
+        $babak = (int) $turnamen->activeGrup()->max('babak');
+
+        if ($babak > 0) {
+            return $this->leaderboardService
+                ->buildMahjongBabakTable($turnamen, $babak)['rows']
+                ->map(function (array $row) {
+                    return [
+                        'peserta' => TurnamenPeserta::find($row['id_peserta']),
+                        'pemain' => Pemain::find($row['id_pemain']),
+                        'member' => null,
+                        'total_poin' => (int) ($row['total_babak'] ?? $row['total_poin'] ?? 0),
+                    ];
+                });
+        }
+
         $rows = collect();
 
         foreach ($this->getActiveMembers($turnamen) as $member) {
@@ -146,10 +182,21 @@ class MahjongMatchmakingService
                 'pemain' => $member->pemain,
                 'member' => $member,
                 'total_poin' => $member->total_poin,
+                'poin_akumulasi' => (int) $member->poin_akumulasi,
+                'poin_didapat' => (int) $member->poin_didapat,
+                'id_peserta' => $member->id_turnamen_peserta,
+                'id_pemain' => $member->id_pemain,
             ]);
         }
 
-        return $rows->sortByDesc('total_poin')->values();
+        return $this->mahjongRanker->rankRows($rows)->map(function (array $row) {
+            return [
+                'peserta' => $row['peserta'],
+                'pemain' => $row['pemain'],
+                'member' => $row['member'],
+                'total_poin' => (int) ($row['total_poin'] ?? 0),
+            ];
+        });
     }
 
     public function getGroupStandingsPayload(Turnamen $turnamen): array

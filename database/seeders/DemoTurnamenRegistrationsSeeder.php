@@ -115,16 +115,29 @@ class DemoTurnamenRegistrationsSeeder extends Seeder
 
     protected function registerPair(Turnamen $turnamen, Pemain $pemain1, Pemain $pemain2, string $status): void
     {
-        TurnamenPeserta::updateOrCreate(
+        $peserta1 = TurnamenPeserta::updateOrCreate(
             [
                 'id_turnamen' => $turnamen->id,
                 'id_pemain1' => $pemain1->id,
             ],
             [
-                'id_pemain2' => $pemain2->id,
                 'status' => $status,
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]
         );
+
+        $peserta2 = TurnamenPeserta::updateOrCreate(
+            [
+                'id_turnamen' => $turnamen->id,
+                'id_pemain1' => $pemain2->id,
+            ],
+            [
+                'status' => $status,
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+            ]
+        );
+
+        app(\App\Services\DoublePairingService::class)->createPair($turnamen, $peserta1, $peserta2);
     }
 
     protected function registerSolo(Turnamen $turnamen, Pemain $pemain, string $status): void
@@ -135,8 +148,8 @@ class DemoTurnamenRegistrationsSeeder extends Seeder
                 'id_pemain1' => $pemain->id,
             ],
             [
-                'id_pemain2' => null,
                 'status' => $status,
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]
         );
     }

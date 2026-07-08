@@ -39,7 +39,8 @@ class RegistrationController extends Controller
                 $turnamen,
                 $data,
                 $request->file('foto'),
-                null
+                null,
+                TurnamenPeserta::SUMBER_EXTERNAL
             );
         } catch (RuntimeException $e) {
             return response()->json([
@@ -110,6 +111,7 @@ class RegistrationController extends Controller
                 'registration' => $peserta ? [
                     'peserta_id' => $peserta->id,
                     'status' => $peserta->status,
+                    'sumber' => $peserta->sumber,
                     'bukti_bayar_url' => $peserta->bukti_bayar_url,
                     'paired_at' => $peserta->paired_at
                         ? $peserta->paired_at->toDateTimeString()

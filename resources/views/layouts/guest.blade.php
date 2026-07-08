@@ -127,6 +127,12 @@
             font-weight: 600;
         }
 
+        .status-badge-pending { background: #ffc107; color: #000; }
+        .status-badge-unpaid { background: #fd7e14; color: #fff; }
+        .status-badge-paid { background: #0dcaf0; color: #000; }
+        .status-badge-approved { background: #198754; color: #fff; }
+        .status-badge-rejected { background: #dc3545; color: #fff; }
+
         .info-label {
             font-size: 0.8rem;
             text-transform: uppercase;

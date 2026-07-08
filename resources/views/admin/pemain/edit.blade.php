@@ -73,10 +73,10 @@
                                     @foreach ($turnamenPesertaEntries as $peserta)
                                         @php
                                             $partner = null;
-                                            if ((int) $peserta->id_pemain1 === (int) $pemain->id && $peserta->pemain2) {
-                                                $partner = $peserta->pemain2;
-                                            } elseif ((int) $peserta->id_pemain2 === (int) $pemain->id && $peserta->pemain1) {
-                                                $partner = $peserta->pemain1;
+                                            if ((int) $peserta->id_pemain1 === (int) $pemain->id) {
+                                                $partner = $peserta->partner_pemain;
+                                            } elseif ($peserta->pasangan && (int) optional($peserta->pasangan->peserta2)->id_pemain1 === (int) $pemain->id) {
+                                                $partner = $peserta->pasangan->peserta1->pemain1 ?? null;
                                             }
                                         @endphp
                                         <tr>

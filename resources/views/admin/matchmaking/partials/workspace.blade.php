@@ -10,9 +10,13 @@
         $bracketUrl = $bracketUrl ?? route('admin.bracket.index', ['id_turnamen' => $turnamen->id]);
     @endphp
     <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="card-title mb-0">{{ $turnamen->nama }}</h5>
-            <span class="badge text-bg-light text-dark border">{{ $turnamen->jenis_label }}</span>
+        <div class="card-header d-flex justify-content-between align-items-center row">
+            <div class="col-md-6">
+                <h5 class="card-title mb-0">{{ $turnamen->nama }}</h5>
+            </div>
+            <div class="col-md-6 text-end">
+                <span class="badge text-bg-light text-dark border">{{ $turnamen->jenis_label }}</span>
+            </div>
         </div>
         <div class="card-body">
             <div class="row g-3 align-items-center">
@@ -209,14 +213,18 @@
         @if ($isMahjong)
             @foreach ($grup as $g)
                 <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-diagram-3 me-2"></i>{{ $g->nama }}
-                            @if ($g->babak)
-                                <small class="text-muted fw-normal">— Babak {{ $g->babak }}</small>
-                            @endif
-                        </h5>
-                        <span class="badge text-bg-info">{{ $g->members->count() }} pemain</span>
+                    <div class="card-header d-flex justify-content-between align-items-center row">
+                        <div class="col-md-6">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-diagram-3 me-2"></i>{{ $g->nama }}
+                                @if ($g->babak)
+                                    <small class="text-muted fw-normal">— Babak {{ $g->babak }}</small>
+                                @endif
+                            </h5>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <span class="badge text-bg-info">{{ $g->members->count() }} pemain</span>
+                        </div>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">

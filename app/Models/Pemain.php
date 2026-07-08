@@ -30,15 +30,10 @@ class Pemain extends Model
         return $this->hasMany(TurnamenPeserta::class, 'id_pemain1');
     }
 
-    public function turnamenPesertaAsPemain2()
-    {
-        return $this->hasMany(TurnamenPeserta::class, 'id_pemain2');
-    }
-
     public function turnamen()
     {
         return $this->belongsToMany(Turnamen::class, 'turnamen_peserta', 'id_pemain1', 'id_turnamen')
-            ->withPivot('status', 'id_pemain2')
+            ->withPivot('status', 'sumber')
             ->withTimestamps();
     }
 
@@ -88,16 +83,11 @@ class Pemain extends Model
 
     public function scopeWithoutRegistration($query)
     {
-        return $query
-            ->whereDoesntHave('turnamenPesertaAsPemain1')
-            ->whereDoesntHave('turnamenPesertaAsPemain2');
+        return $query->whereDoesntHave('turnamenPesertaAsPemain1');
     }
 
     public function scopeWithRegistration($query)
     {
-        return $query->where(function ($builder) {
-            $builder->whereHas('turnamenPesertaAsPemain1')
-                ->orWhereHas('turnamenPesertaAsPemain2');
-        });
+        return $query->whereHas('turnamenPesertaAsPemain1');
     }
 }

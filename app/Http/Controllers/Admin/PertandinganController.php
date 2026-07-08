@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreMatchScoreRequest;
 use App\Models\Grup;
 use App\Models\Pertandingan;
+use App\Models\TurnamenPeserta;
 use App\Services\GroupMatchmakingService;
 use App\Services\MatchScoringService;
 use App\Services\TournamentAccessService;
@@ -36,19 +37,16 @@ class PertandinganController extends Controller
             false
         );
 
-        $query = Pertandingan::with([
+        $query = Pertandingan::with(array_merge([
             'pemain1',
             'pemain2',
             'peserta1.pemain1',
-            'peserta1.pemain2',
             'peserta2.pemain1',
-            'peserta2.pemain2',
             'pemenang',
             'pesertaPemenang.pemain1',
-            'pesertaPemenang.pemain2',
             'grup',
             'skor',
-        ])
+        ], TurnamenPeserta::partnerPemainEagerLoadsFor('peserta1'), TurnamenPeserta::partnerPemainEagerLoadsFor('peserta2'), TurnamenPeserta::partnerPemainEagerLoadsFor('pesertaPemenang')))
             ->orderBy('nama_ronde')
             ->orderBy('id_grup')
             ->orderBy('id');
@@ -92,18 +90,16 @@ class PertandinganController extends Controller
     {
         $this->tournamentAccess->assertPertandinganAccess($pertandingan);
 
-        $pertandingan->load([
+        $pertandingan->load(array_merge([
             'pemain1',
             'pemain2',
             'peserta1.pemain1',
-            'peserta1.pemain2',
             'peserta2.pemain1',
-            'peserta2.pemain2',
             'pemenang',
             'pesertaPemenang',
             'grup',
             'skor',
-        ]);
+        ], TurnamenPeserta::partnerPemainEagerLoadsFor('peserta1'), TurnamenPeserta::partnerPemainEagerLoadsFor('peserta2'), TurnamenPeserta::partnerPemainEagerLoadsFor('pesertaPemenang')));
 
         return response()->json([
             'success' => true,

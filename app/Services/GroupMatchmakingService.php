@@ -170,7 +170,7 @@ class GroupMatchmakingService
         $query = TurnamenPeserta::query()
             ->forTurnamen($turnamen->id)
             ->approved()
-            ->with(['pemain1', 'pemain2']);
+            ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1']);
 
         if ($turnamen->isDouble()) {
             $query->completePairs();

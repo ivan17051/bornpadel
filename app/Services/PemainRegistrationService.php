@@ -47,7 +47,7 @@ class PemainRegistrationService
                 'finalMatch' => function ($query) {
                     $query->with([
                         'pesertaPemenang.pemain1',
-                        'pesertaPemenang.pemain2',
+                        'pesertaPemenang.pasanganAsPeserta1.peserta2.pemain1',
                         'pemenang',
                     ]);
                 },
@@ -85,7 +85,8 @@ class PemainRegistrationService
         Turnamen $turnamen,
         array $data,
         ?UploadedFile $foto = null,
-        ?UploadedFile $buktiBayar = null
+        ?UploadedFile $buktiBayar = null,
+        string $sumber = TurnamenPeserta::SUMBER_INTERNAL
     ): Pemain {
         $pemain = $this->upsertPemain($data, $foto);
 
@@ -100,6 +101,7 @@ class PemainRegistrationService
             'id_pemain1' => $pemain->id,
             'status' => $this->resolveRegistrationStatusFromBukti($buktiPath),
             'bukti_bayar' => $buktiPath,
+            'sumber' => $sumber,
         ]);
 
         return $pemain->fresh();
@@ -114,7 +116,8 @@ class PemainRegistrationService
         ?UploadedFile $foto1,
         array $player2,
         ?UploadedFile $foto2,
-        ?UploadedFile $buktiBayar = null
+        ?UploadedFile $buktiBayar = null,
+        string $sumber = TurnamenPeserta::SUMBER_INTERNAL
     ): array {
         if (trim($player1['no_hp']) === trim($player2['no_hp'])) {
             throw new RuntimeException('Nomor HP pemain 1 dan pemain 2 tidak boleh sama.');
@@ -132,14 +135,25 @@ class PemainRegistrationService
         }
 
         $buktiPath = $this->storeBuktiBayar($buktiBayar);
+        $status = $this->resolveRegistrationStatusFromBukti($buktiPath);
 
-        TurnamenPeserta::create([
+        $peserta1 = TurnamenPeserta::create([
             'id_turnamen' => $turnamen->id,
             'id_pemain1' => $pemain->id,
-            'id_pemain2' => $partner->id,
-            'status' => $this->resolveRegistrationStatusFromBukti($buktiPath),
+            'status' => $status,
             'bukti_bayar' => $buktiPath,
+            'sumber' => $sumber,
         ]);
+
+        $peserta2 = TurnamenPeserta::create([
+            'id_turnamen' => $turnamen->id,
+            'id_pemain1' => $partner->id,
+            'status' => $status,
+            'bukti_bayar' => $buktiPath,
+            'sumber' => $sumber,
+        ]);
+
+        app(DoublePairingService::class)->createPair($turnamen, $peserta1, $peserta2);
 
         return [
             'pemain' => $pemain,
@@ -203,32 +217,37 @@ class PemainRegistrationService
 
     public function detachPemainFromPeserta(TurnamenPeserta $peserta, int $pemainId): void
     {
-        $updates = [];
-
-        if ($peserta->id_pemain1 && (int) $peserta->id_pemain1 === $pemainId) {
-            $updates['id_pemain1'] = null;
-        }
-
-        if ($peserta->id_pemain2 && (int) $peserta->id_pemain2 === $pemainId) {
-            $updates['id_pemain2'] = null;
-        }
-
-        if ($updates === []) {
+        if (! $peserta->involvesPemain($pemainId)) {
             return;
         }
 
-        $remainingPemain1 = array_key_exists('id_pemain1', $updates) ? null : $peserta->id_pemain1;
-        $remainingPemain2 = array_key_exists('id_pemain2', $updates) ? null : $peserta->id_pemain2;
+        $pasangan = $peserta->pasangan;
 
-        if ($remainingPemain1 === null && $remainingPemain2 === null) {
-            $peserta->delete();
+        if ($pasangan) {
+            $partnerPesertaId = (int) $pasangan->id_peserta_1 === (int) $peserta->id
+                ? (int) $pasangan->id_peserta_2
+                : (int) $pasangan->id_peserta_1;
 
+            $pasangan->delete();
+
+            if ((int) $peserta->id_pemain1 === $pemainId) {
+                $peserta->delete();
+
+                return;
+            }
+
+            $peserta = TurnamenPeserta::find($partnerPesertaId);
+
+            if (! $peserta) {
+                return;
+            }
+        }
+
+        if ((int) $peserta->id_pemain1 !== $pemainId) {
             return;
         }
 
-        $updates['status'] = $this->resolveRegistrationStatusFromBukti($peserta->bukti_bayar);
-
-        $peserta->update($updates);
+        $peserta->delete();
     }
 
     public function resolveRegistrationStatusFromBukti(?string $buktiBayarPath = null, ?UploadedFile $buktiBayar = null): string

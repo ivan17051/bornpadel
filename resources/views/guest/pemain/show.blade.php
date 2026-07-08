@@ -73,7 +73,7 @@
                                         </td>
                                         <td>
                                             <span class="badge status-badge-{{ $entry['status'] }}">
-                                                {{ ucfirst($entry['status']) }}
+                                                {{ $entry['status_label'] }}
                                             </span>
                                         </td>
                                         <td class="d-none d-md-table-cell text-muted small">

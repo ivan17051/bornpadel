@@ -24,7 +24,8 @@ class RegisteredPemainListingService
         if ($isDoubleView) {
             $pesertaQuery = TurnamenPeserta::query()
                 ->forTurnamen($turnamen->id)
-                ->with(['pemain1', 'pemain2'])
+                ->whereHas('pasanganAsPeserta1')
+                ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1'])
                 ->latest();
 
             if ($request->filled('status')) {
@@ -37,7 +38,7 @@ class RegisteredPemainListingService
                     $builder->whereHas('pemain1', function ($q) use ($search) {
                         $q->where('nama', 'like', "%{$search}%")
                             ->orWhere('no_hp', 'like', "%{$search}%");
-                    })->orWhereHas('pemain2', function ($q) use ($search) {
+                    })->orWhereHas('pasanganAsPeserta1.peserta2.pemain1', function ($q) use ($search) {
                         $q->where('nama', 'like', "%{$search}%")
                             ->orWhere('no_hp', 'like', "%{$search}%");
                     });
@@ -55,11 +56,6 @@ class RegisteredPemainListingService
 
         $query->where(function ($builder) use ($turnamen, $request) {
             $builder->whereHas('turnamenPesertaAsPemain1', function ($q) use ($turnamen, $request) {
-                $q->where('id_turnamen', $turnamen->id);
-                if ($request->filled('status')) {
-                    $q->where('status', $request->status);
-                }
-            })->orWhereHas('turnamenPesertaAsPemain2', function ($q) use ($turnamen, $request) {
                 $q->where('id_turnamen', $turnamen->id);
                 if ($request->filled('status')) {
                     $q->where('status', $request->status);

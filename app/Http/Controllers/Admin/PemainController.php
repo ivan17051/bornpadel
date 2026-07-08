@@ -67,7 +67,8 @@ class PemainController extends Controller
         if ($isDoubleView) {
             $pesertaQuery = TurnamenPeserta::query()
                 ->forTurnamen($turnamen->id)
-                ->with(['pemain1', 'pemain2'])
+                ->whereHas('pasanganAsPeserta1')
+                ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1'])
                 ->latest();
 
             if ($request->filled('status')) {
@@ -80,7 +81,7 @@ class PemainController extends Controller
                     $builder->whereHas('pemain1', function ($q) use ($search) {
                         $q->where('nama', 'like', "%{$search}%")
                             ->orWhere('no_hp', 'like', "%{$search}%");
-                    })->orWhereHas('pemain2', function ($q) use ($search) {
+                    })->orWhereHas('pasanganAsPeserta1.peserta2.pemain1', function ($q) use ($search) {
                         $q->where('nama', 'like', "%{$search}%")
                             ->orWhere('no_hp', 'like', "%{$search}%");
                     });
@@ -103,26 +104,15 @@ class PemainController extends Controller
         $query = Pemain::query()->latest();
 
         if ($turnamen) {
-            $query->where(function ($builder) use ($turnamen, $request) {
-                $builder->whereHas('turnamenPesertaAsPemain1', function ($q) use ($turnamen, $request) {
-                    $q->where('id_turnamen', $turnamen->id);
-                    if ($request->filled('status')) {
-                        $q->where('status', $request->status);
-                    }
-                })->orWhereHas('turnamenPesertaAsPemain2', function ($q) use ($turnamen, $request) {
-                    $q->where('id_turnamen', $turnamen->id);
-                    if ($request->filled('status')) {
-                        $q->where('status', $request->status);
-                    }
-                });
+            $query->whereHas('turnamenPesertaAsPemain1', function ($q) use ($turnamen, $request) {
+                $q->where('id_turnamen', $turnamen->id);
+                if ($request->filled('status')) {
+                    $q->where('status', $request->status);
+                }
             });
         } elseif ($request->filled('status')) {
-            $query->where(function ($builder) use ($request) {
-                $builder->whereHas('turnamenPesertaAsPemain1', function ($q) use ($request) {
-                    $q->where('status', $request->status);
-                })->orWhereHas('turnamenPesertaAsPemain2', function ($q) use ($request) {
-                    $q->where('status', $request->status);
-                });
+            $query->whereHas('turnamenPesertaAsPemain1', function ($q) use ($request) {
+                $q->where('status', $request->status);
             });
         }
 
@@ -264,6 +254,7 @@ class PemainController extends Controller
                 'id_pemain1' => $pemain->id,
                 'status' => $status,
                 'bukti_bayar' => $this->registrationService->storeBuktiBayar($buktiBayar),
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]);
         } catch (\RuntimeException $e) {
             return back()->withInput()->withErrors(['no_hp' => $e->getMessage()]);
@@ -276,17 +267,12 @@ class PemainController extends Controller
 
     protected function otherPemainForSlot(TurnamenPeserta $peserta, int $slot): ?Pemain
     {
-        return $slot === 1 ? $peserta->pemain2 : $peserta->pemain1;
-    }
-
-    protected function pesertaSlotField(int $slot): string
-    {
-        return $slot === 1 ? 'id_pemain1' : 'id_pemain2';
+        return $slot === 1 ? $peserta->partner_pemain : $peserta->pemain1;
     }
 
     protected function redirectIfPesertaSlotUnavailable(TurnamenPeserta $peserta, int $slot)
     {
-        $peserta->loadMissing(['turnamen', 'pemain1', 'pemain2']);
+        $peserta->loadMissing(['turnamen', 'pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1']);
         $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
 
         if (! $peserta->turnamen->isDouble()) {
@@ -295,7 +281,7 @@ class PemainController extends Controller
                 ->with('error', 'Turnamen ini bukan kategori double.');
         }
 
-        if ($peserta->{$this->pesertaSlotField($slot)}) {
+        if ($peserta->isPaired()) {
             return redirect()
                 ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
                 ->with('error', 'Pemain ' . $slot . ' sudah terisi pada pasangan ini.');
@@ -399,7 +385,19 @@ class PemainController extends Controller
                 throw new \RuntimeException('Pemain ' . $slot . ' sudah terdaftar pada turnamen ini.');
             }
 
-            $peserta->update([$this->pesertaSlotField($slot) => $pemain->id]);
+            $partnerPeserta = TurnamenPeserta::create([
+                'id_turnamen' => $peserta->id_turnamen,
+                'id_pemain1' => $pemain->id,
+                'status' => $peserta->status,
+                'bukti_bayar' => $peserta->bukti_bayar,
+                'sumber' => $peserta->sumber ?? TurnamenPeserta::SUMBER_INTERNAL,
+            ]);
+
+            app(\App\Services\DoublePairingService::class)->createPair(
+                $peserta->turnamen,
+                $slot === 1 ? $partnerPeserta : $peserta,
+                $slot === 1 ? $peserta : $partnerPeserta
+            );
         } catch (\RuntimeException $e) {
             return back()->withInput()->withErrors(['no_hp' => $e->getMessage()]);
         }
@@ -429,7 +427,7 @@ class PemainController extends Controller
         $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
 
         $turnamenPesertaEntries = TurnamenPeserta::involvingPemain($pemain->id)
-            ->with('turnamen', 'pemain1', 'pemain2')
+            ->with(['turnamen', 'pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1'])
             ->get();
 
         $returnQuery = $this->pemainEditReturnQuery($request);

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Turnamen;
+use App\Models\TurnamenPeserta;
 use Illuminate\Http\Request;
 
 class MatchmakingPageService
@@ -55,21 +56,21 @@ class MatchmakingPageService
             $grupQuery = $isMahjong ? $turnamen->activeGrup() : $turnamen->grup();
 
             $grup = $grupQuery
-                ->with([
+                ->with(array_merge([
                     'members.turnamenPeserta.pemain1',
-                    'members.turnamenPeserta.pemain2',
                     'members.pemain',
                     'pertandingan.peserta1.pemain1',
-                    'pertandingan.peserta1.pemain2',
                     'pertandingan.peserta2.pemain1',
-                    'pertandingan.peserta2.pemain2',
                     'pertandingan.pemain1',
                     'pertandingan.pemain2',
                     'pertandingan.skor',
                     'pertandingan.pemenang',
                     'pertandingan.pesertaPemenang.pemain1',
-                    'pertandingan.pesertaPemenang.pemain2',
-                ])
+                ], TurnamenPeserta::partnerPemainEagerLoadsFor('members.turnamenPeserta'), [
+                    ...TurnamenPeserta::partnerPemainEagerLoadsFor('pertandingan.peserta1'),
+                    ...TurnamenPeserta::partnerPemainEagerLoadsFor('pertandingan.peserta2'),
+                    ...TurnamenPeserta::partnerPemainEagerLoadsFor('pertandingan.pesertaPemenang'),
+                ]))
                 ->orderBy('nama')
                 ->get();
 

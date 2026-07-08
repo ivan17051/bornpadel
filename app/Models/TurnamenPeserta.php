@@ -8,19 +8,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class TurnamenPeserta extends Model
 {
+    const SUMBER_INTERNAL = 'internal';
+    const SUMBER_EXTERNAL = 'external';
+
     protected $table = 'turnamen_peserta';
 
     protected $fillable = [
         'id_turnamen',
         'id_pemain1',
-        'id_pemain2',
         'status',
+        'sumber',
         'bukti_bayar',
-        'paired_at',
-    ];
-
-    protected $casts = [
-        'paired_at' => 'datetime',
     ];
 
     public function turnamen()
@@ -33,21 +31,83 @@ class TurnamenPeserta extends Model
         return $this->belongsTo(Pemain::class, 'id_pemain1');
     }
 
-    public function pemain2()
-    {
-        return $this->belongsTo(Pemain::class, 'id_pemain2');
-    }
-
     /** @deprecated Use pemain1() */
     public function pemain()
     {
         return $this->pemain1();
     }
 
+    public function pasanganAsPeserta1()
+    {
+        return $this->hasOne(TurnamenPasangan::class, 'id_peserta_1');
+    }
+
+    public function pasanganAsPeserta2()
+    {
+        return $this->hasOne(TurnamenPasangan::class, 'id_peserta_2');
+    }
+
+    public function getPasanganAttribute(): ?TurnamenPasangan
+    {
+        $this->loadMissing(['pasanganAsPeserta1', 'pasanganAsPeserta2']);
+
+        return $this->pasanganAsPeserta1 ?: $this->pasanganAsPeserta2;
+    }
+
+    public function getPartnerPesertaAttribute(): ?TurnamenPasangan
+    {
+        return $this->pasangan;
+    }
+
+    /** Eager-load paths for resolving partner pemain via pasangan. */
+    public static function partnerPemainEagerLoads(): array
+    {
+        return [
+            'pasanganAsPeserta1.peserta2.pemain1',
+            'pasanganAsPeserta2.peserta1.pemain1',
+        ];
+    }
+
+    public static function partnerPemainEagerLoadsFor(string $prefix = ''): array
+    {
+        $prefix = $prefix !== '' ? rtrim($prefix, '.') . '.' : '';
+
+        return array_map(
+            static fn (string $path) => $prefix . $path,
+            self::partnerPemainEagerLoads()
+        );
+    }
+
+    public function getPartnerPemainAttribute(): ?Pemain
+    {
+        $pasangan = $this->pasangan;
+
+        if (! $pasangan) {
+            return null;
+        }
+
+        if ((int) $pasangan->id_peserta_1 === (int) $this->id) {
+            return optional($pasangan->peserta2)->pemain1;
+        }
+
+        return optional($pasangan->peserta1)->pemain1;
+    }
+
+    /** @deprecated Use partner_pemain */
+    public function getPemain2Attribute(): ?Pemain
+    {
+        return $this->partner_pemain;
+    }
+
     public function involvesPemain(int $pemainId): bool
     {
-        return ($this->id_pemain1 && (int) $this->id_pemain1 === $pemainId)
-            || ($this->id_pemain2 && (int) $this->id_pemain2 === $pemainId);
+        if ($this->id_pemain1 && (int) $this->id_pemain1 === $pemainId) {
+            return true;
+        }
+
+        $partner = $this->partner_pemain;
+
+        return $partner && (int) $partner->id === $pemainId;
     }
 
     public function pemainIds(): array
@@ -58,18 +118,29 @@ class TurnamenPeserta extends Model
             $ids[] = (int) $this->id_pemain1;
         }
 
-        if ($this->id_pemain2) {
-            $ids[] = (int) $this->id_pemain2;
+        $partner = $this->partner_pemain;
+
+        if ($partner) {
+            $ids[] = (int) $partner->id;
         }
 
-        return $ids;
+        return array_values(array_unique($ids));
     }
 
     public function scopeInvolvingPemain(Builder $query, int $pemainId): Builder
     {
         return $query->where(function (Builder $builder) use ($pemainId) {
             $builder->where('id_pemain1', $pemainId)
-                ->orWhere('id_pemain2', $pemainId);
+                ->orWhereHas('pasanganAsPeserta1', function (Builder $pairQuery) use ($pemainId) {
+                    $pairQuery->whereHas('peserta2', function (Builder $pesertaQuery) use ($pemainId) {
+                        $pesertaQuery->where('id_pemain1', $pemainId);
+                    });
+                })
+                ->orWhereHas('pasanganAsPeserta2', function (Builder $pairQuery) use ($pemainId) {
+                    $pairQuery->whereHas('peserta1', function (Builder $pesertaQuery) use ($pemainId) {
+                        $pesertaQuery->where('id_pemain1', $pemainId);
+                    });
+                });
         });
     }
 
@@ -105,33 +176,37 @@ class TurnamenPeserta extends Model
 
     public function scopeCompletePairs($query)
     {
-        return $query->whereNotNull('id_pemain1')->whereNotNull('id_pemain2');
+        return $query->whereHas('pasanganAsPeserta1');
     }
 
     public function scopeSoloEntries($query)
     {
-        return $query->whereNotNull('id_pemain1')->whereNull('id_pemain2');
+        return $query->whereDoesntHave('pasanganAsPeserta1')
+            ->whereDoesntHave('pasanganAsPeserta2');
     }
 
     public function isCompletePair(): bool
     {
-        return $this->id_pemain1 !== null && $this->id_pemain2 !== null;
+        return $this->pasangan !== null;
+    }
+
+    public function isPaired(): bool
+    {
+        return $this->isCompletePair();
     }
 
     public function getDisplayNameAttribute(): string
     {
-        $this->loadMissing(['pemain1', 'pemain2']);
+        $this->loadMissing(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1']);
 
-        if ($this->pemain1 && $this->pemain2) {
-            return trim($this->pemain1->nama . ' / ' . $this->pemain2->nama);
+        $partner = $this->partner_pemain;
+
+        if ($this->pemain1 && $partner) {
+            return trim($this->pemain1->nama . ' / ' . $partner->nama);
         }
 
         if ($this->pemain1) {
             return $this->pemain1->nama;
-        }
-
-        if ($this->pemain2) {
-            return $this->pemain2->nama;
         }
 
         return '-';
@@ -139,11 +214,11 @@ class TurnamenPeserta extends Model
 
     public function getAverageRatingAttribute(): float
     {
-        $this->loadMissing(['pemain1', 'pemain2']);
+        $this->loadMissing(array_merge(['pemain1'], self::partnerPemainEagerLoads()));
 
         $ratings = array_filter([
             optional($this->pemain1)->rating,
-            optional($this->pemain2)->rating,
+            optional($this->partner_pemain)->rating,
         ], static function ($rating) {
             return $rating !== null;
         });
@@ -157,6 +232,29 @@ class TurnamenPeserta extends Model
 
     public function getRepresentativePemainIdAttribute(): int
     {
-        return (int) ($this->id_pemain1 ?? $this->id_pemain2 ?? 0);
+        return (int) ($this->id_pemain1 ?? 0);
+    }
+
+    public function getPairedAtAttribute()
+    {
+        return optional($this->pasangan)->paired_at;
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        $labels = [
+            'pending' => 'Menunggu',
+            'approved' => 'Disetujui',
+            'rejected' => 'Ditolak',
+            'unpaid' => 'Belum Bayar',
+            'paid' => 'Sudah Bayar',
+        ];
+
+        return $labels[$this->status] ?? ucfirst((string) $this->status);
+    }
+
+    public function getSumberLabelAttribute(): string
+    {
+        return $this->sumber === self::SUMBER_EXTERNAL ? 'Eksternal' : 'Internal';
     }
 }

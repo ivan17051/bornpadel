@@ -98,10 +98,15 @@ class Turnamen extends Model
         return $this->hasMany(TurnamenPeserta::class, 'id_turnamen');
     }
 
+    public function pasangan()
+    {
+        return $this->hasMany(TurnamenPasangan::class, 'id_turnamen');
+    }
+
     public function pemain()
     {
         return $this->belongsToMany(Pemain::class, 'turnamen_peserta', 'id_turnamen', 'id_pemain1')
-            ->withPivot('status', 'id_pemain2')
+            ->withPivot('status', 'sumber')
             ->withTimestamps();
     }
 
@@ -151,7 +156,8 @@ class Turnamen extends Model
             ? $this->finalMatch
             : $this->finalMatch()->with([
                 'pesertaPemenang.pemain1',
-                'pesertaPemenang.pemain2',
+                'pesertaPemenang.pasanganAsPeserta1.peserta2.pemain1',
+                'pesertaPemenang.pasanganAsPeserta2.peserta1.pemain1',
                 'pemenang',
             ])->first();
 

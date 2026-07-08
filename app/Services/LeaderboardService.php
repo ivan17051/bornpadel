@@ -10,6 +10,13 @@ use Illuminate\Support\Collection;
 
 class LeaderboardService
 {
+    protected $mahjongRanker;
+
+    public function __construct(MahjongStandingRanker $mahjongRanker)
+    {
+        $this->mahjongRanker = $mahjongRanker;
+    }
+
     public function getActiveTournament(): ?Turnamen
     {
         return Turnamen::whereIn('status', ['open', 'ongoing', 'completed'])
@@ -33,7 +40,10 @@ class LeaderboardService
 
         return $grupQuery
             ->with(['members' => function ($query) use ($turnamen) {
-                $query->with(['pemain', 'turnamenPeserta.pemain1', 'turnamenPeserta.pemain2']);
+                $query->with(array_merge(
+                    ['pemain', 'turnamenPeserta.pemain1'],
+                    TurnamenPeserta::partnerPemainEagerLoadsFor('turnamenPeserta')
+                ));
 
                 if ($turnamen->isMahjong()) {
                     $query->orderByDesc('poin_akumulasi')
@@ -240,12 +250,8 @@ class LeaderboardService
             ]);
         })
             ->filter()
-            ->sortByDesc('total_babak')
-            ->values()
-            ->map(function (array $row, int $index) {
-                $row['rank'] = $index + 1;
-
-                return $row;
+            ->pipe(function (Collection $rows) {
+                return $this->mahjongRanker->rankRows($rows);
             });
 
         return [
@@ -283,7 +289,10 @@ class LeaderboardService
         $groups = Grup::query()
             ->where('id_turnamen', $turnamen->id)
             ->where('babak', $babak)
-            ->with(['members.pemain', 'members.turnamenPeserta.pemain1', 'members.turnamenPeserta.pemain2'])
+            ->with(array_merge(
+                ['members.pemain', 'members.turnamenPeserta.pemain1'],
+                TurnamenPeserta::partnerPemainEagerLoadsFor('members.turnamenPeserta')
+            ))
             ->orderBy('ronde')
             ->orderBy('id')
             ->get();
@@ -342,28 +351,32 @@ class LeaderboardService
         int $babak,
         Turnamen $turnamen
     ): int {
-        if ($roundIndex > 0) {
-            $prevBatch = $roundBatches->get($roundIndex - 1);
+        // Each babak resets the scoreboard. Ronde 1 always starts from 0.
+        if ($roundIndex <= 0) {
+            return 0;
+        }
 
-            if ($prevBatch && $pesertaId) {
-                $prevMember = $this->findMahjongMemberInBatch($prevBatch, $pesertaId);
+        $prevBatch = $roundBatches->get($roundIndex - 1);
 
-                if ($prevMember) {
-                    if ((int) $prevMember->poin_didapat !== 0) {
-                        return (int) $prevMember->poin_akumulasi;
-                    }
+        if ($prevBatch && $pesertaId) {
+            $prevMember = $this->findMahjongMemberInBatch($prevBatch, $pesertaId);
 
-                    return (int) $prevMember->poin_akumulasi;
-                }
+            if ($prevMember) {
+                // After commit, total sits in poin_akumulasi (poin_didapat = 0).
+                // Before commit on a historical row, total is akumulasi + didapat.
+                return (int) $prevMember->poin_akumulasi + (int) $prevMember->poin_didapat;
             }
         }
 
-        return $this->getMahjongCarryPointsBeforeBabak($pesertaId, $babak, $turnamen);
+        return 0;
     }
 
     protected function resolveMahjongGrupBatchForBabak(Turnamen $turnamen, int $babak): Collection
     {
-        $relations = ['members.pemain', 'members.turnamenPeserta.pemain1', 'members.turnamenPeserta.pemain2'];
+        $relations = array_merge(
+            ['members.pemain', 'members.turnamenPeserta.pemain1'],
+            TurnamenPeserta::partnerPemainEagerLoadsFor('members.turnamenPeserta')
+        );
 
         $active = Grup::query()
             ->where('id_turnamen', $turnamen->id)
@@ -397,21 +410,6 @@ class LeaderboardService
             ->get();
     }
 
-    protected function resolveMahjongBabakPoints(GrupMember $member, int $babak, Turnamen $turnamen): int
-    {
-        if ($member->grup && $member->grup->is_aktif) {
-            return (int) $member->poin_didapat;
-        }
-
-        if ((int) $member->poin_didapat !== 0) {
-            return (int) $member->poin_didapat;
-        }
-
-        $startAkumulasi = $this->getMahjongCarryPointsBeforeBabak($member->id_turnamen_peserta, $babak, $turnamen);
-
-        return max(0, (int) $member->poin_akumulasi - $startAkumulasi);
-    }
-
     protected function resolveMahjongTotalPoints(GrupMember $member, int $babakPoints, int $babak, Turnamen $turnamen): int
     {
         if ($member->grup && $member->grup->is_aktif) {
@@ -425,39 +423,16 @@ class LeaderboardService
         return (int) $member->poin_akumulasi;
     }
 
-    protected function getMahjongCarryPointsBeforeBabak(?int $pesertaId, int $babak, Turnamen $turnamen): int
-    {
-        if (! $pesertaId || $babak <= 1) {
-            return 0;
-        }
-
-        $previousMember = GrupMember::query()
-            ->where('id_turnamen_peserta', $pesertaId)
-            ->whereHas('grup', function ($query) use ($turnamen, $babak) {
-                $query->where('id_turnamen', $turnamen->id)
-                    ->where('babak', $babak - 1);
-            })
-            ->orderByDesc('id')
-            ->first();
-
-        if (! $previousMember) {
-            return 0;
-        }
-
-        if ((int) $previousMember->poin_didapat !== 0) {
-            return (int) $previousMember->poin_akumulasi;
-        }
-
-        return (int) $previousMember->poin_akumulasi;
-    }
-
     protected function collectMahjongStandingMembers(Turnamen $turnamen): Collection
     {
         $activeMembers = GrupMember::query()
             ->whereHas('grup', function ($query) use ($turnamen) {
                 $query->where('id_turnamen', $turnamen->id)->where('is_aktif', true);
             })
-            ->with(['pemain', 'turnamenPeserta.pemain1', 'turnamenPeserta.pemain2', 'grup'])
+            ->with(array_merge(
+                ['pemain', 'turnamenPeserta.pemain1', 'grup'],
+                TurnamenPeserta::partnerPemainEagerLoadsFor('turnamenPeserta')
+            ))
             ->get();
 
         if ($activeMembers->isNotEmpty()) {
@@ -474,7 +449,10 @@ class LeaderboardService
             ->whereHas('grup', function ($query) use ($turnamen, $latestBabak) {
                 $query->where('id_turnamen', $turnamen->id)->where('babak', $latestBabak);
             })
-            ->with(['pemain', 'turnamenPeserta.pemain1', 'turnamenPeserta.pemain2', 'grup'])
+            ->with(array_merge(
+                ['pemain', 'turnamenPeserta.pemain1', 'grup'],
+                TurnamenPeserta::partnerPemainEagerLoadsFor('turnamenPeserta')
+            ))
             ->get();
     }
 

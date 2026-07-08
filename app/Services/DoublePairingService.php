@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Turnamen;
+use App\Models\TurnamenPasangan;
 use App\Models\TurnamenPeserta;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -74,7 +75,7 @@ class DoublePairingService
         $pairsCreated = 0;
         $pairs = [];
 
-        DB::transaction(function () use ($shuffled, &$pairsCreated, &$pairs) {
+        DB::transaction(function () use ($shuffled, $turnamen, &$pairsCreated, &$pairs) {
             for ($i = 0; $i < $shuffled->count(); $i += 2) {
                 /** @var TurnamenPeserta $rowA */
                 $rowA = $shuffled[$i];
@@ -84,8 +85,10 @@ class DoublePairingService
                 $rowA->loadMissing('pemain1');
                 $rowB->loadMissing('pemain1');
 
-                $rowA->update([
-                    'id_pemain2' => $rowB->id_pemain1,
+                TurnamenPasangan::create([
+                    'id_turnamen' => $turnamen->id,
+                    'id_peserta_1' => $rowA->id,
+                    'id_peserta_2' => $rowB->id,
                     'paired_at' => now(),
                 ]);
 
@@ -95,7 +98,6 @@ class DoublePairingService
                     'pemain2' => $rowB->pemain1->nama,
                 ];
 
-                $rowB->delete();
                 $pairsCreated++;
             }
         });
@@ -104,6 +106,25 @@ class DoublePairingService
             'pairs_created' => $pairsCreated,
             'pairs' => $pairs,
         ];
+    }
+
+    public function createPair(Turnamen $turnamen, TurnamenPeserta $peserta1, TurnamenPeserta $peserta2): TurnamenPasangan
+    {
+        if ((int) $peserta1->id_turnamen !== (int) $turnamen->id
+            || (int) $peserta2->id_turnamen !== (int) $turnamen->id) {
+            throw new RuntimeException('Kedua peserta harus berada pada turnamen yang sama.');
+        }
+
+        if ($peserta1->isPaired() || $peserta2->isPaired()) {
+            throw new RuntimeException('Salah satu peserta sudah memiliki pasangan.');
+        }
+
+        return TurnamenPasangan::create([
+            'id_turnamen' => $turnamen->id,
+            'id_peserta_1' => $peserta1->id,
+            'id_peserta_2' => $peserta2->id,
+            'paired_at' => now(),
+        ]);
     }
 
     protected function approvedSoloQuery(Turnamen $turnamen)
