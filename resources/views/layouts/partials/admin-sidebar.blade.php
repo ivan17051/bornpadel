@@ -20,22 +20,20 @@
                     </a>
                 </li>
                 
-                <div class="nav-header">DATA MASTER</div>
                 @if (auth()->user()->isAdmin())
+                <div class="nav-header">DATA MASTER</div>
                 <li class="nav-item">
                     <a href="{{ route('admin.turnamen.index') }}" class="nav-link {{ request()->routeIs('admin.turnamen.*') ? 'active' : '' }}">
                         <i class="nav-icon bi bi-calendar-event"></i>
                         <p>Turnamen</p>
                     </a>
                 </li>
-                @endif
                 <li class="nav-item">
                     <a href="{{ route('admin.pemain.directory') }}" class="nav-link {{ request()->routeIs('admin.pemain.directory') ? 'active' : '' }}">
                         <i class="nav-icon bi bi-database"></i>
                         <p>Semua Pemain</p>
                     </a>
                 </li>
-                @if (auth()->user()->isAdmin())
                 <li class="nav-item">
                     <a href="{{ route('admin.pengguna.index') }}" class="nav-link {{ request()->routeIs('admin.pengguna.*') ? 'active' : '' }}">
                         <i class="nav-icon bi bi-person-gear"></i>
@@ -44,8 +42,8 @@
                 </li>
                 @endif
 
-                <div class="nav-header">TURNAMEN</div>
-                
+                {{-- <div class="nav-header">TURNAMEN</div>
+
                 <li class="nav-item">
                     <a href="{{ route('admin.standings.index') }}" class="nav-link {{ request()->routeIs('admin.standings.*') ? 'active' : '' }}">
                         <i class="nav-icon bi bi-bar-chart-steps"></i>
@@ -63,7 +61,7 @@
                         <i class="nav-icon bi bi-trophy"></i>
                         <p>Pertandingan & Skor</p>
                     </a>
-                </li>
+                </li> --}}
                 
             </ul>
         </nav>
