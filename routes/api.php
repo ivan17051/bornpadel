@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\MatchmakingController;
 use App\Http\Controllers\Admin\PemainController;
 use App\Http\Controllers\Admin\PertandinganController;
+use App\Http\Controllers\Api\Guest\GroupStageHistoryController;
 use App\Http\Controllers\Api\Guest\BracketController;
 use App\Http\Controllers\Api\Guest\RegistrationController;
 use App\Http\Controllers\Api\Guest\StandingsController;
@@ -17,6 +18,7 @@ Route::prefix('guest')->group(function () {
     Route::get('/tournaments/open', [TournamentController::class, 'open']);
     Route::post('/register', [RegistrationController::class, 'store']);
     Route::get('/standings', [StandingsController::class, 'index'])->name('api.guest.standings');
+    Route::get('/standings/group-history', [GroupStageHistoryController::class, 'show'])->name('api.guest.standings.group-history');
     Route::get('/bracket', [BracketController::class, 'index'])->name('api.guest.bracket');
 });
 

@@ -91,6 +91,9 @@
 @endpush
 
 @push('scripts')
+@if ($turnamen && $activeTab === 'klasemen' && ! $turnamen->isMahjong())
+    <script src="{{ asset('public/js/group-stage-history.js') }}"></script>
+@endif
 @if ($turnamen && $activeTab === 'klasemen')
     <script src="{{ asset('public/js/leaderboard.js') }}"></script>
 @endif

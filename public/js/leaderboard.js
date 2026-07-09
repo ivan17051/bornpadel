@@ -7,7 +7,29 @@
 
     const refreshUrl = container.dataset.refreshUrl;
     const isMahjong = container.dataset.mahjong === '1';
+    const showGroupHistory = container.dataset.showGroupHistory === '1';
     const profileBase = '/pemain/';
+
+    const renderHistoryButton = (row, grupId) => {
+        if (!showGroupHistory || !row.id_peserta || !grupId) {
+            return '';
+        }
+
+        const name = String(row.nama || '').replace(/"/g, '&quot;');
+
+        return `
+            <td class="text-end">
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary btn-group-stage-history"
+                        title="Riwayat pertandingan"
+                        aria-label="Riwayat pertandingan ${name}"
+                        data-grup-id="${grupId}"
+                        data-peserta-id="${row.id_peserta}"
+                        data-participant-name="${name}">
+                    <i class="bi bi-clock-history"></i>
+                </button>
+            </td>`;
+    };
 
     const renderNameCell = (row) => {
         const ids = row.pemain_ids || (row.id_pemain ? [row.id_pemain] : []);
@@ -165,6 +187,7 @@
                         <td class="text-center"><span class="badge text-bg-primary">${row.poin_didapat}</span></td>
                         <td class="text-center d-none d-sm-table-cell">${row.set_menang}</td>
                         <td class="text-center d-none d-md-table-cell">${row.games_menang}</td>
+                        ${renderHistoryButton(row, grup.id)}
                     </tr>`;
             }).join('');
 
@@ -182,6 +205,7 @@
                         <th class="text-center">Poin</th>
                         <th class="text-center d-none d-sm-table-cell">Set</th>
                         <th class="text-center d-none d-md-table-cell">Games</th>
+                        ${showGroupHistory ? '<th class="text-end" style="width:4rem"></th>' : ''}
                    </tr>`;
 
             return `

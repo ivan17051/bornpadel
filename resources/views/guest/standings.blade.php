@@ -32,5 +32,8 @@
 @endsection
 
 @push('scripts')
+@if ($turnamen && ! $turnamen->isMahjong())
+<script src="{{ asset('public/js/group-stage-history.js') }}"></script>
+@endif
 <script src="{{ asset('public/js/leaderboard.js') }}"></script>
 @endpush

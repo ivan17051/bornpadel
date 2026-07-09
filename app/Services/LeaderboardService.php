@@ -63,9 +63,10 @@ class LeaderboardService
                     'babak' => $grup->babak,
                     'is_double' => $turnamen->isDouble(),
                     'is_mahjong' => $turnamen->isMahjong(),
-                    'standings' => $grup->members->values()->map(function ($member, $index) use ($turnamen) {
+                    'standings' => $grup->members->values()->map(function ($member, $index) use ($turnamen, $grup) {
                         $row = [
                             'rank' => $index + 1,
+                            'id_grup' => $grup->id,
                             'id_pemain' => $member->id_pemain,
                             'id_peserta' => $member->id_turnamen_peserta,
                             'pemain_ids' => $this->resolveStandingPemainIds($member),

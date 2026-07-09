@@ -1,9 +1,16 @@
-@props(['standings', 'turnamen' => null, 'refreshable' => false])
+@props(['standings', 'turnamen' => null, 'refreshable' => false, 'showGroupHistory' => true])
+
+@php
+    $isDouble = optional($turnamen)->isDouble();
+    $showHistory = $showGroupHistory && $turnamen && ! $turnamen->isMahjong();
+    $historyUrl = $showHistory ? route('api.guest.standings.group-history') : null;
+@endphp
 
 <div class="group-leaderboard"
      @if($refreshable)
          id="live-leaderboard"
          data-refresh-url="{{ route('api.guest.standings', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+         @if($showHistory) data-show-group-history="1" @endif
      @endif>
     @if ($turnamen)
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -47,6 +54,9 @@
                                                 <th class="text-center">Poin</th>
                                                 <th class="text-center d-none d-sm-table-cell">Set</th>
                                                 <th class="text-center d-none d-md-table-cell">Games</th>
+                                                @if ($showHistory)
+                                                    <th class="text-end" style="width:4rem"></th>
+                                                @endif
                                             @endif
                                         </tr>
                                     </thead>
@@ -77,6 +87,21 @@
                                                     </td>
                                                     <td class="text-center d-none d-sm-table-cell">{{ $row['set_menang'] }}</td>
                                                     <td class="text-center d-none d-md-table-cell">{{ $row['games_menang'] }}</td>
+                                                    @if ($showHistory)
+                                                        <td class="text-end">
+                                                            @if (! empty($row['id_peserta']))
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-outline-secondary btn-group-stage-history"
+                                                                        title="Riwayat pertandingan"
+                                                                        aria-label="Riwayat pertandingan {{ $row['nama'] }}"
+                                                                        data-grup-id="{{ $grup['id'] }}"
+                                                                        data-peserta-id="{{ $row['id_peserta'] }}"
+                                                                        data-participant-name="{{ $row['nama'] }}">
+                                                                    <i class="bi bi-clock-history"></i>
+                                                                </button>
+                                                            @endif
+                                                        </td>
+                                                    @endif
                                                 @endif
                                             </tr>
                                         @endforeach
@@ -95,3 +120,7 @@
         @endif
     @endif
 </div>
+
+@if ($showHistory)
+    <x-group-stage-history-modal :history-url="$historyUrl" />
+@endif
