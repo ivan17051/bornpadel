@@ -3,6 +3,7 @@
  */
 const BornPadelAdmin = (function () {
     const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    let partnerModalDocumentListenerBound = false;
 
     const showPageLoader = () => {
         if (window.BornPadelPageLoader) {
@@ -48,6 +49,7 @@ const BornPadelAdmin = (function () {
     const apiRequest = async (url, method = 'POST', body = null) => {
         const options = {
             method,
+            credentials: 'same-origin',
             headers: {
                 'X-CSRF-TOKEN': csrfToken(),
                 'Accept': 'application/json',
@@ -130,7 +132,206 @@ const BornPadelAdmin = (function () {
         return confirm(text ? `${title}\n\n${text}` : title);
     };
 
+    const initBulkApproval = () => {
+        const card = document.getElementById('pemain-table-card');
+        const bulkBtns = Array.from(document.querySelectorAll('.btn-bulk-approve'));
+        const selectAll = document.getElementById('select-all-approvable');
+
+        if (!card || bulkBtns.length === 0) return;
+
+        const checkboxes = () => Array.from(document.querySelectorAll('.peserta-bulk-checkbox'));
+
+        const updateBulkControls = () => {
+            const selected = checkboxes().filter((cb) => cb.checked);
+            const count = selected.length;
+
+            bulkBtns.forEach((btn) => {
+                btn.disabled = count === 0;
+                btn.title = count === 0
+                    ? 'Pilih peserta pada tabel terlebih dahulu'
+                    : `Setujui ${count} peserta terpilih`;
+            });
+
+            if (selectAll) {
+                const all = checkboxes();
+                selectAll.checked = all.length > 0 && selected.length === all.length;
+                selectAll.indeterminate = selected.length > 0 && selected.length < all.length;
+            }
+        };
+
+        checkboxes().forEach((cb) => cb.addEventListener('change', updateBulkControls));
+
+        if (selectAll) {
+            selectAll.addEventListener('change', () => {
+                checkboxes().forEach((cb) => {
+                    cb.checked = selectAll.checked;
+                });
+                updateBulkControls();
+            });
+        }
+
+        const runBulkApprove = async (triggerBtn) => {
+            const selectedIds = checkboxes()
+                .filter((cb) => cb.checked)
+                .map((cb) => parseInt(cb.value, 10));
+
+            if (!selectedIds.length) return;
+
+            const confirmed = await confirmAction({
+                title: `Setujui ${selectedIds.length} peserta terpilih?`,
+                confirmText: 'Ya, setujui semua',
+                icon: 'question',
+                confirmButtonColor: '#198754',
+            });
+
+            if (!confirmed) return;
+
+            bulkBtns.forEach((btn) => setButtonLoading(btn, true));
+
+            try {
+                await apiRequest(card.dataset.bulkApproveUrl, 'POST', {
+                    id_turnamen: parseInt(card.dataset.turnamenId, 10),
+                    peserta_ids: selectedIds,
+                });
+                showAlert(`${selectedIds.length} peserta berhasil disetujui.`, 'success');
+                reloadPage();
+            } catch (e) {
+                showAlert(e.message, 'error');
+                bulkBtns.forEach((btn) => setButtonLoading(btn, false));
+            }
+        };
+
+        bulkBtns.forEach((btn) => {
+            btn.addEventListener('click', () => runBulkApprove(btn));
+        });
+
+        updateBulkControls();
+    };
+
+    const initPartnerModal = () => {
+        const modalEl = document.getElementById('setPartnerModal');
+        const form = document.getElementById('setPartnerForm');
+        if (!modalEl || !form) return;
+
+        if (typeof jQuery === 'undefined' || !jQuery.fn.select2) return;
+
+        const $ = jQuery;
+
+        if (modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        const titleEl = document.getElementById('set-partner-modal-title');
+        const nameEl = document.getElementById('set-partner-pemain-name');
+        const partnerSelect = document.getElementById('partner_peserta_id');
+        const saveBtn = document.getElementById('btn-save-partner');
+        const $partnerSelect = $(partnerSelect);
+        let activePesertaId = null;
+        let select2Initialized = false;
+
+        const destroyPartnerSelect2 = () => {
+            if ($partnerSelect.hasClass('select2-hidden-accessible')) {
+                $partnerSelect.select2('destroy');
+                select2Initialized = false;
+            }
+        };
+
+        const initPartnerSelect2 = () => {
+            destroyPartnerSelect2();
+
+            $partnerSelect.select2({
+                theme: 'bootstrap-5',
+                dropdownParent: $(modalEl),
+                placeholder: 'Cari nama atau nomor HP...',
+                allowClear: true,
+                width: '100%',
+            });
+
+            select2Initialized = true;
+        };
+
+        const refreshPartnerOptions = (excludePesertaId) => {
+            Array.from(partnerSelect.options).forEach((option) => {
+                if (!option.value) {
+                    option.disabled = false;
+                    return;
+                }
+
+                option.disabled = parseInt(option.value, 10) === parseInt(excludePesertaId, 10);
+            });
+
+            if (!select2Initialized) {
+                initPartnerSelect2();
+            }
+
+            $partnerSelect.val(null).trigger('change');
+        };
+
+        const openPartnerModal = (btn) => {
+            activePesertaId = btn.dataset.pesertaId;
+            const isChange = btn.dataset.partnerMode === 'change';
+
+            if (titleEl) titleEl.textContent = isChange ? 'Ubah Partner' : 'Set Partner';
+            if (nameEl) nameEl.textContent = btn.dataset.pemainName || 'Pemain';
+
+            refreshPartnerOptions(activePesertaId);
+            modal.show();
+        };
+
+        if (!partnerModalDocumentListenerBound) {
+            document.addEventListener('click', (event) => {
+                const btn = event.target.closest('.btn-set-partner');
+                if (!btn) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                openPartnerModal(btn);
+            });
+
+            partnerModalDocumentListenerBound = true;
+        }
+
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            $partnerSelect.val(null).trigger('change');
+        });
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!activePesertaId) return;
+
+            const partnerId = partnerSelect?.value;
+            if (!partnerId) {
+                showToast('Pilih peserta pasangan terlebih dahulu.', 'error');
+                return;
+            }
+
+            const payload = {
+                partner_peserta_id: parseInt(partnerId, 10),
+            };
+
+            const original = saveBtn.innerHTML;
+            setButtonLoading(saveBtn, true);
+
+            try {
+                const partnerUrl = (modalEl.dataset.setPartnerUrl || '/admin/peserta/__PESERTA_ID__/partner')
+                    .replace('__PESERTA_ID__', activePesertaId);
+                await apiRequest(partnerUrl, 'POST', payload);
+                showAlert('Pasangan berhasil diperbarui.', 'success');
+                modal.hide();
+                reloadPage();
+            } catch (e) {
+                showAlert(e.message, 'error');
+            } finally {
+                setButtonLoading(saveBtn, false, original);
+            }
+        });
+    };
+
     const initPemainActions = () => {
+        initBulkApproval();
+        initPartnerModal();
+
         document.querySelectorAll('.btn-approve').forEach((btn) => {
             btn.addEventListener('click', async () => {
                 const confirmed = await confirmAction({

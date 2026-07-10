@@ -17,6 +17,7 @@ class UpdateTurnamenRequest extends FormRequest
             'nama' => ['required', 'string', 'max:255'],
             'tanggal' => ['required', 'date'],
             'harga' => ['required', 'numeric', 'min:0'],
+            'maks_peserta' => ['nullable', 'integer', 'min:1'],
             'syarat' => ['nullable', 'string'],
             'jenis' => ['required', 'in:single,double,mahjong'],
             'status' => ['required', 'in:draft,open,ongoing,completed'],

@@ -47,18 +47,39 @@ class RegistrationController extends Controller
 
         $validated = $request->validated();
         $noHp = trim($validated['no_hp']);
+        $registrationMode = $validated['registration_mode'] ?? 'single';
+        $isPairMode = $turnamen->isDouble() && $registrationMode === 'pair';
+        $noHp2 = $isPairMode ? trim($validated['no_hp_2']) : null;
+
         $existingPemain = $this->registrationService->findPemainByPhone($noHp);
 
         if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $turnamen)) {
             return back()
                 ->withInput()
-                ->withErrors(['no_hp' => 'Nomor HP sudah terdaftar pada turnamen ini.']);
+                ->withErrors(['no_hp' => 'Nomor HP pemain 1 sudah terdaftar pada turnamen ini.']);
         }
 
-        return redirect()->route('guest.register.form', [
+        if ($isPairMode) {
+            $existingPemain2 = $this->registrationService->findPemainByPhone($noHp2);
+
+            if ($existingPemain2 && $this->registrationService->isRegisteredForTournament($existingPemain2, $turnamen)) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['no_hp_2' => 'Nomor HP pemain 2 sudah terdaftar pada turnamen ini.']);
+            }
+        }
+
+        $formParams = [
             'no_hp' => $noHp,
             'id_turnamen' => $turnamen->id,
-        ]);
+            'registration_mode' => $isPairMode ? 'pair' : 'single',
+        ];
+
+        if ($isPairMode) {
+            $formParams['no_hp_2'] = $noHp2;
+        }
+
+        return redirect()->route('guest.register.form', $formParams);
     }
 
     public function form()
@@ -71,23 +92,49 @@ class RegistrationController extends Controller
         }
 
         $noHp = trim((string) request('no_hp', old('no_hp', '')));
+        $registrationMode = request('registration_mode', old('registration_mode', 'single'));
+        $isPairMode = $turnamen->isDouble() && $registrationMode === 'pair';
+        $noHp2 = $isPairMode ? trim((string) request('no_hp_2', old('player_2.no_hp', ''))) : '';
 
         if ($noHp === '') {
             return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id]);
+        }
+
+        if ($isPairMode && $noHp2 === '') {
+            return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+                ->withErrors(['no_hp_2' => 'Nomor HP pemain 2 wajib diisi untuk pendaftaran berpasangan.']);
         }
 
         $existingPemain = $this->registrationService->findPemainByPhone($noHp);
 
         if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $turnamen)) {
             return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
-                ->withErrors(['no_hp' => 'Nomor HP sudah terdaftar pada turnamen ini.']);
+                ->withErrors(['no_hp' => 'Nomor HP pemain 1 sudah terdaftar pada turnamen ini.']);
+        }
+
+        $existingPemain2 = null;
+        $isExisting2 = false;
+
+        if ($isPairMode) {
+            $existingPemain2 = $this->registrationService->findPemainByPhone($noHp2);
+
+            if ($existingPemain2 && $this->registrationService->isRegisteredForTournament($existingPemain2, $turnamen)) {
+                return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+                    ->withErrors(['no_hp_2' => 'Nomor HP pemain 2 sudah terdaftar pada turnamen ini.']);
+            }
+
+            $isExisting2 = (bool) $existingPemain2;
         }
 
         return view('guest.register-form', [
             'turnamen' => $turnamen,
             'noHp' => $noHp,
+            'noHp2' => $noHp2,
             'existingPemain' => $existingPemain,
+            'existingPemain2' => $existingPemain2,
             'isExisting' => (bool) $existingPemain,
+            'isExisting2' => $isExisting2,
+            'registrationMode' => $isPairMode ? 'pair' : 'single',
         ]);
     }
 
@@ -104,12 +151,29 @@ class RegistrationController extends Controller
         $buktiBayar = $request->file('bukti_bayar');
 
         try {
-            $pemain = $this->registrationService->register(
-                $turnamen,
-                $validated,
-                $request->file('foto'),
-                $buktiBayar
-            );
+            $registerAsPair = $turnamen->isDouble() && $request->isPairRegistration();
+
+            if ($registerAsPair) {
+                $pair = $this->registrationService->registerPair(
+                    $turnamen,
+                    $request->playerOnePayload(),
+                    $request->file('foto'),
+                    $request->playerTwoPayload(),
+                    $request->file('foto_2'),
+                    $buktiBayar
+                );
+
+                $pemain = $pair['pemain'];
+                $partner = $pair['partner'];
+            } else {
+                $pemain = $this->registrationService->register(
+                    $turnamen,
+                    $request->playerOnePayload(),
+                    $request->file('foto'),
+                    $buktiBayar
+                );
+                $partner = null;
+            }
         } catch (\RuntimeException $e) {
             $field = 'no_hp';
 
@@ -118,10 +182,12 @@ class RegistrationController extends Controller
             }
 
             return redirect()
-                ->route('guest.register.form', [
+                ->route('guest.register.form', array_filter([
                     'no_hp' => $request->input('no_hp'),
+                    'no_hp_2' => $request->input('player_2.no_hp'),
+                    'registration_mode' => $request->input('registration_mode'),
                     'id_turnamen' => $turnamen->id,
-                ])
+                ]))
                 ->withInput()
                 ->withErrors([$field => $e->getMessage()]);
         }
@@ -130,11 +196,13 @@ class RegistrationController extends Controller
             ->route('guest.register.success')
             ->with('registration_success', [
                 'is_double' => $turnamen->isDouble(),
-                'individual_registration' => $turnamen->isDouble(),
+                'individual_registration' => $turnamen->isDouble() && ! $partner,
+                'paired_registration' => (bool) $partner,
                 'turnamen_id' => $turnamen->id,
-                'players' => [
+                'players' => array_values(array_filter([
                     $this->playerPayload($pemain, $turnamen),
-                ],
+                    $partner ? $this->playerPayload($partner, $turnamen) : null,
+                ])),
             ]);
     }
 

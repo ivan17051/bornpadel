@@ -15,6 +15,9 @@
     $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
     $hasReject = $turnamen && ! $turnamenOngoing && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'approved'], true);
     $hasDelete = $turnamen && ! $turnamenOngoing;
+    $canManagePartner = ($showPartnerActions ?? false) && $peserta;
+    $hasSetPartner = $canManagePartner && ! $peserta->isPaired();
+    $hasChangePartner = $canManagePartner && $peserta->isPaired();
 @endphp
 
 <div class="dropdown">
@@ -38,6 +41,30 @@
             'turnamen' => $turnamen ?? null,
             'label' => $pemain->nama,
         ])
+
+        @if ($hasSetPartner)
+            <li>
+                <button type="button"
+                        class="dropdown-item btn-set-partner"
+                        data-peserta-id="{{ $peserta->id }}"
+                        data-pemain-name="{{ $pemain->nama }}"
+                        data-partner-mode="set">
+                    <i class="bi bi-people me-2"></i> Set Partner
+                </button>
+            </li>
+        @endif
+
+        @if ($hasChangePartner)
+            <li>
+                <button type="button"
+                        class="dropdown-item btn-set-partner"
+                        data-peserta-id="{{ $peserta->id }}"
+                        data-pemain-name="{{ $pemain->nama }}"
+                        data-partner-mode="change">
+                    <i class="bi bi-arrow-repeat me-2"></i> Ubah Partner
+                </button>
+            </li>
+        @endif
 
         @if ($hasApprove)
             <li>

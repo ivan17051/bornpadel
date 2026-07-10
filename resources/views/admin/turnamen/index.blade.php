@@ -105,16 +105,16 @@
                                    title="Edit">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form action="{{ route('admin.turnamen.destroy', $item) }}"
-                                      method="POST"
-                                      class="d-inline"
-                                      onsubmit="return confirm('Hapus turnamen {{ $item->nama }}?')">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </form>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger"
+                                        title="Hapus"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#deleteTurnamenModal"
+                                        data-turnamen-id="{{ $item->id }}"
+                                        data-turnamen-name="{{ $item->nama }}"
+                                        data-delete-url="{{ route('admin.turnamen.destroy', $item) }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                             </td>
                         </tr>
                     @empty
@@ -134,4 +134,88 @@
         </div>
     @endif
 </div>
+
+<div class="modal fade" id="deleteTurnamenModal" tabindex="-1" aria-labelledby="deleteTurnamenModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-danger">
+            <form method="POST" id="deleteTurnamenForm">
+                @csrf
+                @method('DELETE')
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteTurnamenModalLabel">
+                        <i class="bi bi-exclamation-triangle me-2"></i> Hapus Turnamen
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger mb-3">
+                        <strong>Peringatan:</strong> Menghapus turnamen <strong id="deleteTurnamenName"></strong> akan
+                        <strong>menghapus permanen</strong> seluruh data terkait, termasuk:
+                        <ul class="mb-0 mt-2">
+                            <li>Pendaftaran peserta & pasangan</li>
+                            <li>Grup dan matchmaking</li>
+                            <li>Semua pertandingan & skor</li>
+                            <li>Data klasemen dan bracket</li>
+                        </ul>
+                    </div>
+                    <p class="text-muted small mb-3">Tindakan ini tidak dapat dibatalkan.</p>
+                    <div class="mb-0">
+                        <label for="deleteTurnamenPassword" class="form-label">Password Admin <span class="text-danger">*</span></label>
+                        <input type="password"
+                               name="password"
+                               id="deleteTurnamenPassword"
+                               class="form-control"
+                               autocomplete="current-password"
+                               placeholder="Masukkan password admin">
+                        <div class="form-text">Konfirmasi identitas admin untuk melanjutkan penghapusan.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-danger" id="deleteTurnamenSubmit" disabled>
+                        <i class="bi bi-trash me-1"></i> Hapus Turnamen
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('deleteTurnamenModal');
+    if (!modal) return;
+
+    const form = document.getElementById('deleteTurnamenForm');
+    const nameEl = document.getElementById('deleteTurnamenName');
+    const passwordEl = document.getElementById('deleteTurnamenPassword');
+    const submitBtn = document.getElementById('deleteTurnamenSubmit');
+
+    const toggleSubmit = () => {
+        if (submitBtn) {
+            submitBtn.disabled = !passwordEl.value.trim();
+        }
+    };
+
+    modal.addEventListener('show.bs.modal', function (event) {
+        const button = event.relatedTarget;
+
+        form.action = button.getAttribute('data-delete-url');
+        nameEl.textContent = button.getAttribute('data-turnamen-name');
+        passwordEl.value = '';
+        toggleSubmit();
+    });
+
+    passwordEl.addEventListener('input', toggleSubmit);
+
+    form.addEventListener('submit', function (event) {
+        if (!passwordEl.value.trim()) {
+            event.preventDefault();
+            submitBtn.disabled = true;
+        }
+    });
+});
+</script>
+@endpush

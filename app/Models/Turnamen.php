@@ -15,6 +15,7 @@ class Turnamen extends Model
         'nama',
         'tanggal',
         'harga',
+        'maks_peserta',
         'syarat',
         'jenis',
         'status',

@@ -12,6 +12,13 @@ class EnsureAdmin
         $user = $request->user();
 
         if (! $user || ! $user->isAdmin()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin yang dapat mengakses endpoint ini.',
+                ], 403);
+            }
+
             abort(403, 'Hanya admin yang dapat mengakses halaman ini.');
         }
 

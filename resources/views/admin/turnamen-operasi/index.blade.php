@@ -102,11 +102,15 @@
 @endif
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    BornPadelAdmin.initPemainActions();
-    BornPadelAdmin.initMatchmakingActions();
+    @if ($turnamen && $activeTab === 'pemain')
+        BornPadelAdmin.initPemainActions();
+    @endif
 
-    @if ($turnamen && $activeTab === 'matchmaking' && ! ($isMahjong ?? false))
-        BornPadelAdmin.initScoreModal();
+    @if ($turnamen && $activeTab === 'matchmaking')
+        BornPadelAdmin.initMatchmakingActions();
+        @if (! ($isMahjong ?? false))
+            BornPadelAdmin.initScoreModal();
+        @endif
     @endif
 
     @if (session('success'))

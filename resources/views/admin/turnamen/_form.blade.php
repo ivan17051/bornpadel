@@ -44,6 +44,21 @@
 </div>
 
 <div class="mb-3">
+    <label for="maks_peserta" class="form-label">Maksimal Peserta</label>
+    <input type="number"
+           name="maks_peserta"
+           id="maks_peserta"
+           class="form-control @error('maks_peserta') is-invalid @enderror"
+           value="{{ old('maks_peserta', optional($turnamenModel)->maks_peserta) }}"
+           min="1"
+           placeholder="Kosongkan jika tidak ada batas">
+    <div class="form-text">Membatasi jumlah peserta yang dapat disetujui admin. Tidak membatasi pendaftaran mandiri.</div>
+    @error('maks_peserta')
+        <div class="invalid-feedback">{{ $message }}</div>
+    @enderror
+</div>
+
+<div class="mb-3">
     <label for="syarat" class="form-label">Syarat & Ketentuan</label>
     <textarea name="syarat"
               id="syarat"

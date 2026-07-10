@@ -35,7 +35,7 @@
                 @if ($isDouble)
                     <div class="alert alert-light border text-start mb-4">
                         <i class="bi bi-shuffle me-2"></i>
-                        Pasangan untuk turnamen double akan ditentukan secara acak setelah pendaftaran ditutup oleh panitia.
+                        Jika anda tidak mendaftar berpasangan, maka pasangan untuk turnamen double akan ditentukan secara acak setelah pendaftaran ditutup oleh panitia.
                     </div>
                 @endif
 

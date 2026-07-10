@@ -43,6 +43,14 @@ class PemainRegistrationService
     public function getPublicTournaments(): Collection
     {
         return Turnamen::publicVisible()
+            ->withCount([
+                'turnamenPeserta as registered_count' => function ($query) {
+                    $query->where('status', '!=', 'rejected');
+                },
+                'turnamenPeserta as approved_count' => function ($query) {
+                    $query->where('status', 'approved');
+                },
+            ])
             ->with([
                 'finalMatch' => function ($query) {
                     $query->with([
@@ -79,6 +87,73 @@ class PemainRegistrationService
             ->forTurnamen($turnamen->id)
             ->involvingPemain($pemain->id)
             ->exists();
+    }
+
+    /**
+     * @return array{type: string, items: Collection}
+     */
+    public function getPublicParticipantList(Turnamen $turnamen): array
+    {
+        if ($turnamen->isDouble() && $turnamen->isRegistrationClosed()) {
+            $items = TurnamenPeserta::query()
+                ->forTurnamen($turnamen->id)
+                ->whereHas('pasanganAsPeserta1')
+                ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1'])
+                ->orderBy('id')
+                ->get()
+                ->map(function (TurnamenPeserta $entry) {
+                    $partner = optional($entry->pasanganAsPeserta1)->peserta2;
+
+                    return [
+                        'label' => $entry->display_name,
+                        'pemain1' => optional($entry->pemain1)->nama,
+                        'pemain2' => optional(optional($partner)->pemain1)->nama,
+                        'status' => $entry->status,
+                    ];
+                });
+
+            return ['type' => 'pairs', 'items' => $items];
+        }
+
+        $items = TurnamenPeserta::query()
+            ->forTurnamen($turnamen->id)
+            ->where('status', '!=', 'rejected')
+            ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1'])
+            ->orderBy('id')
+            ->get()
+            ->map(function (TurnamenPeserta $peserta) use ($turnamen) {
+                $partnerName = optional($peserta->partner_pemain)->nama;
+
+                return [
+                    'id' => $peserta->id,
+                    'nama' => optional($peserta->pemain1)->nama ?? '-',
+                    'partner' => $partnerName,
+                    'display' => $partnerName
+                        ? trim((optional($peserta->pemain1)->nama ?? '') . ' / ' . $partnerName)
+                        : (optional($peserta->pemain1)->nama ?? '-'),
+                    'status' => $peserta->status,
+                    'is_paired' => $peserta->isPaired(),
+                ];
+            });
+
+        return [
+            'type' => $turnamen->isDouble() ? 'double_individual' : 'single',
+            'items' => $items,
+        ];
+    }
+
+    public function getSoloPesertaOptions(Turnamen $turnamen): Collection
+    {
+        if (! $turnamen->isDouble()) {
+            return collect();
+        }
+
+        return TurnamenPeserta::query()
+            ->forTurnamen($turnamen->id)
+            ->soloEntries()
+            ->with('pemain1')
+            ->orderBy('id')
+            ->get();
     }
 
     public function register(

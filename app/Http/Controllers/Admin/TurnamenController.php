@@ -3,13 +3,22 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DestroyTurnamenRequest;
 use App\Http\Requests\Admin\StoreTurnamenRequest;
 use App\Http\Requests\Admin\UpdateTurnamenRequest;
 use App\Models\Turnamen;
+use App\Services\TournamentDeletionService;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class TurnamenController extends Controller
 {
+    protected $deletionService;
+
+    public function __construct(TournamentDeletionService $deletionService)
+    {
+        $this->deletionService = $deletionService;
+    }
     public function index(Request $request)
     {
         $query = Turnamen::query()->latest('doc');
@@ -56,13 +65,13 @@ class TurnamenController extends Controller
             ->with('success', 'Turnamen berhasil diperbarui.');
     }
 
-    public function destroy(Turnamen $turnamen)
+    public function destroy(DestroyTurnamenRequest $request, Turnamen $turnamen)
     {
-        if ($turnamen->grup()->exists()) {
-            return back()->with('error', 'Turnamen tidak dapat dihapus karena sudah memiliki grup dan pertandingan.');
+        try {
+            $this->deletionService->delete($turnamen, $request->user(), $request->input('password'));
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
         }
-
-        $turnamen->delete();
 
         return redirect()
             ->route('admin.turnamen.index')

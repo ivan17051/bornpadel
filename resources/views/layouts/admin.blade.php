@@ -57,7 +57,19 @@
     </style>
     @stack('styles')
 </head>
-<body class="layout-fixed sidebar-expand-lg sidebar-open bg-body-tertiary">
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+    <script>
+    (function () {
+        const mq = window.matchMedia('(min-width: 992px)');
+
+        const syncSidebar = () => {
+            document.body.classList.toggle('sidebar-open', mq.matches);
+        };
+
+        syncSidebar();
+        mq.addEventListener('change', syncSidebar);
+    })();
+    </script>
     @include('components.page-loader')
 
     <div class="app-wrapper">

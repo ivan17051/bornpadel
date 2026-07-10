@@ -3,6 +3,14 @@
 @section('title', 'Pendaftaran')
 
 @section('content')
+@php
+    $isDouble = $turnamen->isDouble();
+    $registrationMode = old('registration_mode', 'single');
+    $capacityLabel = $turnamen->maks_peserta
+        ? number_format($turnamen->maks_peserta)
+        : 'Tidak Terbatas';
+@endphp
+
 <div class="row justify-content-center">
     <div class="col-lg-7 col-xl-6">
         <div class="text-center mb-4">
@@ -22,8 +30,8 @@
                         <strong>{{ $turnamen->jenis_label }}</strong>
                     </div>
                     <div class="col-4">
-                        <div class="info-label">Status</div>
-                        <span class="badge badge-open">Pendaftaran Dibuka</span>
+                        <div class="info-label">Peserta</div>
+                        <strong>{{ $capacityLabel }}</strong>
                     </div>
                 </div>
 
@@ -44,23 +52,51 @@
             </div>
             <div class="card-body p-4">
                 <p class="text-muted small mb-4">
-                    Masukkan nomor HP / WhatsApp Anda terlebih dahulu. Jika sudah pernah terdaftar,
-                    data Anda akan ditampilkan untuk diperiksa dan diperbarui.
-                    @if ($turnamen->isDouble())
-                        <span class="d-block mt-2">Turnamen double: pasangan dibuat otomatis setelah pendaftaran ditutup.</span>
-                    @endif
+                    Pilih mode pendaftaran, lalu masukkan nomor HP. Jika sudah pernah terdaftar,
+                    data akan ditampilkan pada langkah berikutnya untuk diperiksa.
                 </p>
 
-                <form action="{{ route('guest.register.lookup') }}" method="POST" novalidate>
+                <form action="{{ route('guest.register.lookup') }}" method="POST" novalidate id="register-lookup-form">
                     @csrf
                     <input type="hidden" name="id_turnamen" value="{{ $turnamen->id }}">
+
+                    @if ($isDouble)
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold d-block mb-2">Mode Pendaftaran</label>
+                            <div class="btn-group w-100" role="group" aria-label="Mode pendaftaran">
+                                <input type="radio" class="btn-check" name="registration_mode" id="mode-single" value="single"
+                                       {{ $registrationMode === 'single' ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-primary" for="mode-single">
+                                    <i class="bi bi-person me-1"></i> Daftar 1 Orang
+                                </label>
+
+                                <input type="radio" class="btn-check" name="registration_mode" id="mode-pair" value="pair"
+                                       {{ $registrationMode === 'pair' ? 'checked' : '' }} autocomplete="off">
+                                <label class="btn btn-outline-primary" for="mode-pair">
+                                    <i class="bi bi-people me-1"></i> Daftar Berpasangan
+                                </label>
+                            </div>
+                        </div>
+                    @else
+                        <input type="hidden" name="registration_mode" value="single">
+                    @endif
 
                     <div class="mb-4">
                         <x-phone-input name="no_hp"
                                        id="guest_no_hp"
-                                       label="Nomor HP / WhatsApp"
+                                       label="{{ $isDouble ? 'Nomor HP Pemain 1' : 'Nomor HP / WhatsApp' }}"
                                        :value="old('no_hp')"
                                        size="lg" />
+                    </div>
+
+                    <div id="player-2-phone-section" class="mb-4 {{ $isDouble && $registrationMode === 'pair' ? '' : 'd-none' }}">
+                        <x-phone-input name="no_hp_2"
+                                       id="guest_no_hp_2"
+                                       label="Nomor HP Pemain 2"
+                                       :value="old('no_hp_2')"
+                                       :required="false"
+                                       size="lg"
+                                       error-key="no_hp_2" />
                     </div>
 
                     <div class="d-grid gap-2">
@@ -77,3 +113,34 @@
     </div>
 </div>
 @endsection
+
+@if ($isDouble)
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const player2Section = document.getElementById('player-2-phone-section');
+    const modeInputs = document.querySelectorAll('input[name="registration_mode"]');
+    const phone2Group = player2Section?.querySelector('[data-phone-input]');
+
+    if (!player2Section || !modeInputs.length) return;
+
+    const togglePlayer2Phone = () => {
+        const mode = document.querySelector('input[name="registration_mode"]:checked')?.value || 'single';
+        const showPair = mode === 'pair';
+
+        player2Section.classList.toggle('d-none', !showPair);
+
+        if (phone2Group) {
+            const localInput = phone2Group.querySelector('[data-phone-local]');
+            if (localInput) {
+                localInput.required = showPair;
+            }
+        }
+    };
+
+    modeInputs.forEach((input) => input.addEventListener('change', togglePlayer2Phone));
+    togglePlayer2Phone();
+});
+</script>
+@endpush
+@endif

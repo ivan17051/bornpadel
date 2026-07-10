@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\PesertaController as ApiAdminPesertaController;
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\BracketController as AdminBracketController;
@@ -27,6 +28,7 @@ Route::get('/register/form', [RegistrationController::class, 'form'])->name('gue
 Route::post('/register', [RegistrationController::class, 'store'])->name('guest.register.store');
 Route::get('/register/success', [RegistrationController::class, 'success'])->name('guest.register.success');
 Route::get('/standings', [StandingsController::class, 'index'])->name('guest.standings');
+Route::get('/peserta', [\App\Http\Controllers\Guest\TournamentParticipantsController::class, 'show'])->name('guest.participants');
 Route::get('/bracket', [BracketController::class, 'index'])->name('guest.bracket');
 
 // Admin auth
@@ -56,6 +58,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/pengguna/{user}/edit', [UserController::class, 'edit'])->name('pengguna.edit');
             Route::put('/pengguna/{user}', [UserController::class, 'update'])->name('pengguna.update');
             Route::delete('/pengguna/{user}', [UserController::class, 'destroy'])->name('pengguna.destroy');
+
+            Route::post('/peserta/bulk-approve', [ApiAdminPesertaController::class, 'bulkApprove'])->name('peserta.bulk-approve');
+            Route::post('/peserta/{peserta}/partner', [ApiAdminPesertaController::class, 'setPartner'])->name('peserta.partner.set');
+            Route::delete('/peserta/{peserta}/partner', [ApiAdminPesertaController::class, 'removePartner'])->name('peserta.partner.remove');
         });
 
         Route::get('/turnamen-operasi', [TurnamenOperasiController::class, 'index'])->name('turnamen-operasi.index');

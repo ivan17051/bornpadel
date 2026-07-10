@@ -1,6 +1,10 @@
 @php
     $filterRoute = $filterRoute ?? route('admin.pemain.index');
     $preserveTab = $preserveTab ?? null;
+    $soloPesertaOptions = $soloPesertaOptions ?? collect();
+    $showBulkActions = auth()->user()->isAdmin() && $turnamen && empty($isDoubleView);
+    $showPartnerActions = auth()->user()->isAdmin() && $turnamen && $turnamen->isDouble() && ! $turnamen->isRegistrationClosed() && empty($isDoubleView);
+    $showPartnerColumn = $turnamen && $turnamen->isDouble() && empty($isDoubleView);
 @endphp
 
 <div class="card mb-3">
@@ -38,8 +42,13 @@
     </div>
 </div>
 
-<div class="card pemain-table-card">
-    <div class="card-header d-flex justify-content-between align-items-center row">
+<div class="card pemain-table-card"
+     id="pemain-table-card"
+     @if ($turnamen)
+     data-turnamen-id="{{ $turnamen->id }}"
+     data-bulk-approve-url="{{ route('admin.peserta.bulk-approve') }}"
+     @endif>
+    <div class="card-header d-flex justify-content-between align-items-center row border-top-0">
         <div class="col-md-6">
             <h5 class="card-title mb-0">
                 Daftar Pemain
@@ -49,7 +58,7 @@
             </h5>
         </div>
         <div class="col-md-6 text-end">
-            <div class="align-items-center gap-2">
+            <div class="d-inline-flex align-items-center gap-2 flex-wrap justify-content-end">
                 <span class="badge text-bg-secondary">
                     @if (! empty($isDoubleView))
                         {{ $peserta->total() }} pasangan
@@ -57,6 +66,19 @@
                         {{ $pemain->total() }} pemain
                     @endif
                 </span>
+                @if ($turnamen && $turnamen->maks_peserta)
+                    <span class="badge text-bg-light text-dark border">
+                        Maks. {{ $turnamen->maks_peserta }} disetujui
+                    </span>
+                @endif
+                @if ($showBulkActions)
+                    <button type="button"
+                            class="btn btn-success btn-sm btn-bulk-approve"
+                            disabled
+                            title="Pilih peserta pada tabel terlebih dahulu">
+                        <i class="bi bi-check-all me-1"></i> Setujui Terpilih
+                    </button>
+                @endif
                 <a href="{{ route('admin.pemain.create', request()->only('id_turnamen')) }}" class="btn btn-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i> Tambah Pemain
                 </a>
@@ -79,9 +101,17 @@
                             <th>Status</th>
                             <th class="text-end">Aksi</th>
                         @else
+                            @if ($showBulkActions)
+                                <th style="width: 2.5rem;">
+                                    <input type="checkbox" class="form-check-input" id="select-all-approvable" title="Pilih semua yang dapat disetujui">
+                                </th>
+                            @endif
                             <th style="width: 3.5rem;"></th>
                             <th>#</th>
                             <th>Nama</th>
+                            @if ($showPartnerColumn)
+                                <th>Partner</th>
+                            @endif
                             <th class="d-none d-md-table-cell">No. HP</th>
                             <th class="d-none d-lg-table-cell">Gender</th>
                             <th class="d-none d-lg-table-cell">Rating</th>
@@ -147,10 +177,22 @@
                     @else
                         @forelse ($pemain as $item)
                             @php
-                                $pesertaRow = $item->pesertaForTurnamen($turnamen);
+                                $pesertaRow = $turnamen ? $item->turnamenPesertaAsPemain1->first() : null;
+                                $partnerPemain = $showPartnerColumn ? optional($pesertaRow)->partner_pemain : null;
                                 $registrationStatus = optional($pesertaRow)->status;
+                                $canBulkApprove = $showBulkActions && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
                             @endphp
-                            <tr data-pemain-id="{{ $item->id }}">
+                            <tr data-pemain-id="{{ $item->id }}" data-peserta-id="{{ optional($pesertaRow)->id }}">
+                                @if ($showBulkActions)
+                                    <td>
+                                        @if ($canBulkApprove)
+                                            <input type="checkbox"
+                                                   class="form-check-input peserta-bulk-checkbox"
+                                                   value="{{ $pesertaRow->id }}"
+                                                   data-peserta-id="{{ $pesertaRow->id }}">
+                                        @endif
+                                    </td>
+                                @endif
                                 <td><x-pemain-avatar :pemain="$item" :size="40" /></td>
                                 <td>{{ $pemain->firstItem() + $loop->index }}</td>
                                 <td>
@@ -159,6 +201,15 @@
                                     </strong>
                                     <div class="small text-muted d-md-none">{{ $item->no_hp }}</div>
                                 </td>
+                                @if ($showPartnerColumn)
+                                    <td>
+                                        @if ($partnerPemain)
+                                            <x-pemain-link :pemain="$partnerPemain" class="text-decoration-none" />
+                                        @else
+                                            <span class="text-muted small">—</span>
+                                        @endif
+                                    </td>
+                                @endif
                                 <td class="d-none d-md-table-cell">{{ $item->no_hp }}</td>
                                 <td class="d-none d-lg-table-cell">{{ $item->gender === 'male' ? 'Laki-laki' : 'Perempuan' }}</td>
                                 <td class="d-none d-lg-table-cell">{{ number_format($item->rating, 1) }}</td>
@@ -179,12 +230,13 @@
                                         'registrationStatus' => $registrationStatus,
                                         'turnamenOngoing' => $turnamenOngoing,
                                         'pemainEditFrom' => $pemainEditFrom ?? 'index',
+                                        'showPartnerActions' => $showPartnerActions,
                                     ])
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center text-muted py-4">
+                                <td colspan="{{ 8 + ($showBulkActions ? 1 : 0) + ($showPartnerColumn ? 1 : 0) }}" class="text-center text-muted py-4">
                                     @if ($turnamen)
                                         Belum ada pemain terdaftar pada turnamen ini.
                                     @else
@@ -204,6 +256,12 @@
         </div>
     @endif
 </div>
+
+@if ($showPartnerActions ?? false)
+    @include('admin.pemain.partials.set-partner-modal', [
+        'soloPesertaOptions' => $soloPesertaOptions ?? collect(),
+    ])
+@endif
 
 <div class="modal fade" id="buktiBayarModal" tabindex="-1" aria-labelledby="buktiBayarModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">

@@ -3,6 +3,8 @@
 use App\Http\Controllers\Admin\MatchmakingController;
 use App\Http\Controllers\Admin\PemainController;
 use App\Http\Controllers\Admin\PertandinganController;
+use App\Http\Controllers\Api\Admin\PesertaController as ApiAdminPesertaController;
+use App\Http\Controllers\Api\Admin\TurnamenController as ApiAdminTurnamenController;
 use App\Http\Controllers\Api\Guest\GroupStageHistoryController;
 use App\Http\Controllers\Api\Guest\BracketController;
 use App\Http\Controllers\Api\Guest\RegistrationController;
@@ -47,4 +49,11 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
 
     Route::get('/pertandingan/{pertandingan}', [PertandinganController::class, 'show']);
     Route::post('/pertandingan/{pertandingan}/score', [PertandinganController::class, 'storeScore']);
+
+    Route::middleware('admin')->group(function () {
+        Route::delete('/turnamen/{turnamen}', [ApiAdminTurnamenController::class, 'destroy']);
+        Route::post('/peserta/bulk-approve', [ApiAdminPesertaController::class, 'bulkApprove']);
+        Route::post('/peserta/{peserta}/partner', [ApiAdminPesertaController::class, 'setPartner']);
+        Route::delete('/peserta/{peserta}/partner', [ApiAdminPesertaController::class, 'removePartner']);
+    });
 });
