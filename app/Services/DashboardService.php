@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Grup;
+use App\Models\GrupMember;
 use App\Models\Pemain;
 use App\Models\Pertandingan;
 use App\Models\Turnamen;
@@ -167,7 +168,9 @@ class DashboardService
                     return $row;
                 });
             })
-            ->sortByDesc('poin_didapat')
+            ->sort(function (array $a, array $b) {
+                return GrupMember::comparePadelStandingRows($a, $b);
+            })
             ->take($limit)
             ->values();
     }

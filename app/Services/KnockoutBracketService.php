@@ -8,6 +8,8 @@ namespace App\Services;
 
 use App\Models\Pemain;
 
+use App\Models\GrupMember;
+
 use App\Models\Pertandingan;
 
 use App\Models\Turnamen;
@@ -136,6 +138,8 @@ class KnockoutBracketService
 
                     'games_menang' => $row['games_menang'],
 
+                    'stats_reached_at' => $row['stats_reached_at'] ?? null,
+
                 ];
 
             });
@@ -146,17 +150,13 @@ class KnockoutBracketService
 
         return $qualifiers
 
-            ->sortBy([
+            ->sort(function (array $a, array $b) {
+                if ($a['rank'] !== $b['rank']) {
+                    return $a['rank'] <=> $b['rank'];
+                }
 
-                ['rank', 'asc'],
-
-                ['poin_didapat', 'desc'],
-
-                ['set_menang', 'desc'],
-
-                ['games_menang', 'desc'],
-
-            ])
+                return GrupMember::comparePadelStandingRows($a, $b);
+            })
 
             ->values()
 
@@ -220,13 +220,13 @@ class KnockoutBracketService
 
         $roundMatches = $this->createEmptyRounds($turnamen, $rounds, $bracketSize);
 
-
-
         $this->linkRounds($roundMatches, $rounds);
 
         $this->createThirdPlaceMatch($turnamen, $roundMatches);
 
         $byeCount = $this->assignFirstRoundSeeding($roundMatches, $rounds, $qualifiers, $bracketSize);
+
+        $this->optimizeFirstRoundByePairing($roundMatches, $rounds);
 
 
 
@@ -356,6 +356,89 @@ class KnockoutBracketService
 
 
 
+    /**
+     * Rewire first-round feeders so each bye path is paired with a played match
+     * in the next round whenever possible (avoids bye vs bye in round 2).
+     */
+    protected function optimizeFirstRoundByePairing(array $roundMatches, array $rounds): void
+    {
+        if (count($rounds) < 2) {
+            return;
+        }
+
+        $firstRound = $rounds[0];
+        $secondRound = $rounds[1];
+        $firstMatches = $roundMatches[$firstRound];
+        $secondMatches = $roundMatches[$secondRound];
+
+        $byeMatches = [];
+        $playedMatches = [];
+
+        foreach ($firstMatches as $match) {
+            if ($this->isByeMatch($match)) {
+                $byeMatches[] = $match;
+            } else {
+                $playedMatches[] = $match;
+            }
+        }
+
+        if ($byeMatches === [] || $playedMatches === []) {
+            return;
+        }
+
+        foreach ($secondMatches as $match) {
+            $match->update([
+                'id_pemain1' => null,
+                'id_pemain2' => null,
+                'id_peserta1' => null,
+                'id_peserta2' => null,
+            ]);
+        }
+
+        foreach ($firstMatches as $match) {
+            $match->update(['id_next_pertandingan' => null]);
+        }
+
+        $byeQueue = collect($byeMatches)->values();
+        $playedQueue = collect($playedMatches)->values();
+        $nextIndex = 0;
+
+        while ($byeQueue->isNotEmpty() && $playedQueue->isNotEmpty() && $nextIndex < count($secondMatches)) {
+            $next = $secondMatches[$nextIndex++];
+            $this->linkFeedersToNextMatch($next, [$byeQueue->shift(), $playedQueue->shift()]);
+        }
+
+        while ($playedQueue->count() >= 2 && $nextIndex < count($secondMatches)) {
+            $next = $secondMatches[$nextIndex++];
+            $this->linkFeedersToNextMatch($next, [$playedQueue->shift(), $playedQueue->shift()]);
+        }
+
+        while ($byeQueue->count() >= 2 && $nextIndex < count($secondMatches)) {
+            $next = $secondMatches[$nextIndex++];
+            $this->linkFeedersToNextMatch($next, [$byeQueue->shift(), $byeQueue->shift()]);
+        }
+
+        $turnamen = Turnamen::find($firstMatches[0]->id_turnamen);
+
+        if ($turnamen) {
+            $this->resyncKnockoutBracketOccupants($turnamen);
+        }
+    }
+
+
+
+    /**
+     * @param  array<int, Pertandingan>  $feeders
+     */
+    protected function linkFeedersToNextMatch(Pertandingan $nextMatch, array $feeders): void
+    {
+        foreach ($feeders as $feeder) {
+            $feeder->update(['id_next_pertandingan' => $nextMatch->id]);
+        }
+    }
+
+
+
     protected function linkRounds(array $roundMatches, array $rounds): void
 
     {
@@ -472,7 +555,7 @@ class KnockoutBracketService
 
             if ($player1) {
 
-                $this->completeByeMatch($match, $player1, 1);
+                $this->completeByeMatch($match, $player1, 1, false);
 
                 $byeCount++;
 
@@ -484,7 +567,7 @@ class KnockoutBracketService
 
             if ($player2) {
 
-                $this->completeByeMatch($match, $player2, 2);
+                $this->completeByeMatch($match, $player2, 2, false);
 
                 $byeCount++;
 
@@ -520,7 +603,7 @@ class KnockoutBracketService
 
 
 
-    protected function completeByeMatch(Pertandingan $match, array $winner, int $side): void
+    protected function completeByeMatch(Pertandingan $match, array $winner, int $side, bool $advance = true): void
 
     {
 
@@ -554,7 +637,9 @@ class KnockoutBracketService
 
         $match->update($payload);
 
-        $this->advanceWinner($match->fresh(), $winner['id_pemain'], $winner['id_peserta'] ?? null);
+        if ($advance) {
+            $this->advanceWinner($match->fresh(), $winner['id_pemain'], $winner['id_peserta'] ?? null);
+        }
 
     }
 
@@ -600,6 +685,8 @@ class KnockoutBracketService
 
     {
 
+        $this->resyncKnockoutBracketOccupants($turnamen);
+
         // The third-place playoff is not rendered as its own column; it is
         // appended into the Final column (below the final match) further down.
         $roundOrder = ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final'];
@@ -611,25 +698,21 @@ class KnockoutBracketService
             TurnamenPeserta::partnerPemainEagerLoadsFor('pesertaPemenang')
         );
 
+        $allMatches = Pertandingan::where('id_turnamen', $turnamen->id)
+            ->whereNull('id_grup')
+            ->with($relations)
+            ->orderBy('id')
+            ->get();
+
+        $allMatchesById = $allMatches->keyBy('id');
+        $matchesByRound = $allMatches->groupBy('nama_ronde');
+
         $result = [];
-
-
+        $previousOrdered = null;
 
         foreach ($roundOrder as $round) {
 
-            $matches = Pertandingan::where('id_turnamen', $turnamen->id)
-
-                ->whereNull('id_grup')
-
-                ->where('nama_ronde', $round)
-
-                ->with($relations)
-
-                ->orderBy('id')
-
-                ->get();
-
-
+            $matches = $matchesByRound->get($round, collect());
 
             if ($matches->isEmpty()) {
 
@@ -637,13 +720,14 @@ class KnockoutBracketService
 
             }
 
-
+            $ordered = $this->orderMatchesForBracketDisplay($matches, $previousOrdered, $allMatchesById);
+            $previousOrdered = $ordered;
 
             $result[] = [
 
                 'nama_ronde' => $round,
 
-                'matches' => $matches->map(function (Pertandingan $m) {
+                'matches' => $ordered->map(function (Pertandingan $m) {
 
                     return $this->formatMatchForBracket($m);
 
@@ -655,17 +739,7 @@ class KnockoutBracketService
 
 
 
-        $thirdPlaceMatches = Pertandingan::where('id_turnamen', $turnamen->id)
-
-            ->whereNull('id_grup')
-
-            ->where('nama_ronde', 'Perebutan Juara 3')
-
-            ->with($relations)
-
-            ->orderBy('id')
-
-            ->get();
+        $thirdPlaceMatches = $matchesByRound->get('Perebutan Juara 3', collect());
 
 
 
@@ -683,7 +757,7 @@ class KnockoutBracketService
 
                 if ($round['nama_ronde'] === 'Final') {
 
-                    $result[$index]['matches'] = array_merge($result[$index]['matches'], $formatted);
+                    $result[$index]['matches'] = array_merge($round['matches'], $formatted);
 
                     break;
 
@@ -697,6 +771,81 @@ class KnockoutBracketService
 
         return $result;
 
+    }
+
+
+
+    /**
+     * Order matches for bracket display so feeders that share the same next
+     * match appear adjacent (bye beside its paired played match).
+     */
+    protected function orderMatchesForBracketDisplay(
+        Collection $matches,
+        ?Collection $previousRoundOrdered,
+        Collection $allMatchesById
+    ): Collection {
+        if ($matches->isEmpty()) {
+            return $matches;
+        }
+
+        if ($previousRoundOrdered === null) {
+            return $this->orderFirstRoundMatchesForDisplay($matches);
+        }
+
+        return $this->orderFeederAlignedMatches($matches, $previousRoundOrdered, $allMatchesById);
+    }
+
+
+
+    protected function orderFirstRoundMatchesForDisplay(Collection $matches): Collection
+    {
+        return $matches
+            ->groupBy('id_next_pertandingan')
+            ->sortBy(fn (Collection $group, $nextId) => $nextId ? (int) $nextId : PHP_INT_MAX)
+            ->flatMap(function (Collection $group) {
+                $played = $group
+                    ->reject(fn (Pertandingan $match) => $this->isByeMatch($match))
+                    ->sortBy('id')
+                    ->values();
+
+                $byes = $group
+                    ->filter(fn (Pertandingan $match) => $this->isByeMatch($match))
+                    ->sortBy('id')
+                    ->values();
+
+                return $played->concat($byes);
+            })
+            ->values();
+    }
+
+
+
+    protected function orderFeederAlignedMatches(
+        Collection $matches,
+        Collection $previousRoundOrdered,
+        Collection $allMatchesById
+    ): Collection {
+        $indexById = $previousRoundOrdered->values()->mapWithKeys(
+            fn (Pertandingan $match, int $index) => [$match->id => $index]
+        );
+
+        $feedersByTarget = $allMatchesById
+            ->filter(fn (Pertandingan $match) => $match->id_next_pertandingan)
+            ->groupBy('id_next_pertandingan');
+
+        return $matches
+            ->sortBy(function (Pertandingan $match) use ($indexById, $feedersByTarget) {
+                $feeders = $feedersByTarget->get($match->id, collect());
+
+                if ($feeders->isEmpty()) {
+                    return PHP_INT_MAX;
+                }
+
+                $positions = $feeders->map(fn (Pertandingan $feeder) => $indexById[$feeder->id] ?? PHP_INT_MAX);
+
+                return ($positions->min() + $positions->max()) / 2;
+            })
+            ->values();
     }
 
 
@@ -870,7 +1019,17 @@ class KnockoutBracketService
 
 
 
-        $winnerPesertaId = $winnerPesertaId ?? $pertandingan->resolvePesertaIdForPemain($winnerId);
+        if (! $winnerPesertaId) {
+            $winnerPesertaId = $pertandingan->resolvePesertaIdForPemain($winnerId);
+        }
+
+        if ($winnerPesertaId) {
+            $peserta = TurnamenPeserta::find($winnerPesertaId);
+
+            if ($peserta) {
+                $winnerId = (int) $peserta->id_pemain1;
+            }
+        }
 
 
 
@@ -910,6 +1069,68 @@ class KnockoutBracketService
 
         }
 
+    }
+
+
+
+    /**
+     * Rebuild knockout round occupants from completed feeder matches only.
+     * Fixes stale slots left by bye advances before feeder links were rewired.
+     */
+    public function resyncKnockoutBracketOccupants(Turnamen $turnamen): void
+    {
+        $roundOrder = ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final'];
+
+        $existingRounds = Pertandingan::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->whereNull('id_grup')
+            ->whereIn('nama_ronde', $roundOrder)
+            ->pluck('nama_ronde')
+            ->unique();
+
+        $activeRounds = array_values(array_filter(
+            $roundOrder,
+            fn (string $round) => $existingRounds->contains($round)
+        ));
+
+        for ($roundIndex = 1; $roundIndex < count($activeRounds); $roundIndex++) {
+            $roundName = $activeRounds[$roundIndex];
+
+            $matches = Pertandingan::query()
+                ->where('id_turnamen', $turnamen->id)
+                ->whereNull('id_grup')
+                ->where('nama_ronde', $roundName)
+                ->orderBy('id')
+                ->get();
+
+            foreach ($matches as $match) {
+                $match->update([
+                    'id_pemain1' => null,
+                    'id_pemain2' => null,
+                    'id_peserta1' => null,
+                    'id_peserta2' => null,
+                ]);
+            }
+
+            foreach ($matches as $nextMatch) {
+                $feeders = Pertandingan::query()
+                    ->where('id_next_pertandingan', $nextMatch->id)
+                    ->orderBy('id')
+                    ->get();
+
+                foreach ($feeders as $feeder) {
+                    if ($feeder->status !== 'completed' || (! $feeder->id_pemenang && ! $feeder->id_peserta_pemenang)) {
+                        continue;
+                    }
+
+                    $this->advanceWinner(
+                        $feeder,
+                        (int) $feeder->id_pemenang,
+                        $feeder->id_peserta_pemenang ? (int) $feeder->id_peserta_pemenang : null
+                    );
+                }
+            }
+        }
     }
 
     /**

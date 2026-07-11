@@ -49,9 +49,7 @@ class LeaderboardService
                     $query->orderByDesc('poin_akumulasi')
                         ->orderByDesc('poin_didapat');
                 } else {
-                    $query->orderByDesc('poin_didapat')
-                        ->orderByDesc('set_menang')
-                        ->orderByDesc('games_menang');
+                    $query->orderedForPadelStandings();
                 }
             }])
             ->orderBy('nama')
@@ -74,6 +72,7 @@ class LeaderboardService
                             'poin_didapat' => $member->poin_didapat,
                             'set_menang' => $member->set_menang,
                             'games_menang' => $member->games_menang,
+                            'stats_reached_at' => optional($member->stats_reached_at)->toIso8601String(),
                         ];
 
                         if ($turnamen->isMahjong()) {

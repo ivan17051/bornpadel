@@ -17,6 +17,8 @@
     'sweetAlert' => true,
     'requireTurnamenSelection' => true,
     'preserveParams' => ['tab' => $activeTab],
+    'useSelect2TurnamenFilter' => true,
+    'turnamenFilterMax' => 5,
 ])
 
 @if ($turnamen)
@@ -78,6 +80,8 @@
 @endsection
 
 @push('styles')
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" crossorigin="anonymous">
 <style>
     .pemain-table-card,
     .pemain-table-card > .card-body {
@@ -87,10 +91,20 @@
     #pemain-table-wrapper .dropdown-menu {
         z-index: 1080;
     }
+
+    .turnamen-filter-select2-wrap .select2-container {
+        width: 100% !important;
+    }
+
+    .turnamen-filter-select2-dropdown .select2-results__options {
+        max-height: 12.5rem;
+    }
 </style>
 @endpush
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" crossorigin="anonymous"></script>
 @if ($turnamen && $activeTab === 'klasemen' && ! $turnamen->isMahjong())
     <script src="{{ asset('public/js/group-stage-history.js') }}"></script>
 @endif
@@ -102,6 +116,8 @@
 @endif
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    BornPadelAdmin.initTurnamenFilterSelect();
+
     @if ($turnamen && $activeTab === 'pemain')
         BornPadelAdmin.initPemainActions();
     @endif

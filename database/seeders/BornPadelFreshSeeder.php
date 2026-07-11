@@ -177,6 +177,17 @@ class BornPadelFreshSeeder extends Seeder
             $this->registerPlayer($turnamen, $veteran, $this->rotatingStatus($index));
         }
 
+        if ($jenis === 'single') {
+            for ($e = 1; $e <= 2; $e++) {
+                $pemain = $this->createPemain(
+                    "External API Pemain {$e}",
+                    $e % 2 === 1 ? 'female' : 'male',
+                    $this->ratingFor($e + 10)
+                );
+                $this->registerPlayer($turnamen, $pemain, 'approved', TurnamenPeserta::SUMBER_EXTERNAL);
+            }
+        }
+
         $dedicated = self::PLAYERS_PER_TURNAMEN - count($this->veterans);
         if ($dedicated < 8) {
             $dedicated = 8;
@@ -224,9 +235,9 @@ class BornPadelFreshSeeder extends Seeder
         }
 
         $this->groupService->generateRandomGroups($turnamen, 3, 5, 'by_rating');
-        $this->playGroupStage($turnamen);
+        $this->playGroupStage($turnamen, 0.68);
 
-        // Left ongoing: group stage done, knockout not yet generated.
+        // Left ongoing: group stage in progress, standings already differ per grup.
         return $turnamen;
     }
 
@@ -321,8 +332,12 @@ class BornPadelFreshSeeder extends Seeder
         }
     }
 
-    protected function registerPlayer(Turnamen $turnamen, Pemain $pemain, string $status): void
-    {
+    protected function registerPlayer(
+        Turnamen $turnamen,
+        Pemain $pemain,
+        string $status,
+        string $sumber = TurnamenPeserta::SUMBER_INTERNAL
+    ): void {
         TurnamenPeserta::firstOrCreate(
             [
                 'id_turnamen' => $turnamen->id,
@@ -330,7 +345,7 @@ class BornPadelFreshSeeder extends Seeder
             ],
             [
                 'status' => $status,
-                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+                'sumber' => $sumber,
                 'bukti_bayar' => null,
             ]
         );
@@ -340,7 +355,7 @@ class BornPadelFreshSeeder extends Seeder
     /* Match play helpers                                                  */
     /* ------------------------------------------------------------------ */
 
-    protected function playGroupStage(Turnamen $turnamen): void
+    protected function playGroupStage(Turnamen $turnamen, float $completionRatio = 1.0): void
     {
         $matches = Pertandingan::where('id_turnamen', $turnamen->id)
             ->where('nama_ronde', 'Fase Grup')
@@ -348,14 +363,18 @@ class BornPadelFreshSeeder extends Seeder
             ->orderBy('id')
             ->get();
 
-        foreach ($matches as $index => $match) {
-            $fresh = Pertandingan::find($match->id);
+        if ($matches->isEmpty()) {
+            return;
+        }
 
-            if (! $fresh || ! $fresh->isReadyForScoring() || $fresh->status === 'completed') {
-                continue;
-            }
+        $playCount = $completionRatio >= 1.0
+            ? $matches->count()
+            : max(1, (int) floor($matches->count() * $completionRatio));
 
-            $this->scoringService->recordScore($fresh, $this->setsForSide(($index % 2) + 1));
+        $baseTime = Carbon::parse($turnamen->tanggal)->setTime(9, 0);
+
+        foreach ($matches->take($playCount) as $sequence => $match) {
+            $this->recordVariedScore($match, $sequence, $baseTime);
         }
     }
 
@@ -369,6 +388,9 @@ class BornPadelFreshSeeder extends Seeder
             'Perebutan Juara 3',
         ];
 
+        $sequence = 0;
+        $baseTime = Carbon::parse($turnamen->tanggal)->setTime(14, 0);
+
         foreach ($rounds as $round) {
             $matches = Pertandingan::where('id_turnamen', $turnamen->id)
                 ->whereNull('id_grup')
@@ -378,16 +400,96 @@ class BornPadelFreshSeeder extends Seeder
                 ->get();
 
             foreach ($matches as $match) {
-                $fresh = Pertandingan::find($match->id);
-
-                if (! $fresh || $fresh->status === 'completed' || ! $fresh->isReadyForScoring()) {
-                    continue;
-                }
-
-                // Side 1 wins to keep results deterministic.
-                $this->scoringService->recordScore($fresh, $this->setsForSide(1));
+                $this->recordVariedScore($match, $sequence++, $baseTime);
             }
         }
+    }
+
+    protected function recordVariedScore(Pertandingan $match, int $sequence, Carbon $baseTime): void
+    {
+        $fresh = Pertandingan::find($match->id);
+
+        if (! $fresh || ! $fresh->isReadyForScoring() || $fresh->status === 'completed') {
+            return;
+        }
+
+        $winnerSide = $this->resolveWinnerSide($fresh);
+        $patternIndex = ($fresh->id + ($sequence * 5)) % count($this->scorePatterns());
+        $playedAt = (clone $baseTime)->addMinutes($sequence * 23 + ($fresh->id % 11));
+
+        Carbon::setTestNow($playedAt);
+
+        try {
+            $this->scoringService->recordScore(
+                $fresh,
+                $this->buildSets($winnerSide, $patternIndex)
+            );
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    protected function resolveWinnerSide(Pertandingan $match): int
+    {
+        $pemain1 = Pemain::find($match->id_pemain1);
+        $pemain2 = Pemain::find($match->id_pemain2);
+        $rating1 = (float) optional($pemain1)->rating;
+        $rating2 = (float) optional($pemain2)->rating;
+
+        if ($rating1 !== $rating2 && abs($rating1 - $rating2) >= 0.25) {
+            return $rating1 > $rating2 ? 1 : 2;
+        }
+
+        $seed = (int) $match->id_pemain1 + (int) $match->id_pemain2 + (int) $match->id;
+
+        return ($seed % 2) === 0 ? 1 : 2;
+    }
+
+    /**
+     * @return array<int, array<int, array{0:string,1:string}>>
+     */
+    protected function scorePatterns(): array
+    {
+        return [
+            [['6', '2'], ['6', '3']],
+            [['6', '4'], ['6', '4']],
+            [['6', '1'], ['6', '2']],
+            [['7', '5'], ['6', '3']],
+            [['6', '3'], ['6', '0']],
+            [['6', '4'], ['4', '6'], ['6', '2']],
+            [['6', '3'], ['3', '6'], ['6', '4']],
+            [['7', '5'], ['6', '7'], ['6', '3']],
+            [['6', '2'], ['5', '7'], ['6', '1']],
+            [['6', '0'], ['6', '4']],
+        ];
+    }
+
+    /**
+     * @return array<int, array{skor_pemain1:int, skor_pemain2:int}>
+     */
+    protected function buildSets(int $winnerSide, int $patternIndex): array
+    {
+        $patterns = $this->scorePatterns();
+        $pattern = $patterns[$patternIndex % count($patterns)];
+        $sets = [];
+
+        foreach ($pattern as $games) {
+            [$winnerGames, $loserGames] = $games;
+
+            if ($winnerSide === 1) {
+                $sets[] = [
+                    'skor_pemain1' => (int) $winnerGames,
+                    'skor_pemain2' => (int) $loserGames,
+                ];
+            } else {
+                $sets[] = [
+                    'skor_pemain1' => (int) $loserGames,
+                    'skor_pemain2' => (int) $winnerGames,
+                ];
+            }
+        }
+
+        return $sets;
     }
 
     protected function applyMahjongPoints(Turnamen $turnamen): void
@@ -397,26 +499,12 @@ class BornPadelFreshSeeder extends Seeder
         })->orderBy('id')->get();
 
         foreach ($members as $index => $member) {
-            $this->mahjongService->updateMemberPoints($member, 5 + (($index * 7) % 40));
-        }
-    }
+            $babak = (int) optional($member->grup)->babak;
+            $base = 8 + (($index * 11 + $babak * 5) % 35);
+            $swing = (($member->id * 3 + $index) % 7) - 3;
 
-    /**
-     * @return array<int, array{skor_pemain1:int, skor_pemain2:int}>
-     */
-    protected function setsForSide(int $winnerSide): array
-    {
-        if ($winnerSide === 1) {
-            return [
-                ['skor_pemain1' => 6, 'skor_pemain2' => 2],
-                ['skor_pemain1' => 6, 'skor_pemain2' => 4],
-            ];
+            $this->mahjongService->updateMemberPoints($member, $base + $swing);
         }
-
-        return [
-            ['skor_pemain1' => 2, 'skor_pemain2' => 6],
-            ['skor_pemain1' => 4, 'skor_pemain2' => 6],
-        ];
     }
 
     /* ------------------------------------------------------------------ */

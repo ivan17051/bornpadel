@@ -1074,11 +1074,92 @@ const BornPadelAdmin = (function () {
         });
     };
 
+    const initTurnamenFilterSelect = () => {
+        const select = document.getElementById('id_turnamen');
+
+        if (!select || select.dataset.select2Turnamen !== '1') {
+            return;
+        }
+
+        if (typeof jQuery === 'undefined' || !jQuery.fn.select2) {
+            return;
+        }
+
+        const $select = jQuery(select);
+        const form = select.closest('form');
+        const placeholder = select.dataset.placeholder || 'Pilih turnamen';
+        const allowClear = select.dataset.allowClear === '1';
+        const selectedValue = select.value || '';
+        const select2Config = {
+            theme: 'bootstrap-5',
+            placeholder,
+            allowClear,
+            width: '100%',
+            dropdownCssClass: 'turnamen-filter-select2-dropdown',
+        };
+
+        if (select.dataset.turnamenOptions) {
+            try {
+                const allOptions = JSON.parse(select.dataset.turnamenOptions);
+
+                if (Array.isArray(allOptions) && allOptions.length > 0) {
+                    const initialMax = parseInt(select.dataset.turnamenInitialMax || '5', 10);
+                    const formatLabel = (item) => {
+                        const status = item.status || '';
+                        const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+
+                        return `${item.nama} — ${statusLabel}`;
+                    };
+                    const items = allOptions.map((item, index) => ({
+                        id: String(item.id),
+                        text: formatLabel(item),
+                        initialVisible: index < initialMax || String(item.id) === selectedValue,
+                    }));
+
+                    select2Config.data = [{ id: '', text: placeholder }].concat(items);
+                    select2Config.matcher = (params, data) => {
+                        if (data.id === undefined || data.id === '') {
+                            return data;
+                        }
+
+                        const term = (params.term || '').trim().toLowerCase();
+
+                        if (term === '') {
+                            return data.initialVisible ? data : null;
+                        }
+
+                        return (data.text || '').toLowerCase().includes(term) ? data : null;
+                    };
+                }
+            } catch (error) {
+                // Fall back to native options below.
+            }
+        }
+
+        if (!select2Config.data) {
+            select2Config.minimumResultsForSearch = 0;
+        }
+
+        $select.select2(select2Config);
+
+        if (selectedValue) {
+            $select.val(selectedValue).trigger('change.select2');
+        }
+
+        $select.on('change', function () {
+            if (form) {
+                showPageLoader();
+                form.submit();
+            }
+        });
+    };
+
     return {
         initPemainActions,
         initMatchmakingActions,
         initScoreModal,
         initPasswordModal,
+        initTurnamenFilterSelect,
         showToast,
         showAlert,
         apiRequest,

@@ -4,9 +4,39 @@
     $turnamenList = $turnamenList ?? collect();
     $requireTurnamenSelection = $requireTurnamenSelection ?? false;
     $emptyOptionLabel = $emptyOptionLabel ?? ($requireTurnamenSelection ? 'Pilih turnamen' : 'Default (turnamen aktif)');
+    $useSelect2TurnamenFilter = $useSelect2TurnamenFilter ?? false;
+    $turnamenFilterMax = $turnamenFilterMax ?? null;
     $user = auth()->user();
     $isPanitia = $user && $user->isPanitia();
     $lockedTurnamen = $isPanitia ? $turnamenList->first() : null;
+
+    $filterTurnamenList = $turnamenList;
+
+    if ($turnamenFilterMax && $turnamenList->count() > $turnamenFilterMax) {
+        $filterTurnamenList = $turnamenList->take($turnamenFilterMax)->values();
+        $selectedId = request('id_turnamen');
+
+        if ($selectedId && ! $filterTurnamenList->contains(fn ($item) => (int) $item->id === (int) $selectedId)) {
+            $selectedTurnamen = $turnamenList->firstWhere('id', (int) $selectedId);
+
+            if ($selectedTurnamen) {
+                $filterTurnamenList = $filterTurnamenList
+                    ->slice(0, max(0, $turnamenFilterMax - 1))
+                    ->push($selectedTurnamen)
+                    ->values();
+            }
+        }
+    }
+
+    $turnamenSelectOptions = ($useSelect2TurnamenFilter && $turnamenFilterMax && $turnamenList->isNotEmpty())
+        ? $turnamenList->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'nama' => $item->nama,
+                'status' => $item->status,
+            ];
+        })->values()->all()
+        : [];
 @endphp
 
 @if (empty($sweetAlert))
@@ -46,13 +76,25 @@
                 @endif
             @endforeach
 
-            <div class="col-md-6 col-lg-5">
+            <div class="col-md-6 col-lg-5 {{ $useSelect2TurnamenFilter ? 'turnamen-filter-select2-wrap' : '' }}">
                 <label for="id_turnamen" class="form-label small text-muted mb-1">Turnamen</label>
-                <select name="id_turnamen" id="id_turnamen" class="form-select" onchange="this.form.submit()">
+                <select name="id_turnamen"
+                        id="id_turnamen"
+                        class="form-select {{ $useSelect2TurnamenFilter ? 'turnamen-filter-select2' : '' }}"
+                        @if (! $useSelect2TurnamenFilter) onchange="this.form.submit()" @endif
+                        @if ($useSelect2TurnamenFilter)
+                            data-select2-turnamen="1"
+                            data-placeholder="{{ $emptyOptionLabel }}"
+                            data-allow-clear="{{ $requireTurnamenSelection ? '0' : '1' }}"
+                            @if ($turnamenSelectOptions)
+                                data-turnamen-initial-max="{{ $turnamenFilterMax }}"
+                                data-turnamen-options='@json($turnamenSelectOptions)'
+                            @endif
+                        @endif>
                     <option value="" {{ ! request('id_turnamen') ? 'selected' : '' }}>
                         {{ $emptyOptionLabel }}
                     </option>
-                    @foreach ($turnamenList as $item)
+                    @foreach ($filterTurnamenList as $item)
                         <option value="{{ $item->id }}"
                             {{ (string) request('id_turnamen') === (string) $item->id ? 'selected' : '' }}>
                             {{ $item->nama }} — {{ ucfirst($item->status) }}

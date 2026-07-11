@@ -8,6 +8,9 @@
         $pairingSummary = $pairingSummary ?? null;
         $isDoubleOpen = $turnamen->isDouble() && $turnamen->isRegistrationOpen();
         $bracketUrl = $bracketUrl ?? route('admin.bracket.index', ['id_turnamen' => $turnamen->id]);
+        $isKnockoutPhase = ! $isMahjong && ($hasKnockoutBracket ?? false);
+        $expandGroupsByDefault = $isMahjong || ! $isKnockoutPhase;
+        $expandKnockoutByDefault = $isKnockoutPhase;
     @endphp
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center row">
@@ -210,23 +213,32 @@
     </div>
 
     @if ($grup->isNotEmpty())
+        <div class="accordion matchmaking-groups-accordion mb-3" id="matchmaking-groups-accordion">
         @if ($isMahjong)
             @foreach ($grup as $g)
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center row">
-                        <div class="col-md-6">
-                            <h5 class="card-title mb-0">
-                                <i class="bi bi-diagram-3 me-2"></i>{{ $g->nama }}
-                                @if ($g->babak)
-                                    <small class="text-muted fw-normal">— Babak {{ $g->babak }}</small>
-                                @endif
-                            </h5>
-                        </div>
-                        <div class="col-md-6 text-end">
-                            <span class="badge text-bg-info">{{ $g->members->count() }} pemain</span>
-                        </div>
-                    </div>
-                    <div class="card-body p-0">
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="group-heading-{{ $g->id }}">
+                        <button class="accordion-button {{ $expandGroupsByDefault ? '' : 'collapsed' }}"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#group-collapse-{{ $g->id }}"
+                                aria-expanded="{{ $expandGroupsByDefault ? 'true' : 'false' }}"
+                                aria-controls="group-collapse-{{ $g->id }}">
+                            <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
+                                <span>
+                                    <i class="bi bi-diagram-3 me-1"></i>{{ $g->nama }}
+                                    @if ($g->babak)
+                                        <small class="text-muted fw-normal">— Babak {{ $g->babak }}</small>
+                                    @endif
+                                </span>
+                                <span class="badge text-bg-info ms-auto">{{ $g->members->count() }} pemain</span>
+                            </span>
+                        </button>
+                    </h2>
+                    <div id="group-collapse-{{ $g->id }}"
+                         class="accordion-collapse collapse {{ $expandGroupsByDefault ? 'show' : '' }}"
+                         aria-labelledby="group-heading-{{ $g->id }}">
+                        <div class="accordion-body p-0">
                         <div class="table-responsive">
                             <table class="table table-hover mb-0 align-middle">
                                 <thead class="table-light">
@@ -267,21 +279,30 @@
                                 </tbody>
                             </table>
                         </div>
+                        </div>
                     </div>
                 </div>
             @endforeach
         @else
             @foreach ($grup as $g)
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center row">
-                        <div class="col-md-6">
-                            <h5 class="card-title mb-0"><i class="bi bi-diagram-3 me-2"></i>{{ $g->nama }}</h5>
-                        </div>
-                        <div class="col-md-6 text-end">
-                            <span class="badge text-bg-info">{{ $g->members->count() }} {{ $unitLabel }} · {{ $g->pertandingan->count() }} pertandingan</span>
-                        </div>
-                    </div>
-                    <div class="card-body">
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="group-heading-{{ $g->id }}">
+                        <button class="accordion-button {{ $expandGroupsByDefault ? '' : 'collapsed' }}"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#group-collapse-{{ $g->id }}"
+                                aria-expanded="{{ $expandGroupsByDefault ? 'true' : 'false' }}"
+                                aria-controls="group-collapse-{{ $g->id }}">
+                            <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
+                                <span><i class="bi bi-diagram-3 me-1"></i>{{ $g->nama }}</span>
+                                <span class="badge text-bg-info ms-auto">{{ $g->members->count() }} {{ $unitLabel }} · {{ $g->pertandingan->count() }} pertandingan</span>
+                            </span>
+                        </button>
+                    </h2>
+                    <div id="group-collapse-{{ $g->id }}"
+                         class="accordion-collapse collapse {{ $expandGroupsByDefault ? 'show' : '' }}"
+                         aria-labelledby="group-heading-{{ $g->id }}">
+                        <div class="accordion-body">
                         <div class="row">
                             <div class="col-md-5 mb-3 mb-md-0">
                                 <h6 class="text-muted text-uppercase small">Anggota Grup</h6>
@@ -365,21 +386,38 @@
                                 </div>
                             </div>
                         </div>
+                        </div>
                     </div>
                 </div>
             @endforeach
         @endif
+        </div>
     @endif
 
     @if (! ($isMahjong ?? false) && ! empty($knockoutRounds) && collect($knockoutRounds)->isNotEmpty())
-        <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0"><i class="bi bi-diagram-2 me-2"></i>Pertandingan Knockout</h5>
-                <a href="{{ $bracketUrl }}" class="btn btn-sm btn-outline-success">
-                    <i class="bi bi-diagram-2 me-1"></i> Lihat Bracket
-                </a>
-            </div>
-            <div class="card-body">
+        <div class="accordion matchmaking-knockout-accordion mb-3" id="matchmaking-knockout-accordion">
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="knockout-heading">
+                    <button class="accordion-button {{ $expandKnockoutByDefault ? '' : 'collapsed' }}"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#knockout-collapse"
+                            aria-expanded="{{ $expandKnockoutByDefault ? 'true' : 'false' }}"
+                            aria-controls="knockout-collapse">
+                        <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
+                            <span><i class="bi bi-diagram-2 me-1"></i>Pertandingan Knockout</span>
+                            <a href="{{ $bracketUrl }}"
+                               class="btn btn-sm btn-outline-success ms-auto me-1"
+                               onclick="event.stopPropagation();">
+                                <i class="bi bi-diagram-2 me-1"></i> Lihat Bracket
+                            </a>
+                        </span>
+                    </button>
+                </h2>
+                <div id="knockout-collapse"
+                     class="accordion-collapse collapse {{ $expandKnockoutByDefault ? 'show' : '' }}"
+                     aria-labelledby="knockout-heading">
+                    <div class="accordion-body">
                 @foreach ($knockoutRounds as $round)
                     <h6 class="text-muted text-uppercase small {{ $loop->first ? '' : 'mt-4' }}">{{ $round['nama_ronde'] }}</h6>
                     <div class="table-responsive">
@@ -449,10 +487,34 @@
                         </table>
                     </div>
                 @endforeach
+                    </div>
+                </div>
             </div>
         </div>
     @endif
 @endif
+
+@once
+@push('styles')
+<style>
+    .matchmaking-groups-accordion .accordion-button,
+    .matchmaking-knockout-accordion .accordion-button {
+        font-weight: 600;
+        padding-top: 0.85rem;
+        padding-bottom: 0.85rem;
+    }
+    .matchmaking-groups-accordion .accordion-button:not(.collapsed),
+    .matchmaking-knockout-accordion .accordion-button:not(.collapsed) {
+        background-color: #f8f9fa;
+        color: inherit;
+        box-shadow: none;
+    }
+    .matchmaking-knockout-accordion .accordion-button .btn {
+        font-weight: 500;
+    }
+</style>
+@endpush
+@endonce
 
 @if ($turnamen ?? null)
     <div class="modal fade" id="endGroupStageModal" tabindex="-1" aria-labelledby="endGroupStageModalLabel" aria-hidden="true">

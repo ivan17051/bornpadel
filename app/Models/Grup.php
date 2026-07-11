@@ -52,7 +52,9 @@ class Grup extends Model
             ->orderByDesc('poin_akumulasi')
             ->orderByDesc('poin_didapat')
             ->orderByDesc('set_menang')
-            ->orderByDesc('games_menang');
+            ->orderByDesc('games_menang')
+            ->orderByRaw('CASE WHEN stats_reached_at IS NULL THEN 1 ELSE 0 END ASC')
+            ->orderBy('stats_reached_at');
     }
 
     public function scopeActive($query)

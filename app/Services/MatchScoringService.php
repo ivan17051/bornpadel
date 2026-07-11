@@ -159,6 +159,9 @@ class MatchScoringService
 
         $loserMember->increment('set_menang', $loserSets);
         $loserMember->increment('games_menang', $loserGames);
+
+        $winnerMember->fresh()->stampStatsReachedAt();
+        $loserMember->fresh()->stampStatsReachedAt();
     }
 
     protected function findGrupMember(int $grupId, int $pemainId, ?int $pesertaId): ?GrupMember
