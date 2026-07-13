@@ -61,6 +61,10 @@
     };
 
     container.addEventListener('click', (event) => {
+        if (event.target.closest('.pemain-profile-link')) {
+            return;
+        }
+
         const player = event.target.closest('.bracket-player.is-editable');
         if (!player || !container.contains(player)) return;
 

@@ -33,7 +33,15 @@
                                 </div>
                             @endforelse
                         </div>
-                        <div class="bracket-podium-names">{{ $slot['entry']['label'] }}</div>
+                        <div class="bracket-podium-names">
+                            @if (! empty($slot['entry']['players']))
+                                @foreach ($slot['entry']['players'] as $player)
+                                    <x-pemain-link :id="$player['id'] ?? null" :name="$player['nama'] ?? ''" />@if (! $loop->last)<span class="text-muted"> / </span>@endif
+                                @endforeach
+                            @else
+                                {{ $slot['entry']['label'] }}
+                            @endif
+                        </div>
                     </div>
                 @endif
             @endforeach

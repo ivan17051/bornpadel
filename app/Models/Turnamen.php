@@ -37,9 +37,25 @@ class Turnamen extends Model
         return $query->where('status', 'open');
     }
 
+    public function scopePublicActive($query)
+    {
+        return $query->whereIn('status', ['open', 'ongoing'])
+            ->orderByRaw("CASE status WHEN 'open' THEN 0 WHEN 'ongoing' THEN 1 ELSE 2 END")
+            ->orderByDesc('tanggal');
+    }
+
+    public function scopePublicCompleted($query)
+    {
+        $cutoff = now()->subYear()->startOfDay();
+
+        return $query->where('status', 'completed')
+            ->where('tanggal', '>=', $cutoff)
+            ->orderByDesc('tanggal');
+    }
+
     public function scopePublicVisible($query)
     {
-        $cutoff = now()->subDays(30)->startOfDay();
+        $cutoff = now()->subYear()->startOfDay();
 
         return $query->where(function ($builder) use ($cutoff) {
             $builder->whereIn('status', ['open', 'ongoing'])

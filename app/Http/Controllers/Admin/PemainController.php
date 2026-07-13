@@ -16,6 +16,7 @@ use App\Services\GroupMatchmakingService;
 use App\Services\PemainPhotoService;
 use App\Services\PemainRegistrationService;
 use App\Services\PesertaApprovalService;
+use App\Services\RegisteredPemainListingService;
 use App\Services\TournamentCapacityService;
 use App\Services\TournamentAccessService;
 use Carbon\Carbon;
@@ -47,7 +48,7 @@ class PemainController extends Controller
         $this->capacityService = $capacityService;
     }
 
-    public function index(Request $request)
+    public function index(Request $request, RegisteredPemainListingService $pemainListingService)
     {
         $turnamenList = $this->matchmakingService->listForFilter();
         $turnamen = $this->matchmakingService->resolveTournament(
@@ -55,101 +56,19 @@ class PemainController extends Controller
             false
         );
 
-        $isDoubleView = $turnamen && $turnamen->isDouble() && $turnamen->isRegistrationClosed();
-        $soloPesertaOptions = collect();
-
-        if (! $turnamen) {
-            $peserta = null;
-            $pemain = Pemain::query()->whereRaw('0 = 1')->paginate(15)->withQueryString();
-            $isDoubleView = false;
-
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'data' => $pemain,
-                ]);
-            }
-
-            return view('admin.pemain.index', compact('peserta', 'pemain', 'turnamen', 'turnamenList', 'isDoubleView', 'soloPesertaOptions'));
-        }
-
-        if ($isDoubleView) {
-            $pesertaQuery = TurnamenPeserta::query()
-                ->forTurnamen($turnamen->id)
-                ->whereHas('pasanganAsPeserta1')
-                ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1'])
-                ->latest();
-
-            if ($request->filled('status')) {
-                $pesertaQuery->where('status', $request->status);
-            }
-
-            if ($request->filled('search')) {
-                $search = $request->search;
-                $pesertaQuery->where(function ($builder) use ($search) {
-                    $builder->whereHas('pemain1', function ($q) use ($search) {
-                        $q->where('nama', 'like', "%{$search}%")
-                            ->orWhere('no_hp', 'like', "%{$search}%");
-                    })->orWhereHas('pasanganAsPeserta1.peserta2.pemain1', function ($q) use ($search) {
-                        $q->where('nama', 'like', "%{$search}%")
-                            ->orWhere('no_hp', 'like', "%{$search}%");
-                    });
-                });
-            }
-
-            $peserta = $pesertaQuery->paginate(15)->withQueryString();
-            $pemain = null;
-            $soloPesertaOptions = collect();
-
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'data' => $peserta,
-                ]);
-            }
-
-            return view('admin.pemain.index', compact('peserta', 'pemain', 'turnamen', 'turnamenList', 'isDoubleView', 'soloPesertaOptions'));
-        }
-
-        $query = Pemain::query()->latest();
-
-        if ($turnamen) {
-            $query->whereHas('turnamenPesertaAsPemain1', function ($q) use ($turnamen, $request) {
-                $q->where('id_turnamen', $turnamen->id);
-                if ($request->filled('status')) {
-                    $q->where('status', $request->status);
-                }
-            });
-        } elseif ($request->filled('status')) {
-            $query->whereHas('turnamenPesertaAsPemain1', function ($q) use ($request) {
-                $q->where('status', $request->status);
-            });
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('nama', 'like', "%{$search}%")
-                    ->orWhere('no_hp', 'like', "%{$search}%");
-            });
-        }
-
-        $pemain = $query->paginate(15)->withQueryString();
-        $peserta = null;
-        $isDoubleView = false;
+        $listing = $pemainListingService->paginate($request, $turnamen);
 
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
-                'data' => $pemain,
+                'data' => $listing['isDoubleView'] ? $listing['peserta'] : $listing['pemain'],
             ]);
         }
 
-        $soloPesertaOptions = $turnamen && ! $isDoubleView && $turnamen->isDouble()
-            ? $this->registrationService->getSoloPesertaOptions($turnamen)
-            : collect();
-
-        return view('admin.pemain.index', compact('pemain', 'peserta', 'turnamen', 'turnamenList', 'isDoubleView', 'soloPesertaOptions'));
+        return view('admin.pemain.index', array_merge(
+            compact('turnamen', 'turnamenList'),
+            $listing
+        ));
     }
 
     public function directory(Request $request)

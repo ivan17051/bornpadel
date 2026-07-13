@@ -7,6 +7,7 @@
 
     const refreshUrl = container.dataset.refreshUrl;
     const editable = container.dataset.editable === '1';
+    const profileBase = container.dataset.profileBase || '/pemain/';
 
     const esc = (value) => String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -41,6 +42,57 @@
         return '';
     };
 
+    const renderPemainNames = (match, side) => {
+        const ids = side === 1
+            ? (match.pemain1_ids || (match.pemain1_id ? [match.pemain1_id] : []))
+            : (match.pemain2_ids || (match.pemain2_id ? [match.pemain2_id] : []));
+        const label = side === 1 ? match.pemain1 : match.pemain2;
+        const players = side === 1 ? (match.pemain1_players || []) : (match.pemain2_players || []);
+
+        if (players.length) {
+            return players.map((player, index) => {
+                const name = esc(player.nama || 'Pemain');
+                const link = player.id
+                    ? `<a href="${profileBase}${player.id}" class="pemain-profile-link">${name}</a>`
+                    : name;
+
+                return index < players.length - 1 ? `${link}<span class="text-muted"> / </span>` : link;
+            }).join('');
+        }
+
+        if (ids.length === 1) {
+            return `<a href="${profileBase}${ids[0]}" class="pemain-profile-link">${esc(label || 'Pemain')}</a>`;
+        }
+
+        if (ids.length > 1) {
+            const names = String(label || '').split(' / ');
+
+            return ids.map((id, index) => {
+                const link = `<a href="${profileBase}${id}" class="pemain-profile-link">${esc(names[index] || 'Pemain')}</a>`;
+                return index < ids.length - 1 ? `${link}<span class="text-muted"> / </span>` : link;
+            }).join('');
+        }
+
+        return esc(label || 'TBD');
+    };
+
+    const renderPodiumNames = (entry) => {
+        const players = entry?.players || [];
+
+        if (players.length) {
+            return players.map((player, index) => {
+                const name = esc(player.nama || 'Pemain');
+                const link = player.id
+                    ? `<a href="${profileBase}${player.id}" class="pemain-profile-link">${name}</a>`
+                    : name;
+
+                return index < players.length - 1 ? `${link}<span class="text-muted"> / </span>` : link;
+            }).join('');
+        }
+
+        return esc(entry?.label || '');
+    };
+
     const renderMatchCard = (match, opts = {}) => {
         const { slot1Editable = false, slot2Editable = false, isThirdPlace = false } = opts;
         const p1Winner = match.pemenang_id && match.pemain1_id === match.pemenang_id;
@@ -51,11 +103,11 @@
         return `
             <div class="bracket-match ${isThirdPlace ? 'is-third-place' : ''} ${match.status === 'completed' ? 'is-completed' : ''} ${match.pemenang_id ? 'has-winner' : ''}">
                 <div class="bracket-player ${p1Winner ? 'is-winner' : ''} ${!match.pemain1_id ? 'is-tbd' : ''} ${slot1Editable ? 'is-editable' : ''}"${slotAttrs(match, 1, slot1Editable)}>
-                    <span class="bracket-player-name">${esc(match.pemain1)}</span>
+                    <span class="bracket-player-name">${renderPemainNames(match, 1)}</span>
                     ${p1Scores ? `<span class="bracket-score-badge">${esc(p1Scores)}</span>` : ''}
                 </div>
                 <div class="bracket-player ${p2Winner ? 'is-winner' : ''} ${!match.pemain2_id ? 'is-tbd' : ''} ${slot2Editable ? 'is-editable' : ''}"${slotAttrs(match, 2, slot2Editable)}>
-                    <span class="bracket-player-name">${esc(match.pemain2)}</span>
+                    <span class="bracket-player-name">${renderPemainNames(match, 2)}</span>
                     ${p2Scores ? `<span class="bracket-score-badge">${esc(p2Scores)}</span>` : ''}
                 </div>
                 ${statusBadge(match)}
@@ -97,7 +149,7 @@
                     <span>${label}</span>
                 </div>
                 <div class="bracket-podium-photos">${renderPodiumPhotos(entry.players || [])}</div>
-                <div class="bracket-podium-names">${esc(entry.label)}</div>
+                <div class="bracket-podium-names">${renderPodiumNames(entry)}</div>
             </div>`;
     };
 

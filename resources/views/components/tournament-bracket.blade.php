@@ -13,6 +13,7 @@
 @endphp
 
 <div class="tournament-bracket-wrapper"
+     data-profile-base="{{ url('/pemain') }}/"
      @if($refreshable || $editable)
          id="live-bracket"
          data-refresh-url="{{ route('api.guest.bracket', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
@@ -274,6 +275,14 @@
     .bracket-player.is-editable:hover::after,
     .bracket-player.is-editable:focus-visible::after { opacity: 1; }
     .bracket-player-name { line-height: 1.35; word-break: break-word; }
+    .bracket-player-name .pemain-profile-link,
+    .bracket-podium-names .pemain-profile-link {
+        color: inherit;
+        font-weight: inherit;
+    }
+    .bracket-player.is-winner .pemain-profile-link {
+        font-weight: 600;
+    }
     .bracket-score-badge { font-size: 0.72rem; color: #6c757d; font-weight: 600; flex-shrink: 0; }
     .bracket-match-status { position: absolute; top: -0.6rem; right: 0.45rem; z-index: 2; line-height: 1; }
     .bracket-match-status .badge { white-space: nowrap; font-size: 0.62rem; }

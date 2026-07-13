@@ -17,6 +17,8 @@
         <span class="bracket-player-name">
             @if (! empty($match['pemain1_ids']))
                 <x-pemain-names :pemain-ids="$match['pemain1_ids']" :nama="$match['pemain1']" />
+            @elseif (! empty($match['pemain1_id']))
+                <x-pemain-names :pemain-ids="[(int) $match['pemain1_id']]" :nama="$match['pemain1']" />
             @else
                 {{ $match['pemain1'] }}
             @endif
@@ -38,6 +40,8 @@
         <span class="bracket-player-name">
             @if (! empty($match['pemain2_ids']))
                 <x-pemain-names :pemain-ids="$match['pemain2_ids']" :nama="$match['pemain2']" />
+            @elseif (! empty($match['pemain2_id']))
+                <x-pemain-names :pemain-ids="[(int) $match['pemain2_id']]" :nama="$match['pemain2']" />
             @else
                 {{ $match['pemain2'] }}
             @endif

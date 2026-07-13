@@ -25,7 +25,7 @@
     <ul class="nav nav-tabs mb-3" role="tablist">
         <li class="nav-item" role="presentation">
             <a class="nav-link {{ $activeTab === 'pemain' ? 'active' : '' }}"
-               href="{{ route('admin.turnamen-operasi.index', array_filter(['id_turnamen' => $turnamen->id, 'tab' => 'pemain', 'search' => request('search'), 'status' => request('status')])) }}">
+               href="{{ route('admin.turnamen-operasi.index', array_filter(['id_turnamen' => $turnamen->id, 'tab' => 'pemain', 'search' => request('search'), 'status' => request('status'), 'sort' => request('sort'), 'dir' => request('dir')])) }}">
                 <i class="bi bi-people me-1"></i> Pemain Terdaftar
             </a>
         </li>

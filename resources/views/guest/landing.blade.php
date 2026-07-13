@@ -2,6 +2,14 @@
 
 @section('title', 'Beranda')
 
+@php
+    use Carbon\Carbon;
+
+    $formatMonth = static fn (int $month) => Carbon::createFromDate(2000, $month, 1)
+        ->locale('id')
+        ->translatedFormat('F');
+@endphp
+
 @push('styles')
 <style>
     .guest-card-meta {
@@ -41,6 +49,12 @@
         width: 100%;
     }
 
+    @media (min-width: 576px) {
+        .guest-card-actions--3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
     @media (max-width: 575.98px) {
         .guest-card-actions--3 {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -49,6 +63,18 @@
         .guest-card-actions--3 .btn:last-child {
             grid-column: 1 / -1;
         }
+    }
+
+    .guest-completed-section {
+        margin-top: 3rem;
+        padding-top: 2.5rem;
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    .guest-completed-filter {
+        max-width: 28rem;
+        margin-left: auto;
+        margin-right: auto;
     }
 </style>
 @endpush
@@ -61,109 +87,10 @@
             <p class="text-muted mb-0">Daftar turnamen terbuka atau lihat klasemen dan bracket turnamen berlangsung.</p>
         </div>
 
-        @if ($publicTournaments->isNotEmpty())
+        @if ($activeTournaments->isNotEmpty())
             <div class="row g-4">
-                @foreach ($publicTournaments as $item)
-                    @php
-                        if ($item->status === 'open') {
-                            $statusClass = 'success';
-                            $statusLabel = 'Pendaftaran Dibuka';
-                        } elseif ($item->status === 'ongoing') {
-                            $statusClass = 'primary';
-                            $statusLabel = 'Berlangsung';
-                        } else {
-                            $statusClass = 'secondary';
-                            $statusLabel = 'Selesai';
-                        }
-
-                        $capacityLabel = $item->maks_peserta
-                            ? number_format($item->maks_peserta)
-                            : 'Tidak Terbatas';
-                        $pesertaLabel = $item->registered_count ?? 0;
-                        $actionCount = $item->isRegistrationOpen()
-                            ? 2
-                            : ($item->isMahjong() ? 2 : 3);
-                    @endphp
-                    <div class="col-12 col-md-6">
-                        <div class="card guest-card h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                                    <span class="badge bg-{{ $statusClass }}">{{ $statusLabel }}</span>
-                                    <span class="badge text-bg-light text-dark border">{{ $item->jenis_label }}</span>
-                                </div>
-
-                                <h2 class="h5 fw-bold mb-2">{{ $item->nama }}</h2>
-
-                                @if ($item->tanggal)
-                                    <p class="text-muted small mb-2">
-                                        <i class="bi bi-calendar3 me-1"></i>
-                                        {{ $item->tanggal->format('d M Y') }}
-                                    </p>
-                                @endif
-
-                                <p class="small guest-card-meta {{ $item->syarat ? 'mb-2' : 'mb-3' }}">
-                                    <span>
-                                        <i class="bi bi-people me-1 text-primary"></i>
-                                        <span class="text-muted">Peserta:</span>
-                                        <strong>{{ $pesertaLabel }} / {{ $capacityLabel }}</strong>
-                                        @if ($item->maks_peserta)
-                                            <span class="text-muted">· {{ $item->approved_count ?? 0 }} disetujui</span>
-                                        @endif
-                                    </span>
-                                    @if ($item->isRegistrationOpen())
-                                        <span class="guest-card-meta-price fw-semibold text-primary">
-                                            Rp {{ number_format($item->harga, 0, ',', '.') }}
-                                            <span class="text-muted fw-normal">
-                                                / orang
-                                            </span>
-                                        </span>
-                                    @endif
-                                </p>
-
-                                @if ($item->syarat)
-                                    <div class="guest-card-syarat mb-3">
-                                        <div class="text-muted small text-uppercase mb-1">
-                                            <i class="bi bi-card-text me-1"></i> Syarat
-                                        </div>
-                                        <div class="text-secondary small guest-card-syarat-text">{{ $item->syarat }}</div>
-                                    </div>
-                                @endif
-
-                                @if (! $item->isRegistrationOpen() && $item->status === 'completed' && $item->champion_label)
-                                    <p class="mb-3">
-                                        <span class="text-muted small text-uppercase">
-                                            <i class="bi bi-trophy me-1"></i> Juara
-                                        </span>
-                                        <span class="fw-semibold d-block">{{ $item->champion_label }}</span>
-                                    </p>
-                                @endif
-
-                                <div class="mt-auto guest-card-actions guest-card-actions--{{ $actionCount }}">
-                                    <a href="{{ route('guest.participants', ['id_turnamen' => $item->id]) }}"
-                                       class="btn btn-outline-secondary">
-                                        <i class="bi bi-people me-1"></i> Daftar Peserta
-                                    </a>
-                                    @if ($item->isRegistrationOpen())
-                                        <a href="{{ route('guest.register', ['id_turnamen' => $item->id]) }}"
-                                           class="btn btn-bp">
-                                            <i class="bi bi-person-plus me-1"></i> Daftar
-                                        </a>
-                                    @else
-                                        <a href="{{ route('guest.standings', ['id_turnamen' => $item->id]) }}"
-                                           class="btn btn-outline-success">
-                                            <i class="bi bi-bar-chart-steps me-1"></i> Klasemen
-                                        </a>
-                                        @if (! $item->isMahjong())
-                                            <a href="{{ route('guest.bracket', ['id_turnamen' => $item->id]) }}"
-                                               class="btn btn-outline-primary">
-                                                <i class="bi bi-diagram-2 me-1"></i> Bracket
-                                            </a>
-                                        @endif
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                @foreach ($activeTournaments as $item)
+                    @include('guest.partials.tournament-card', ['item' => $item])
                 @endforeach
             </div>
         @else
@@ -172,11 +99,85 @@
                     <i class="bi bi-calendar-x display-4 text-muted mb-3 d-block"></i>
                     <h2 class="h4 fw-bold mb-2">Belum Ada Turnamen Aktif</h2>
                     <p class="text-muted mb-0 mx-auto" style="max-width: 28rem;">
-                        Saat ini tidak ada turnamen terbuka, berlangsung, atau selesai dalam 30 hari terakhir.
+                        Saat ini tidak ada turnamen dengan pendaftaran terbuka atau sedang berlangsung.
                     </p>
                 </div>
             </div>
         @endif
+
+        @if ($completedFilter['hasAny'])
+            <section class="guest-completed-section" id="turnamen-selesai">
+                <div class="text-center mb-4">
+                    <h2 class="h4 fw-bold mb-2">Turnamen Selesai</h2>
+                    <p class="text-muted mb-0">Lihat hasil turnamen yang sudah selesai.</p>
+                </div>
+
+                <form method="GET"
+                      action="{{ route('guest.landing') }}"
+                      class="guest-completed-filter row g-2 align-items-end justify-content-center mb-4"
+                      id="completed-tournament-filter">
+                    <div class="col-6 col-sm-5">
+                        <label for="completed_month" class="form-label small text-muted mb-1">Bulan</label>
+                        <select name="completed_month" id="completed_month" class="form-select form-select-sm">
+                            @foreach ($completedMonths as $monthOption)
+                                <option value="{{ $monthOption }}"
+                                    {{ (int) $completedFilter['month'] === $monthOption ? 'selected' : '' }}>
+                                    {{ $formatMonth($monthOption) }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <label for="completed_year" class="form-label small text-muted mb-1">Tahun</label>
+                        <select name="completed_year" id="completed_year" class="form-select form-select-sm">
+                            @foreach ($completedFilter['years'] as $yearOption)
+                                <option value="{{ $yearOption }}"
+                                    {{ (int) $completedFilter['year'] === $yearOption ? 'selected' : '' }}>
+                                    {{ $yearOption }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-12 col-sm-3">
+                        <button type="submit" class="btn btn-outline-secondary btn-sm w-100">
+                            <i class="bi bi-funnel me-1"></i> Tampilkan
+                        </button>
+                    </div>
+                </form>
+
+                @if ($completedTournaments->isNotEmpty())
+                    <div class="row g-4">
+                        @foreach ($completedTournaments as $item)
+                            @include('guest.partials.tournament-card', ['item' => $item])
+                        @endforeach
+                    </div>
+                @else
+                    <div class="card guest-card text-center py-4 px-3">
+                        <div class="card-body">
+                            <i class="bi bi-calendar2-week display-6 text-muted mb-2 d-block"></i>
+                            <p class="text-muted mb-0">
+                                Tidak ada turnamen selesai pada
+                                {{ $formatMonth($completedFilter['month']) }}
+                                {{ $completedFilter['year'] }}.
+                            </p>
+                        </div>
+                    </div>
+                @endif
+            </section>
+        @endif
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('completed-tournament-filter');
+    if (!form) return;
+
+    form.querySelectorAll('select').forEach((select) => {
+        select.addEventListener('change', () => form.submit());
+    });
+});
+</script>
+@endpush

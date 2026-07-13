@@ -5,7 +5,35 @@
     $showBulkActions = auth()->user()->isAdmin() && $turnamen && empty($isDoubleView);
     $showPartnerActions = auth()->user()->isAdmin() && $turnamen && $turnamen->isDouble() && ! $turnamen->isRegistrationClosed() && empty($isDoubleView);
     $showPartnerColumn = $turnamen && $turnamen->isDouble() && empty($isDoubleView);
+    $sortThParams = compact('filterRoute', 'preserveTab');
 @endphp
+
+@once
+@push('styles')
+<style>
+    .pemain-table-sort-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.15rem;
+        white-space: nowrap;
+    }
+
+    .pemain-table-sort-link:hover {
+        color: var(--bs-primary) !important;
+    }
+
+    .pemain-table-sort-icon {
+        font-size: 0.85rem;
+        opacity: 0.35;
+    }
+
+    .pemain-table-sort-icon.is-active {
+        opacity: 1;
+        color: var(--bs-primary);
+    }
+</style>
+@endpush
+@endonce
 
 <div class="card mb-3">
     <div class="card-body">
@@ -15,6 +43,12 @@
             @endif
             @if ($preserveTab)
                 <input type="hidden" name="tab" value="{{ $preserveTab }}">
+            @endif
+            @if (request('sort'))
+                <input type="hidden" name="sort" value="{{ request('sort') }}">
+            @endif
+            @if (request('dir'))
+                <input type="hidden" name="dir" value="{{ request('dir') }}">
             @endif
             <div class="col-md-5">
                 <label class="form-label small text-muted">Cari</label>
@@ -92,13 +126,13 @@
                     <tr>
                         @if (! empty($isDoubleView))
                             <th>#</th>
-                            <th>Pemain 1</th>
-                            <th class="d-none d-lg-table-cell">Gender</th>
-                            <th class="d-none d-lg-table-cell">Rating</th>
-                            <th>Pemain 2</th>
-                            <th class="d-none d-lg-table-cell">Gender</th>
-                            <th class="d-none d-lg-table-cell">Rating</th>
-                            <th>Status</th>
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Pemain 1', 'column' => 'pemain1_nama']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Gender', 'column' => 'pemain1_gender', 'class' => 'd-none d-lg-table-cell']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Rating', 'column' => 'pemain1_rating', 'class' => 'd-none d-lg-table-cell']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Pemain 2', 'column' => 'pemain2_nama']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Gender', 'column' => 'pemain2_gender', 'class' => 'd-none d-lg-table-cell']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Rating', 'column' => 'pemain2_rating', 'class' => 'd-none d-lg-table-cell']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Status', 'column' => 'status']))
                             <th class="text-end">Aksi</th>
                         @else
                             @if ($showBulkActions)
@@ -108,14 +142,14 @@
                             @endif
                             <th style="width: 3.5rem;"></th>
                             <th>#</th>
-                            <th>Nama</th>
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Nama', 'column' => 'nama']))
                             @if ($showPartnerColumn)
-                                <th>Partner</th>
+                                @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Partner', 'column' => 'partner']))
                             @endif
-                            <th class="d-none d-md-table-cell">No. HP</th>
-                            <th class="d-none d-lg-table-cell">Gender</th>
-                            <th class="d-none d-lg-table-cell">Rating</th>
-                            <th>Status</th>
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'No. HP', 'column' => 'no_hp', 'class' => 'd-none d-md-table-cell']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Gender', 'column' => 'gender', 'class' => 'd-none d-lg-table-cell']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Rating', 'column' => 'rating', 'class' => 'd-none d-lg-table-cell']))
+                            @include('admin.pemain.partials.sortable-th', array_merge($sortThParams, ['label' => 'Status', 'column' => 'status']))
                             <th class="text-end">Aksi</th>
                         @endif
                     </tr>

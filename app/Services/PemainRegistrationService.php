@@ -40,38 +40,137 @@ class PemainRegistrationService
         return Turnamen::open()->latest('doc')->get();
     }
 
+    public function getPublicActiveTournaments(): Collection
+    {
+        return $this->publicTournamentQuery()
+            ->publicActive()
+            ->get();
+    }
+
+    public function getPublicCompletedTournaments(int $month, int $year): Collection
+    {
+        $month = max(1, min(12, $month));
+        $start = Carbon::createFromDate($year, $month, 1)->startOfDay();
+        $end = $start->copy()->endOfMonth()->endOfDay();
+
+        return $this->publicTournamentQuery()
+            ->publicCompleted()
+            ->whereBetween('tanggal', [$start, $end])
+            ->get();
+    }
+
+    /**
+     * @return array{month: int, year: int, years: array<int, int>, hasAny: bool}
+     */
+    public function resolvePublicCompletedFilter(?int $month, ?int $year): array
+    {
+        $years = $this->getPublicCompletedYearOptions();
+        $hasAny = $years !== [];
+
+        if (! $hasAny) {
+            return [
+                'month' => now()->month,
+                'year' => now()->year,
+                'years' => [],
+                'hasAny' => false,
+            ];
+        }
+
+        $selectedYear = ($year && in_array($year, $years, true)) ? $year : $years[0];
+        $availableMonths = $this->getPublicCompletedMonthsForYear($selectedYear);
+
+        if ($month && $year && in_array($year, $years, true) && in_array($month, $availableMonths, true)) {
+            $selectedMonth = $month;
+            $selectedYear = $year;
+        } else {
+            $selectedMonth = $availableMonths[0] ?? now()->month;
+        }
+
+        return [
+            'month' => $selectedMonth,
+            'year' => $selectedYear,
+            'years' => $years,
+            'hasAny' => true,
+        ];
+    }
+
+    public function monthLabel(int $month): string
+    {
+        return Carbon::createFromDate(2000, $month, 1)
+            ->locale('id')
+            ->translatedFormat('F');
+    }
+
+    protected function publicTournamentQuery()
+    {
+        return Turnamen::query()->withCount([
+            'turnamenPeserta as registered_count' => function ($query) {
+                $query->where('status', '!=', 'rejected');
+            },
+            'turnamenPeserta as approved_count' => function ($query) {
+                $query->where('status', 'approved');
+            },
+        ]);
+    }
+
+    protected function getPublicCompletedYearOptions(): array
+    {
+        $cutoff = now()->subYear()->startOfDay();
+
+        return Turnamen::query()
+            ->where('status', 'completed')
+            ->where('tanggal', '>=', $cutoff)
+            ->selectRaw('YEAR(tanggal) as year')
+            ->distinct()
+            ->orderByDesc('year')
+            ->pluck('year')
+            ->map(fn ($year) => (int) $year)
+            ->values()
+            ->all();
+    }
+
+    public function getPublicCompletedMonthsForYear(int $year): array
+    {
+        $cutoff = now()->subYear()->startOfDay();
+        $start = Carbon::createFromDate($year, 1, 1)->startOfDay();
+        $end = Carbon::createFromDate($year, 12, 31)->endOfDay();
+
+        return Turnamen::query()
+            ->where('status', 'completed')
+            ->where('tanggal', '>=', $cutoff)
+            ->whereBetween('tanggal', [$start, $end])
+            ->selectRaw('MONTH(tanggal) as month')
+            ->distinct()
+            ->orderByDesc('month')
+            ->pluck('month')
+            ->map(fn ($month) => (int) $month)
+            ->values()
+            ->all();
+    }
+
     public function getPublicTournaments(): Collection
     {
-        return Turnamen::publicVisible()
-            ->withCount([
-                'turnamenPeserta as registered_count' => function ($query) {
-                    $query->where('status', '!=', 'rejected');
-                },
-                'turnamenPeserta as approved_count' => function ($query) {
-                    $query->where('status', 'approved');
-                },
-            ])
-            ->with([
-                'finalMatch' => function ($query) {
-                    $query->with([
-                        'pesertaPemenang.pemain1',
-                        'pesertaPemenang.pasanganAsPeserta1.peserta2.pemain1',
-                        'pemenang',
-                    ]);
-                },
-            ])
-            ->get();
+        return $this->getPublicActiveTournaments();
     }
 
     public function resolvePublicTournament(?int $turnamenId = null): ?Turnamen
     {
-        $tournaments = $this->getPublicTournaments();
-
         if ($turnamenId) {
-            return $tournaments->firstWhere('id', $turnamenId);
+            $cutoff = now()->subYear()->startOfDay();
+
+            return Turnamen::query()
+                ->where('id', $turnamenId)
+                ->where(function ($builder) use ($cutoff) {
+                    $builder->whereIn('status', ['open', 'ongoing'])
+                        ->orWhere(function ($completed) use ($cutoff) {
+                            $completed->where('status', 'completed')
+                                ->where('tanggal', '>=', $cutoff);
+                        });
+                })
+                ->first();
         }
 
-        return $tournaments->first();
+        return Turnamen::publicActive()->orderByDesc('tanggal')->first();
     }
 
     public function findPemainByPhone(string $noHp): ?Pemain

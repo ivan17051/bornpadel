@@ -13,6 +13,15 @@
         </div>
 
         @if ($turnamen && $turnamen->isMahjong())
+            @if (! empty($winners) && ! empty($winners['has_winners']))
+                @include('components.partials.bracket-podium-styles')
+                @include('components.partials.bracket-podium', [
+                    'first' => $winners['first'],
+                    'second' => $winners['second'],
+                    'third' => $winners['third'],
+                ])
+            @endif
+
             <x-mahjong-leaderboard
                 :standings="$standings"
                 :turnamen="$turnamen"

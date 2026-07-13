@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Guest;
 use App\Http\Controllers\Controller;
 use App\Services\LeaderboardService;
 use App\Services\PemainRegistrationService;
+use App\Services\TournamentWinnersService;
 use Illuminate\Http\Request;
 
 class StandingsController extends Controller
@@ -12,7 +13,8 @@ class StandingsController extends Controller
     public function index(
         Request $request,
         LeaderboardService $leaderboardService,
-        PemainRegistrationService $registrationService
+        PemainRegistrationService $registrationService,
+        TournamentWinnersService $winnersService
     ) {
         $turnamen = $registrationService->resolvePublicTournament(
             $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
@@ -25,9 +27,14 @@ class StandingsController extends Controller
             ? $mahjongStandings['sections']
             : $leaderboardService->getStandings(optional($turnamen)->id);
 
+        $winners = $turnamen && $turnamen->isMahjong() && $turnamen->status === 'completed'
+            ? $winnersService->getWinners($turnamen)
+            : null;
+
         return view('guest.standings', compact(
             'turnamen',
-            'standings'
+            'standings',
+            'winners'
         ));
     }
 }

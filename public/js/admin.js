@@ -132,6 +132,12 @@ const BornPadelAdmin = (function () {
         return confirm(text ? `${title}\n\n${text}` : title);
     };
 
+    const initPemainTableSort = () => {
+        document.querySelectorAll('#pemain-table .pemain-table-sort-link').forEach((link) => {
+            link.addEventListener('click', () => showPageLoader());
+        });
+    };
+
     const initBulkApproval = () => {
         const card = document.getElementById('pemain-table-card');
         const bulkBtns = Array.from(document.querySelectorAll('.btn-bulk-approve'));
@@ -331,6 +337,7 @@ const BornPadelAdmin = (function () {
     const initPemainActions = () => {
         initBulkApproval();
         initPartnerModal();
+        initPemainTableSort();
 
         document.querySelectorAll('.btn-approve').forEach((btn) => {
             btn.addEventListener('click', async () => {
