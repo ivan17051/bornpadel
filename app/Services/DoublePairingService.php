@@ -11,9 +11,22 @@ use RuntimeException;
 
 class DoublePairingService
 {
+    public function countApprovedIndividuals(Turnamen $turnamen): int
+    {
+        return TurnamenPeserta::query()
+            ->forTurnamen($turnamen->id)
+            ->approved()
+            ->count();
+    }
+
     public function countApprovedSolos(Turnamen $turnamen): int
     {
         return $this->approvedSoloQuery($turnamen)->count();
+    }
+
+    public function countPairedIndividuals(Turnamen $turnamen): int
+    {
+        return max(0, $this->countApprovedIndividuals($turnamen) - $this->countApprovedSolos($turnamen));
     }
 
     public function getApprovedSolos(Turnamen $turnamen): Collection
@@ -26,16 +39,20 @@ class DoublePairingService
 
     public function getSummary(Turnamen $turnamen): array
     {
-        $approvedIndividuals = $this->countApprovedSolos($turnamen);
-        $isEven = $approvedIndividuals % 2 === 0;
+        $approvedIndividuals = $this->countApprovedIndividuals($turnamen);
+        $approvedSolos = $this->countApprovedSolos($turnamen);
+        $pairedIndividuals = max(0, $approvedIndividuals - $approvedSolos);
+        $isEven = $approvedSolos % 2 === 0;
 
         return [
             'approved_individuals' => $approvedIndividuals,
+            'approved_solos' => $approvedSolos,
+            'paired_individuals' => $pairedIndividuals,
             'is_even' => $isEven,
-            'can_auto_pair' => $approvedIndividuals >= 2 && $isEven,
-            'pairs_preview' => intdiv($approvedIndividuals, 2),
+            'can_auto_pair' => $approvedSolos >= 2 && $isEven,
+            'pairs_preview' => intdiv($approvedSolos, 2),
             'is_paired' => (bool) $turnamen->registration_paired_at,
-            'odd_player_warning' => $approvedIndividuals > 0 && ! $isEven,
+            'odd_player_warning' => $approvedSolos > 0 && ! $isEven,
         ];
     }
 

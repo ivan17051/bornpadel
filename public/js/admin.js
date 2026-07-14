@@ -1096,62 +1096,28 @@ const BornPadelAdmin = (function () {
         const form = select.closest('form');
         const placeholder = select.dataset.placeholder || 'Pilih turnamen';
         const allowClear = select.dataset.allowClear === '1';
-        const selectedValue = select.value || '';
-        const select2Config = {
+        const visibleMax = parseInt(select.dataset.turnamenVisibleMax || '5', 10);
+        // ~2.5rem per option row (bootstrap-5 theme)
+        const resultsMaxHeight = `${Math.max(1, visibleMax) * 2.5}rem`;
+
+        $select.select2({
             theme: 'bootstrap-5',
             placeholder,
             allowClear,
             width: '100%',
+            minimumResultsForSearch: 0,
             dropdownCssClass: 'turnamen-filter-select2-dropdown',
-        };
+        });
 
-        if (select.dataset.turnamenOptions) {
-            try {
-                const allOptions = JSON.parse(select.dataset.turnamenOptions);
+        $select.on('select2:open', function () {
+            const optionsEl = document.querySelector(
+                '.turnamen-filter-select2-dropdown .select2-results__options'
+            );
 
-                if (Array.isArray(allOptions) && allOptions.length > 0) {
-                    const initialMax = parseInt(select.dataset.turnamenInitialMax || '5', 10);
-                    const formatLabel = (item) => {
-                        const status = item.status || '';
-                        const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
-
-                        return `${item.nama} — ${statusLabel}`;
-                    };
-                    const items = allOptions.map((item, index) => ({
-                        id: String(item.id),
-                        text: formatLabel(item),
-                        initialVisible: index < initialMax || String(item.id) === selectedValue,
-                    }));
-
-                    select2Config.data = [{ id: '', text: placeholder }].concat(items);
-                    select2Config.matcher = (params, data) => {
-                        if (data.id === undefined || data.id === '') {
-                            return data;
-                        }
-
-                        const term = (params.term || '').trim().toLowerCase();
-
-                        if (term === '') {
-                            return data.initialVisible ? data : null;
-                        }
-
-                        return (data.text || '').toLowerCase().includes(term) ? data : null;
-                    };
-                }
-            } catch (error) {
-                // Fall back to native options below.
+            if (optionsEl) {
+                optionsEl.style.maxHeight = resultsMaxHeight;
             }
-        }
-
-        if (!select2Config.data) {
-            select2Config.minimumResultsForSearch = 0;
-        }
-
-        $select.select2(select2Config);
-
-        if (selectedValue) {
-            $select.val(selectedValue).trigger('change.select2');
-        }
+        });
 
         $select.on('change', function () {
             if (form) {

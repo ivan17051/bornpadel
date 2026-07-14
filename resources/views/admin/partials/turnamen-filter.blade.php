@@ -11,32 +11,6 @@
     $lockedTurnamen = $isPanitia ? $turnamenList->first() : null;
 
     $filterTurnamenList = $turnamenList;
-
-    if ($turnamenFilterMax && $turnamenList->count() > $turnamenFilterMax) {
-        $filterTurnamenList = $turnamenList->take($turnamenFilterMax)->values();
-        $selectedId = request('id_turnamen');
-
-        if ($selectedId && ! $filterTurnamenList->contains(fn ($item) => (int) $item->id === (int) $selectedId)) {
-            $selectedTurnamen = $turnamenList->firstWhere('id', (int) $selectedId);
-
-            if ($selectedTurnamen) {
-                $filterTurnamenList = $filterTurnamenList
-                    ->slice(0, max(0, $turnamenFilterMax - 1))
-                    ->push($selectedTurnamen)
-                    ->values();
-            }
-        }
-    }
-
-    $turnamenSelectOptions = ($useSelect2TurnamenFilter && $turnamenFilterMax && $turnamenList->isNotEmpty())
-        ? $turnamenList->map(function ($item) {
-            return [
-                'id' => $item->id,
-                'nama' => $item->nama,
-                'status' => $item->status,
-            ];
-        })->values()->all()
-        : [];
 @endphp
 
 @if (empty($sweetAlert))
@@ -86,9 +60,8 @@
                             data-select2-turnamen="1"
                             data-placeholder="{{ $emptyOptionLabel }}"
                             data-allow-clear="{{ $requireTurnamenSelection ? '0' : '1' }}"
-                            @if ($turnamenSelectOptions)
-                                data-turnamen-initial-max="{{ $turnamenFilterMax }}"
-                                data-turnamen-options='@json($turnamenSelectOptions)'
+                            @if ($turnamenFilterMax)
+                                data-turnamen-visible-max="{{ $turnamenFilterMax }}"
                             @endif
                         @endif>
                     <option value="" {{ ! request('id_turnamen') ? 'selected' : '' }}>

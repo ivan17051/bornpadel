@@ -42,10 +42,10 @@
                     <p class="text-muted mb-0 small">
                         @if ($turnamen->isRegistrationOpen())
                             @if ($isDoubleOpen && ($pairingSummary['odd_player_warning'] ?? false))
-                                Pendaftaran masih dibuka. <strong class="text-danger">Jumlah pemain approved ganjil ({{ $pairingSummary['approved_individuals'] }}).</strong>
+                                Pendaftaran masih dibuka. <strong class="text-danger">Jumlah pemain belum berpasangan ganjil ({{ $pairingSummary['approved_solos'] ?? 0 }}).</strong>
                                 Tolak satu pemain atau tambahkan pemain baru sebelum menutup pendaftaran.
                             @elseif ($isDoubleOpen)
-                                Pendaftaran masih dibuka. Setiap peserta mendaftar individu; saat ditutup, sistem akan memasangkan {{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan secara acak dari pemain approved.
+                                Pendaftaran masih dibuka. Setiap peserta mendaftar individu; saat ditutup, sistem akan memasangkan {{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan secara acak dari pemain belum berpasangan.
                             @else
                                 Pendaftaran masih dibuka. Tutup pendaftaran sebelum membuat grup.
                             @endif
@@ -127,9 +127,11 @@
                                 <h6 class="text-muted text-uppercase small mb-2">Pemasangan Otomatis</h6>
                                 <ul class="small text-muted mb-0 ps-3">
                                     <li>{{ $pairingSummary['approved_individuals'] ?? 0 }} pemain approved</li>
+                                    <li>{{ $pairingSummary['paired_individuals'] ?? 0 }} pemain sudah berpasangan</li>
+                                    <li>{{ $pairingSummary['approved_solos'] ?? 0 }} pemain belum berpasangan</li>
                                     <li>{{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan akan dibuat saat pendaftaran ditutup</li>
                                     @if ($pairingSummary['odd_player_warning'] ?? false)
-                                        <li class="text-danger">Jumlah pemain ganjil, mohon perbaiki data sebelum menutup pendaftaran</li>
+                                        <li class="text-danger">Jumlah pemain belum berpasangan ganjil, mohon perbaiki data sebelum menutup pendaftaran</li>
                                     @endif
                                 </ul>
                             </div>

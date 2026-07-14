@@ -182,7 +182,7 @@ class GroupMatchmakingService
     public function countApprovedPlayers(Turnamen $turnamen): int
     {
         if ($turnamen->isDouble() && $turnamen->isRegistrationOpen()) {
-            return $this->pairingService->countApprovedSolos($turnamen);
+            return $this->pairingService->countApprovedIndividuals($turnamen);
         }
 
         return $this->getApprovedEntries($turnamen)->count();

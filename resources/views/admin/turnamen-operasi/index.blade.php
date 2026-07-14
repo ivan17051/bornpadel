@@ -97,7 +97,8 @@
     }
 
     .turnamen-filter-select2-dropdown .select2-results__options {
-        max-height: 12.5rem;
+        max-height: 12.5rem; /* ~5 rows; overflow scrolls */
+        overflow-y: auto;
     }
 </style>
 @endpush
