@@ -9,6 +9,7 @@ use App\Models\TurnamenPeserta;
 use App\Services\GroupMatchmakingService;
 use App\Services\KnockoutBracketService;
 use App\Services\MahjongMatchmakingService;
+use App\Services\MatchScoringService;
 use App\Services\TournamentAccessService;
 use App\Services\TournamentCompletionService;
 use Illuminate\Http\Request;
@@ -21,19 +22,22 @@ class MatchmakingController extends Controller
     protected $knockoutBracketService;
     protected $tournamentAccess;
     protected $tournamentCompletionService;
+    protected $scoringService;
 
     public function __construct(
         GroupMatchmakingService $matchmakingService,
         MahjongMatchmakingService $mahjongService,
         KnockoutBracketService $knockoutBracketService,
         TournamentAccessService $tournamentAccess,
-        TournamentCompletionService $tournamentCompletionService
+        TournamentCompletionService $tournamentCompletionService,
+        MatchScoringService $scoringService
     ) {
         $this->matchmakingService = $matchmakingService;
         $this->mahjongService = $mahjongService;
         $this->knockoutBracketService = $knockoutBracketService;
         $this->tournamentAccess = $tournamentAccess;
         $this->tournamentCompletionService = $tournamentCompletionService;
+        $this->scoringService = $scoringService;
     }
 
     public function index(Request $request)
@@ -112,6 +116,18 @@ class MatchmakingController extends Controller
 
         $knockoutRounds = $hasKnockoutBracket
             ? $this->knockoutBracketService->getKnockoutRoundsWithMatches($turnamen)
+                ->map(function (array $round) {
+                    $round['matches'] = $round['matches']->map(function ($match) {
+                        $match->setAttribute(
+                            'can_edit_score',
+                            $this->scoringService->canEditKnockoutScore($match)
+                        );
+
+                        return $match;
+                    });
+
+                    return $round;
+                })
             : collect();
 
         return view('admin.matchmaking.index', [
@@ -128,9 +144,13 @@ class MatchmakingController extends Controller
             'defaultMaxPerGroup' => $this->matchmakingService->getDefaultMaxPerGroup(),
             'canCloseRegistration' => $turnamen ? $this->matchmakingService->canCloseRegistration($turnamen) : false,
             'canRandomGrup' => $turnamen ? $this->matchmakingService->canGenerateRandomGroups($turnamen) : false,
+            'canEditGroups' => $turnamen ? $this->matchmakingService->canEditGroups($turnamen) : false,
+            'canGenerateGroupMatches' => $turnamen ? $this->matchmakingService->canGenerateGroupMatches($turnamen) : false,
+            'canResetGroupsAndMatches' => $turnamen ? $this->matchmakingService->canResetGroupsAndMatches($turnamen) : false,
             'canReshuffle' => $turnamen && $isMahjong ? $this->mahjongService->canReshuffle($turnamen) : false,
             'canEndGroupStage' => $canEndGroupStage,
             'hasKnockoutBracket' => $hasKnockoutBracket,
+            'canEditGroupScores' => $turnamen && ! $isMahjong && ! $hasKnockoutBracket,
             'knockoutRounds' => $knockoutRounds,
             'canCompleteTournament' => $turnamen ? $this->tournamentCompletionService->canComplete($turnamen) : false,
             'mahjongIsFinal' => $turnamen && $isMahjong ? (bool) $turnamen->mahjong_is_final : false,
@@ -376,13 +396,70 @@ class MatchmakingController extends Controller
         return response()->json([
             'success' => true,
             'message' => sprintf(
-                'Berhasil membuat %d grup (%s pemain) dan %d pertandingan fase grup (%s).',
+                'Berhasil membuat %d grup (%s peserta, %s). Susunan grup masih dapat diubah.',
                 count($result['groups']),
                 $sizeLabel,
-                $result['matches'],
                 $modeLabel
             ),
             'data' => $result,
+        ]);
+    }
+
+    public function generateGroupMatches(Request $request)
+    {
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $result = $this->matchmakingService->generateGroupMatches($turnamen);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => sprintf(
+                'Matchmaking berhasil dibuat: %d pertandingan dalam %d grup. Susunan grup sekarang dikunci.',
+                $result['matches'],
+                $result['groups']
+            ),
+            'data' => $result,
+        ]);
+    }
+
+    public function swapGroupMembers(Request $request)
+    {
+        $data = $request->validate([
+            'id_turnamen' => ['required', 'integer', 'exists:m_turnamen,id'],
+            'first_member_id' => ['required', 'integer', 'different:second_member_id', 'exists:grup_member,id'],
+            'second_member_id' => ['required', 'integer', 'exists:grup_member,id'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $first = GrupMember::findOrFail($data['first_member_id']);
+            $second = GrupMember::findOrFail($data['second_member_id']);
+            $this->matchmakingService->swapGroupMembers($turnamen, $first, $second);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Peserta berhasil ditukar antar grup.',
+        ]);
+    }
+
+    public function resetGroupsAndMatches(Request $request)
+    {
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $this->matchmakingService->resetGroupsAndMatches($turnamen);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Grup dan matchmaking berhasil direset. Anda dapat membuat grup kembali.',
         ]);
     }
 

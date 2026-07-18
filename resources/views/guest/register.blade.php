@@ -9,6 +9,10 @@
     $capacityLabel = $turnamen->maks_peserta
         ? number_format($turnamen->maks_peserta)
         : 'Tidak Terbatas';
+    $hargaSatuan = (float) $turnamen->harga;
+    $hargaTampil = $isDouble && $registrationMode === 'pair'
+        ? $hargaSatuan * 2
+        : $hargaSatuan;
 @endphp
 
 <div class="row justify-content-center">
@@ -23,7 +27,15 @@
                 <div class="row text-center g-3">
                     <div class="col-4">
                         <div class="info-label">Biaya</div>
-                        <strong class="text-primary">Rp {{ number_format($turnamen->harga, 0, ',', '.') }}</strong>
+                        <strong class="text-primary" id="register-harga-display"
+                                data-harga-single="{{ $hargaSatuan }}"
+                                data-harga-pair="{{ $hargaSatuan * 2 }}">
+                            Rp {{ number_format($hargaTampil, 0, ',', '.') }}
+                        </strong>
+                        <div class="small text-muted {{ $isDouble && $registrationMode === 'pair' ? '' : 'd-none' }}"
+                             id="register-harga-note">
+                            2 × Rp {{ number_format($hargaSatuan, 0, ',', '.') }}
+                        </div>
                     </div>
                     <div class="col-4">
                         <div class="info-label">Jenis</div>
@@ -121,8 +133,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const player2Section = document.getElementById('player-2-phone-section');
     const modeInputs = document.querySelectorAll('input[name="registration_mode"]');
     const phone2Group = player2Section?.querySelector('[data-phone-input]');
+    const hargaDisplay = document.getElementById('register-harga-display');
+    const hargaNote = document.getElementById('register-harga-note');
 
     if (!player2Section || !modeInputs.length) return;
+
+    const formatRp = (value) => {
+        const amount = Math.round(Number(value) || 0);
+        return 'Rp ' + amount.toLocaleString('id-ID');
+    };
 
     const togglePlayer2Phone = () => {
         const mode = document.querySelector('input[name="registration_mode"]:checked')?.value || 'single';
@@ -135,6 +154,17 @@ document.addEventListener('DOMContentLoaded', function () {
             if (localInput) {
                 localInput.required = showPair;
             }
+        }
+
+        if (hargaDisplay) {
+            const harga = showPair
+                ? hargaDisplay.dataset.hargaPair
+                : hargaDisplay.dataset.hargaSingle;
+            hargaDisplay.textContent = formatRp(harga);
+        }
+
+        if (hargaNote) {
+            hargaNote.classList.toggle('d-none', !showPair);
         }
     };
 

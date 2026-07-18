@@ -126,6 +126,7 @@ class DashboardService
     public function getRecentTurnamen(int $limit = 8): Collection
     {
         return Turnamen::query()
+            ->whereIn('status', ['open', 'ongoing'])
             ->withCount([
                 'turnamenPeserta',
                 'turnamenPeserta as approved_count' => function ($query) {

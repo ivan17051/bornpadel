@@ -25,6 +25,44 @@ class PointRewardService
         Pemain::whereIn('id', $pemainIds)->increment('total_poin', $points);
     }
 
+    public function revokeMatchWin(
+        Pertandingan $pertandingan,
+        ?int $winnerPesertaId = null,
+        ?int $winnerPemainId = null
+    ): void {
+        $points = (int) config('tournament.points.match_win', 10);
+
+        if ($points <= 0) {
+            return;
+        }
+
+        $pemainIds = [];
+
+        if ($winnerPesertaId) {
+            $pemainIds = $this->resolvePemainIdsFromPeserta((int) $winnerPesertaId);
+        } elseif ($winnerPemainId) {
+            $pemainIds = [(int) $winnerPemainId];
+        } else {
+            $pemainIds = $this->resolveWinnerPemainIds($pertandingan);
+        }
+
+        if ($pemainIds === []) {
+            return;
+        }
+
+        foreach ($pemainIds as $pemainId) {
+            $pemain = Pemain::query()->lockForUpdate()->find($pemainId);
+
+            if (! $pemain) {
+                continue;
+            }
+
+            $pemain->update([
+                'total_poin' => max(0, (int) $pemain->total_poin - $points),
+            ]);
+        }
+    }
+
     /**
      * @param  array<int, array{pemain_ids: int[], points: int}>  $awards
      */

@@ -2,7 +2,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-trophy me-2"></i>Input Skor Pertandingan</h5>
+                <h5 class="modal-title" id="score-modal-title"><i class="bi bi-trophy me-2"></i>Input Skor Pertandingan</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -23,6 +23,17 @@
                     <div class="alert alert-info small mt-3 mb-0">
                         <i class="bi bi-info-circle me-1"></i>
                         Pemenang ditentukan dari jumlah set yang dimenangkan. Tambah atau hapus set sesuai kebutuhan.
+                    </div>
+                    <div id="score-password-wrap" class="mt-3 d-none">
+                        <label for="score-confirm-password" class="form-label">
+                            Password Anda <span class="text-danger">*</span>
+                        </label>
+                        <input type="password"
+                               id="score-confirm-password"
+                               class="form-control"
+                               autocomplete="current-password"
+                               placeholder="Masukkan password untuk konfirmasi">
+                        <div class="form-text">Wajib diisi untuk mengubah skor yang sudah tersimpan.</div>
                     </div>
                     <div id="score-form-error" class="alert alert-danger small mt-2 d-none"></div>
                 </form>

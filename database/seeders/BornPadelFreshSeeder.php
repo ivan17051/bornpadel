@@ -235,6 +235,7 @@ class BornPadelFreshSeeder extends Seeder
         }
 
         $this->groupService->generateRandomGroups($turnamen, 3, 5, 'by_rating');
+        $this->groupService->generateGroupMatches($turnamen);
         $this->playGroupStage($turnamen, 0.68);
 
         // Left ongoing: group stage in progress, standings already differ per grup.
@@ -276,6 +277,7 @@ class BornPadelFreshSeeder extends Seeder
         }
 
         $this->groupService->generateRandomGroups($turnamen, 3, 5, 'by_rating');
+        $this->groupService->generateGroupMatches($turnamen);
         $this->playGroupStage($turnamen);
 
         $this->bracketService->generateKnockoutBracket($turnamen, 2);

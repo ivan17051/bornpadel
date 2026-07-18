@@ -21,6 +21,7 @@ class Turnamen extends Model
         'status',
         'mahjong_is_final',
         'registration_paired_at',
+        'group_matches_generated_at',
     ];
 
     protected $casts = [
@@ -30,6 +31,7 @@ class Turnamen extends Model
         'dom' => 'datetime',
         'mahjong_is_final' => 'boolean',
         'registration_paired_at' => 'datetime',
+        'group_matches_generated_at' => 'datetime',
     ];
 
     public function scopeOpen($query)

@@ -11,6 +11,7 @@
         $isKnockoutPhase = ! $isMahjong && ($hasKnockoutBracket ?? false);
         $expandGroupsByDefault = $isMahjong || ! $isKnockoutPhase;
         $expandKnockoutByDefault = $isKnockoutPhase;
+        $groupsEditable = ! $isMahjong && ($canEditGroups ?? false);
     @endphp
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center row">
@@ -55,56 +56,23 @@
                             Grup Mahjong aktif. Input poin per pemain, reshuffle kapan saja, atau lanjut ke babak berikutnya.
                         @elseif ($canRandomGrup && $isMahjong)
                             Pendaftaran ditutup. Buat grup Mahjong (4 pemain per grup, jumlah approved harus kelipatan 4).
+                        @elseif ($groupsEditable)
+                            Grup sudah dibuat dan masih dapat diubah. Klik {{ $unitLabel }} di daftar anggota untuk menukar, atau buka "Random Grup" untuk acak ulang, lalu klik "Buat Matchmaking" untuk mengunci grup dan membuat jadwal.
                         @elseif ($canRandomGrup)
-                            Pendaftaran ditutup. Atur min/max {{ $unitLabel }} per grup, lalu buat pembagian grup secara acak atau berdasarkan rating.
+                            Pendaftaran ditutup. Klik "Random Grup" untuk mengatur min/max dan membagi {{ $unitLabel }}.
                         @elseif ($hasKnockoutBracket)
                             Fase grup selesai. Bracket knockout sudah dibuat.
                         @elseif ($canEndGroupStage && ! $isMahjong)
                             Semua pertandingan fase grup selesai. Klik "End Group Stage" untuk membuat bracket.
                         @elseif ($grup->isNotEmpty())
-                            {{ $isMahjong ? 'Grup Mahjong sudah dibuat.' : 'Grup dan pertandingan fase grup sudah dibuat.' }}
+                            {{ $isMahjong ? 'Grup Mahjong sudah dibuat.' : 'Matchmaking fase grup sudah dibuat dan susunan grup dikunci.' }}
                         @else
                             Turnamen tidak siap untuk matchmaking.
                         @endif
                     </p>
                 </div>
                 <div class="col-md-4">
-                    @if ($canRandomGrup && ! $isMahjong)
-                        <div class="card bg-light border-0 mb-3">
-                            <div class="card-body py-3">
-                                <h6 class="text-muted text-uppercase small mb-3">Pengaturan Grup</h6>
-                                <div class="row g-2 mb-2">
-                                    <div class="col-6">
-                                        <label for="min-pemain-grup" class="form-label small mb-1">Min / grup</label>
-                                        <input type="number"
-                                               id="min-pemain-grup"
-                                               class="form-control form-control-sm"
-                                               min="2"
-                                               max="12"
-                                               value="{{ $defaultMinPerGroup }}">
-                                    </div>
-                                    <div class="col-6">
-                                        <label for="max-pemain-grup" class="form-label small mb-1">Max / grup</label>
-                                        <input type="number"
-                                               id="max-pemain-grup"
-                                               class="form-control form-control-sm"
-                                               min="2"
-                                               max="12"
-                                               value="{{ $defaultMaxPerGroup }}">
-                                    </div>
-                                </div>
-                                <div id="group-split-preview"
-                                     class="small text-muted"
-                                     data-approved="{{ $groupingUnitCount }}">
-                                    @if ($groupSplitPreview)
-                                        {{ $groupingUnitCount }} {{ $unitLabel }} → {{ $groupSplitPreview['group_count'] }} grup ({{ $groupSplitPreview['label'] }})
-                                    @else
-                                        {{ ucfirst($unitLabel) }} tidak cukup untuk pembagian grup dengan batas ini.
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                    @elseif ($canRandomGrup && $isMahjong)
+                    @if ($canRandomGrup && $isMahjong)
                         <div class="card bg-light border-0 mb-3">
                             <div class="card-body py-3">
                                 <h6 class="text-muted text-uppercase small mb-2">Mahjong</h6>
@@ -155,24 +123,51 @@
                             <i class="bi bi-lock me-1"></i> Tutup Pendaftaran
                         </button>
                         @endif
-                        <button type="button"
-                                class="btn btn-primary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'd-none' }}"
-                                data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                data-turnamen="{{ $turnamen->id }}"
-                                data-mode="random"
-                                data-mahjong="{{ $isMahjong ? '1' : '0' }}"
-                                {{ $canRandomGrup ? '' : 'd-none' }}>
-                            <i class="bi bi-shuffle me-1"></i> {{ $isMahjong ? 'Buat Grup' : 'Random Grup' }}
-                        </button>
-                        <button type="button"
-                                class="btn btn-secondary btn-matchmaking-grup {{ $canRandomGrup ? '' : 'd-none' }}"
-                                data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                data-turnamen="{{ $turnamen->id }}"
-                                data-mode="by_rating"
-                                data-mahjong="{{ $isMahjong ? '1' : '0' }}"
-                                {{ $canRandomGrup ? '' : 'd-none' }}>
-                            <i class="bi bi-bar-chart-steps me-1"></i> Grup by Rating
-                        </button>
+                        @if ($canRandomGrup && ! $isMahjong)
+                            <button type="button"
+                                    id="btn-open-random-grup-modal"
+                                    class="btn btn-primary"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#randomGrupModal">
+                                <i class="bi bi-shuffle me-1"></i> Random Grup
+                            </button>
+                        @endif
+                        @if ($canRandomGrup && $isMahjong)
+                            <button type="button"
+                                    class="btn btn-primary btn-matchmaking-grup"
+                                    data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-mode="random"
+                                    data-mahjong="1">
+                                <i class="bi bi-shuffle me-1"></i> Buat Grup
+                            </button>
+                            <button type="button"
+                                    class="btn btn-secondary btn-matchmaking-grup"
+                                    data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-mode="by_rating"
+                                    data-mahjong="1">
+                                <i class="bi bi-bar-chart-steps me-1"></i> Grup by Rating
+                            </button>
+                        @endif
+                        @if ($canGenerateGroupMatches ?? false)
+                            <button type="button"
+                                    id="btn-generate-group-matches"
+                                    class="btn btn-success"
+                                    data-url="{{ route('admin.matchmaking.generate-group-matches') }}"
+                                    data-turnamen="{{ $turnamen->id }}">
+                                <i class="bi bi-calendar2-check me-1"></i> Buat Matchmaking
+                            </button>
+                        @endif
+                        @if ($canResetGroupsAndMatches ?? false)
+                            <button type="button"
+                                    id="btn-reset-groups"
+                                    class="btn btn-outline-danger"
+                                    data-url="{{ route('admin.matchmaking.reset-groups') }}"
+                                    data-turnamen="{{ $turnamen->id }}">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Grup & Matchmaking
+                            </button>
+                        @endif
                         @if ($isMahjong && ($canReshuffle ?? false))
                             <button type="button"
                                     id="btn-reshuffle-groups"
@@ -215,7 +210,13 @@
     </div>
 
     @if ($grup->isNotEmpty())
-        <div class="accordion matchmaking-groups-accordion mb-3" id="matchmaking-groups-accordion">
+        <div class="accordion matchmaking-groups-accordion mb-3" id="matchmaking-groups-accordion"
+             @if ($groupsEditable)
+                 data-group-swap="1"
+                 data-swap-url="{{ route('admin.matchmaking.swap-group-members') }}"
+                 data-turnamen="{{ $turnamen->id }}"
+                 data-unit-label="{{ $unitLabel }}"
+             @endif>
         @if ($isMahjong)
             @foreach ($grup as $g)
                 <div class="accordion-item">
@@ -307,18 +308,37 @@
                         <div class="accordion-body">
                         <div class="row">
                             <div class="col-md-5 mb-3 mb-md-0">
-                                <h6 class="text-muted text-uppercase small">Anggota Grup</h6>
+                                <h6 class="text-muted text-uppercase small">
+                                    Anggota Grup
+                                    @if ($groupsEditable)
+                                        <span class="fw-normal text-lowercase">— klik untuk tukar</span>
+                                    @endif
+                                </h6>
                                 <ul class="list-group list-group-flush">
                                     @foreach ($g->members as $member)
-                                        <li class="list-group-item px-0 d-flex justify-content-between">
-                                            <span>{{ $member->display_name }}</span>
-                                            <small class="text-muted">
-                                                @if ($turnamen->isDouble())
-                                                    Rating {{ number_format(optional($member->turnamenPeserta)->average_rating ?? 0, 1) }}
-                                                @else
-                                                    Rating {{ number_format(optional($member->pemain)->rating ?? 0, 1) }}
+                                        @php
+                                            $ratingLabel = $turnamen->isDouble()
+                                                ? number_format(optional($member->turnamenPeserta)->average_rating ?? 0, 1)
+                                                : number_format(optional($member->pemain)->rating ?? 0, 1);
+                                        @endphp
+                                        <li class="list-group-item px-0 d-flex justify-content-between align-items-center
+                                                   {{ $groupsEditable ? 'group-member-swap-source' : '' }}"
+                                            @if ($groupsEditable)
+                                                role="button"
+                                                tabindex="0"
+                                                data-member-id="{{ $member->id }}"
+                                                data-group-id="{{ $g->id }}"
+                                                data-group-name="{{ $g->nama }}"
+                                                data-label="{{ $member->display_name }}"
+                                                title="Klik untuk menukar {{ $unitLabel }} ini"
+                                            @endif>
+                                            <span>
+                                                @if ($groupsEditable)
+                                                    <i class="bi bi-arrow-left-right me-1 text-primary"></i>
                                                 @endif
-                                            </small>
+                                                {{ $member->display_name }}
+                                            </span>
+                                            <small class="text-muted">Rating {{ $ratingLabel }}</small>
                                         </li>
                                     @endforeach
                                 </ul>
@@ -338,7 +358,7 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @foreach ($g->pertandingan as $match)
+                                            @forelse ($g->pertandingan as $match)
                                                 <tr>
                                                     <td>@include('admin.pertandingan.partials.match-side-label', ['match' => $match, 'side' => 1])</td>
                                                     <td class="text-center">vs</td>
@@ -373,6 +393,14 @@
                                                             </button>
                                                         @elseif ($match->status !== 'completed')
                                                             <span class="badge text-bg-light text-dark border">Menunggu Pemain</span>
+                                                        @elseif ($canEditGroupScores ?? false)
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-primary btn-input-score"
+                                                                    data-id="{{ $match->id }}"
+                                                                    data-show-url="{{ route('admin.pertandingan.show', $match) }}"
+                                                                    data-store-url="{{ route('admin.pertandingan.score', $match) }}">
+                                                                <i class="bi bi-pencil-square me-1"></i> Edit Skor
+                                                            </button>
                                                         @else
                                                             <button type="button"
                                                                     class="btn btn-sm btn-outline-secondary btn-view-score"
@@ -382,7 +410,13 @@
                                                         @endif
                                                     </td>
                                                 </tr>
-                                            @endforeach
+                                            @empty
+                                                <tr>
+                                                    <td colspan="6" class="text-center text-muted py-3">
+                                                        Jadwal belum dibuat. Susun grup lalu klik "Buat Matchmaking".
+                                                    </td>
+                                                </tr>
+                                            @endforelse
                                         </tbody>
                                     </table>
                                 </div>
@@ -473,6 +507,14 @@
                                                 </button>
                                             @elseif ($match->status !== 'completed')
                                                 <span class="badge text-bg-light text-dark border">Menunggu Pemain</span>
+                                            @elseif ($match->skor->isNotEmpty() && ($match->can_edit_score ?? false))
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-primary btn-input-score"
+                                                        data-id="{{ $match->id }}"
+                                                        data-show-url="{{ route('admin.pertandingan.show', $match) }}"
+                                                        data-store-url="{{ route('admin.pertandingan.score', $match) }}">
+                                                    <i class="bi bi-pencil-square me-1"></i> Edit Skor
+                                                </button>
                                             @elseif ($match->skor->isNotEmpty())
                                                 <button type="button"
                                                         class="btn btn-sm btn-outline-secondary btn-view-score"
@@ -514,11 +556,92 @@
     .matchmaking-knockout-accordion .accordion-button .btn {
         font-weight: 500;
     }
+    .group-member-swap-source {
+        cursor: pointer;
+        border-radius: 0.375rem;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        transition: background-color 0.15s ease;
+    }
+    .group-member-swap-source:hover,
+    .group-member-swap-source:focus {
+        background-color: rgba(13, 110, 253, 0.08);
+        outline: none;
+    }
 </style>
 @endpush
 @endonce
 
 @if ($turnamen ?? null)
+    @if (($canRandomGrup ?? false) && ! ($isMahjong ?? false))
+        <div class="modal fade" id="randomGrupModal" tabindex="-1" aria-labelledby="randomGrupModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="randomGrupModalLabel">
+                            <i class="bi bi-shuffle me-1"></i> Random Grup
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="card bg-light border-0 mb-3">
+                            <div class="card-body py-3">
+                                <h6 class="text-muted text-uppercase small mb-3">Pengaturan Grup</h6>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-6">
+                                        <label for="min-pemain-grup" class="form-label small mb-1">Min / grup</label>
+                                        <input type="number"
+                                               id="min-pemain-grup"
+                                               class="form-control form-control-sm"
+                                               min="2"
+                                               max="12"
+                                               value="{{ $defaultMinPerGroup }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="max-pemain-grup" class="form-label small mb-1">Max / grup</label>
+                                        <input type="number"
+                                               id="max-pemain-grup"
+                                               class="form-control form-control-sm"
+                                               min="2"
+                                               max="12"
+                                               value="{{ $defaultMaxPerGroup }}">
+                                    </div>
+                                </div>
+                                <div id="group-split-preview"
+                                     class="small text-muted"
+                                     data-approved="{{ $groupingUnitCount }}">
+                                    @if ($groupSplitPreview)
+                                        {{ $groupingUnitCount }} {{ $unitLabel }} → {{ $groupSplitPreview['group_count'] }} grup ({{ $groupSplitPreview['label'] }})
+                                    @else
+                                        {{ ucfirst($unitLabel) }} tidak cukup untuk pembagian grup dengan batas ini.
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button"
+                                    class="btn btn-primary btn-matchmaking-grup"
+                                    data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-mode="random"
+                                    data-mahjong="0">
+                                <i class="bi bi-shuffle me-1"></i> Random Grup
+                            </button>
+                            <button type="button"
+                                    class="btn btn-secondary btn-matchmaking-grup"
+                                    data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-mode="by_rating"
+                                    data-mahjong="0">
+                                <i class="bi bi-bar-chart-steps me-1"></i> Grup by Rating
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <div class="modal fade" id="endGroupStageModal" tabindex="-1" aria-labelledby="endGroupStageModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -574,6 +697,29 @@
             </div>
         </div>
     </div>
+
+    @if ($groupsEditable)
+        <div class="modal fade" id="groupMemberSwapModal" tabindex="-1" aria-labelledby="groupMemberSwapModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="groupMemberSwapModalLabel">
+                            <i class="bi bi-arrow-left-right me-1"></i> Tukar {{ $unitLabelTitle }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted mb-3">
+                            Tukar <strong id="group-swap-source-label"></strong>
+                            (<span class="text-muted" id="group-swap-source-group"></span>
+                            dengan {{ $unitLabel }} dari grup lain:
+                        </p>
+                        <div id="group-swap-list" class="list-group list-group-flush"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if (! ($isMahjong ?? false))
         @include('admin.pertandingan.partials.score-modal')

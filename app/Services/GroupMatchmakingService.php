@@ -136,18 +136,26 @@ class GroupMatchmakingService
             throw new RuntimeException('Pendaftaran sudah ditutup atau turnamen belum dibuka.');
         }
 
-        $pairingResult = null;
+        $pairingResult = DB::transaction(function () use ($turnamen) {
+            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+            $result = null;
 
-        if ($turnamen->isDouble()) {
-            $pairingResult = $this->pairingService->pairApprovedPlayers($turnamen);
+            if ($locked->isDouble()) {
+                $result = $this->pairingService->pairApprovedPlayers($locked);
+                $locked->update([
+                    'status' => 'ongoing',
+                    'registration_paired_at' => now(),
+                    'group_matches_generated_at' => null,
+                ]);
+            } else {
+                $locked->update([
+                    'status' => 'ongoing',
+                    'group_matches_generated_at' => null,
+                ]);
+            }
 
-            $turnamen->update([
-                'status' => 'ongoing',
-                'registration_paired_at' => now(),
-            ]);
-        } else {
-            $turnamen->update(['status' => 'ongoing']);
-        }
+            return $result;
+        });
 
         return [
             'turnamen' => $turnamen->fresh(),
@@ -162,7 +170,42 @@ class GroupMatchmakingService
         }
 
         return $turnamen->status === 'ongoing'
-            && ! $turnamen->grup()->exists();
+            && ! $this->hasGeneratedGroupMatches($turnamen);
+    }
+
+    public function canEditGroups(Turnamen $turnamen): bool
+    {
+        return ! $turnamen->isMahjong()
+            && $turnamen->status === 'ongoing'
+            && $turnamen->grup()->exists()
+            && ! $this->hasGeneratedGroupMatches($turnamen);
+    }
+
+    public function canGenerateGroupMatches(Turnamen $turnamen): bool
+    {
+        return $this->canEditGroups($turnamen);
+    }
+
+    public function canResetGroupsAndMatches(Turnamen $turnamen): bool
+    {
+        if ($turnamen->isMahjong() || $turnamen->status !== 'ongoing') {
+            return false;
+        }
+
+        $hasCompetitionData = $turnamen->grup()->exists() || $turnamen->pertandingan()->exists();
+
+        return $hasCompetitionData
+            && ! $turnamen->pertandingan()->where('status', 'completed')->exists()
+            && ! $turnamen->pertandingan()->whereHas('skor')->exists();
+    }
+
+    protected function hasGeneratedGroupMatches(Turnamen $turnamen): bool
+    {
+        return $turnamen->group_matches_generated_at !== null
+            || $turnamen->pertandingan()
+                ->whereNotNull('id_grup')
+                ->where('nama_ronde', 'Fase Grup')
+                ->exists();
     }
 
     public function getApprovedEntries(Turnamen $turnamen): Collection
@@ -230,12 +273,12 @@ class GroupMatchmakingService
             throw new RuntimeException('Turnamen tidak dalam status yang valid untuk pembagian grup.');
         }
 
-        if ($turnamen->grup()->exists()) {
-            throw new RuntimeException('Grup sudah dibuat untuk turnamen ini.');
-        }
-
         if ($turnamen->isMahjong()) {
             throw new RuntimeException('Gunakan fitur Mahjong untuk membuat grup turnamen ini.');
+        }
+
+        if ($this->hasGeneratedGroupMatches($turnamen)) {
+            throw new RuntimeException('Matchmaking sudah dibuat. Grup tidak dapat diacak ulang.');
         }
 
         if (! in_array($mode, ['random', 'by_rating'], true)) {
@@ -246,8 +289,18 @@ class GroupMatchmakingService
         $groupSizes = $this->calculateGroupSizes($entries->count(), $minPerGroup, $maxPerGroup);
 
         return DB::transaction(function () use ($turnamen, $entries, $groupSizes, $mode) {
+            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+
+            if ($this->hasGeneratedGroupMatches($locked)) {
+                throw new RuntimeException('Matchmaking sudah dibuat. Grup tidak dapat diacak ulang.');
+            }
+
+            if ($locked->grup()->exists()) {
+                $locked->grup()->delete();
+            }
+
             $chunks = $this->distributeEntriesIntoGroups($entries, $groupSizes, $mode);
-            $result = ['groups' => [], 'matches' => 0, 'mode' => $mode, 'group_sizes' => $groupSizes];
+            $result = ['groups' => [], 'mode' => $mode, 'group_sizes' => $groupSizes];
 
             foreach ($chunks as $index => $groupEntries) {
                 $grup = Grup::create([
@@ -263,17 +316,133 @@ class GroupMatchmakingService
                     ]);
                 }
 
-                $matchCount = $this->generateRoundRobinMatches($turnamen, $grup, $groupEntries);
-                $result['matches'] += $matchCount;
                 $result['groups'][] = [
                     'id' => $grup->id,
                     'nama' => $grup->nama,
                     'pemain_count' => $groupEntries->count(),
-                    'matches' => $matchCount,
                 ];
             }
 
             return $result;
+        });
+    }
+
+    public function swapGroupMembers(Turnamen $turnamen, GrupMember $first, GrupMember $second): void
+    {
+        if (! $this->canEditGroups($turnamen)) {
+            throw new RuntimeException('Grup hanya dapat diubah sebelum matchmaking dibuat.');
+        }
+
+        if ($first->id === $second->id) {
+            throw new RuntimeException('Pilih dua peserta yang berbeda.');
+        }
+
+        $first->loadMissing('grup');
+        $second->loadMissing('grup');
+
+        if (! $first->grup || ! $second->grup
+            || (int) $first->grup->id_turnamen !== (int) $turnamen->id
+            || (int) $second->grup->id_turnamen !== (int) $turnamen->id) {
+            throw new RuntimeException('Peserta grup tidak berasal dari turnamen yang dipilih.');
+        }
+
+        if ((int) $first->id_grup === (int) $second->id_grup) {
+            throw new RuntimeException('Peserta sudah berada di grup yang sama.');
+        }
+
+        DB::transaction(function () use ($turnamen, $first, $second) {
+            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+
+            if (! $this->canEditGroups($locked)) {
+                throw new RuntimeException('Grup hanya dapat diubah sebelum matchmaking dibuat.');
+            }
+
+            $firstGroupId = $first->id_grup;
+            $secondGroupId = $second->id_grup;
+
+            GrupMember::query()->whereKey($first->id)->update(['id_grup' => $secondGroupId]);
+            GrupMember::query()->whereKey($second->id)->update(['id_grup' => $firstGroupId]);
+        });
+    }
+
+    public function generateGroupMatches(Turnamen $turnamen): array
+    {
+        if (! $this->canGenerateGroupMatches($turnamen)) {
+            throw new RuntimeException('Grup belum siap atau matchmaking sudah dibuat.');
+        }
+
+        return DB::transaction(function () use ($turnamen) {
+            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+
+            if ($this->hasGeneratedGroupMatches($locked)) {
+                throw new RuntimeException('Matchmaking fase grup sudah dibuat.');
+            }
+
+            $groups = Grup::query()
+                ->where('id_turnamen', $locked->id)
+                ->with(['members.turnamenPeserta'])
+                ->orderBy('id')
+                ->get();
+
+            $assignedIds = $groups->flatMap(function (Grup $group) {
+                return $group->members->pluck('id_turnamen_peserta');
+            })->filter()->map(fn ($id) => (int) $id)->values();
+            $approvedIds = $this->getApprovedEntries($locked)->pluck('id')->map(fn ($id) => (int) $id)->values();
+
+            if ($assignedIds->count() !== $assignedIds->unique()->count()
+                || $assignedIds->sort()->values()->all() !== $approvedIds->sort()->values()->all()) {
+                throw new RuntimeException('Susunan grup tidak valid. Setiap peserta approved harus berada tepat di satu grup.');
+            }
+
+            $matchCount = 0;
+
+            foreach ($groups as $group) {
+                if ($group->members->count() < 2) {
+                    throw new RuntimeException("{$group->nama} harus memiliki minimal 2 peserta.");
+                }
+
+                $entries = $group->members->map(function (GrupMember $member) {
+                    if (! $member->turnamenPeserta) {
+                        throw new RuntimeException('Data peserta grup tidak lengkap.');
+                    }
+
+                    return $member->turnamenPeserta;
+                });
+                $matchCount += $this->generateRoundRobinMatches($locked, $group, $entries);
+            }
+
+            $locked->update(['group_matches_generated_at' => now()]);
+
+            return ['groups' => $groups->count(), 'matches' => $matchCount];
+        });
+    }
+
+    public function resetGroupsAndMatches(Turnamen $turnamen): void
+    {
+        if (! $this->canResetGroupsAndMatches($turnamen)) {
+            throw new RuntimeException('Reset hanya tersedia sebelum skor pertandingan dicatat.');
+        }
+
+        DB::transaction(function () use ($turnamen) {
+            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+
+            if ($locked->pertandingan()->where('status', 'completed')->exists()
+                || $locked->pertandingan()->whereHas('skor')->exists()) {
+                throw new RuntimeException('Turnamen tidak dapat direset karena skor sudah dicatat.');
+            }
+
+            $locked->pertandingan()->update([
+                'id_next_pertandingan' => null,
+                'id_next_pertandingan_kalah' => null,
+            ]);
+            $locked->pertandingan()->delete();
+            $locked->grup()->delete();
+            DB::table('turnamen_pemenang')->where('id_turnamen', $locked->id)->delete();
+            $locked->update([
+                'status' => 'ongoing',
+                'mahjong_is_final' => false,
+                'group_matches_generated_at' => null,
+            ]);
         });
     }
 

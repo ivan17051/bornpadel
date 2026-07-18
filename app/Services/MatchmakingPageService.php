@@ -12,17 +12,20 @@ class MatchmakingPageService
     protected $mahjongService;
     protected $knockoutBracketService;
     protected $tournamentCompletionService;
+    protected $scoringService;
 
     public function __construct(
         GroupMatchmakingService $matchmakingService,
         MahjongMatchmakingService $mahjongService,
         KnockoutBracketService $knockoutBracketService,
-        TournamentCompletionService $tournamentCompletionService
+        TournamentCompletionService $tournamentCompletionService,
+        MatchScoringService $scoringService
     ) {
         $this->matchmakingService = $matchmakingService;
         $this->mahjongService = $mahjongService;
         $this->knockoutBracketService = $knockoutBracketService;
         $this->tournamentCompletionService = $tournamentCompletionService;
+        $this->scoringService = $scoringService;
     }
 
     public function getIndexData(Request $request, ?Turnamen $turnamen = null): array
@@ -105,6 +108,18 @@ class MatchmakingPageService
 
         $knockoutRounds = $hasKnockoutBracket
             ? $this->knockoutBracketService->getKnockoutRoundsWithMatches($turnamen)
+                ->map(function (array $round) {
+                    $round['matches'] = $round['matches']->map(function ($match) {
+                        $match->setAttribute(
+                            'can_edit_score',
+                            $this->scoringService->canEditKnockoutScore($match)
+                        );
+
+                        return $match;
+                    });
+
+                    return $round;
+                })
             : collect();
 
         return [
@@ -120,9 +135,13 @@ class MatchmakingPageService
             'defaultMaxPerGroup' => $this->matchmakingService->getDefaultMaxPerGroup(),
             'canCloseRegistration' => $turnamen ? $this->matchmakingService->canCloseRegistration($turnamen) : false,
             'canRandomGrup' => $turnamen ? $this->matchmakingService->canGenerateRandomGroups($turnamen) : false,
+            'canEditGroups' => $turnamen ? $this->matchmakingService->canEditGroups($turnamen) : false,
+            'canGenerateGroupMatches' => $turnamen ? $this->matchmakingService->canGenerateGroupMatches($turnamen) : false,
+            'canResetGroupsAndMatches' => $turnamen ? $this->matchmakingService->canResetGroupsAndMatches($turnamen) : false,
             'canReshuffle' => $turnamen && $isMahjong ? $this->mahjongService->canReshuffle($turnamen) : false,
             'canEndGroupStage' => $canEndGroupStage,
             'hasKnockoutBracket' => $hasKnockoutBracket,
+            'canEditGroupScores' => $turnamen && ! $isMahjong && ! $hasKnockoutBracket,
             'knockoutRounds' => $knockoutRounds,
             'canCompleteTournament' => $turnamen ? $this->tournamentCompletionService->canComplete($turnamen) : false,
             'mahjongIsFinal' => $turnamen && $isMahjong ? (bool) $turnamen->mahjong_is_final : false,

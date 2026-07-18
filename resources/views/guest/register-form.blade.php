@@ -16,6 +16,8 @@
     $capacityLabel = $turnamen->maks_peserta
         ? number_format($turnamen->maks_peserta)
         : 'Tidak Terbatas';
+    $hargaSatuan = (float) $turnamen->harga;
+    $hargaTampil = $isPairMode ? $hargaSatuan * 2 : $hargaSatuan;
 @endphp
 
 <div class="row justify-content-center">
@@ -34,7 +36,10 @@
                 <div class="row text-center g-3">
                     <div class="col-{{ $isPairMode ? '3' : '4' }}">
                         <div class="info-label">Biaya</div>
-                        <strong class="text-primary">Rp {{ number_format($turnamen->harga, 0, ',', '.') }}</strong>
+                        <strong class="text-primary">Rp {{ number_format($hargaTampil, 0, ',', '.') }}</strong>
+                        @if ($isPairMode)
+                            <div class="small text-muted">2 × Rp {{ number_format($hargaSatuan, 0, ',', '.') }}</div>
+                        @endif
                     </div>
                     <div class="col-{{ $isPairMode ? '3' : '4' }}">
                         <div class="info-label">HP Pemain 1</div>

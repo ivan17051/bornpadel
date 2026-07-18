@@ -4,6 +4,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Services\MatchScoringService;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Validator;
 
 class StoreMatchScoreRequest extends FormRequest
@@ -15,6 +16,9 @@ class StoreMatchScoreRequest extends FormRequest
 
     public function rules()
     {
+        $pertandingan = $this->route('pertandingan');
+        $isUpdate = $pertandingan && $pertandingan->status === 'completed';
+
         return [
             'sets' => [
                 'required',
@@ -24,6 +28,9 @@ class StoreMatchScoreRequest extends FormRequest
             ],
             'sets.*.skor_pemain1' => ['required', 'integer', 'min:0', 'max:99'],
             'sets.*.skor_pemain2' => ['required', 'integer', 'min:0', 'max:99'],
+            'password' => $isUpdate
+                ? ['required', 'string']
+                : ['nullable', 'string'],
         ];
     }
 
@@ -35,6 +42,7 @@ class StoreMatchScoreRequest extends FormRequest
             'sets.max' => 'Maksimal ' . MatchScoringService::MAX_SETS . ' set diperbolehkan.',
             'sets.*.skor_pemain1.required' => 'Skor pemain 1 wajib diisi.',
             'sets.*.skor_pemain2.required' => 'Skor pemain 2 wajib diisi.',
+            'password.required' => 'Password wajib diisi untuk mengubah skor.',
         ];
     }
 
@@ -47,6 +55,16 @@ class StoreMatchScoreRequest extends FormRequest
 
             $pertandingan = $this->route('pertandingan');
             $sets = $this->input('sets', []);
+
+            if ($pertandingan && $pertandingan->status === 'completed') {
+                $user = $this->user();
+                $password = (string) $this->input('password', '');
+
+                if (! $user || ! Hash::check($password, $user->password)) {
+                    $validator->errors()->add('password', 'Password tidak valid.');
+                    return;
+                }
+            }
 
             try {
                 app(MatchScoringService::class)->calculateMatchResult(

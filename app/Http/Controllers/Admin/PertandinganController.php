@@ -117,6 +117,7 @@ class PertandinganController extends Controller
                     'nama' => $pertandingan->side2_label,
                 ],
                 'ready_for_scoring' => $pertandingan->isReadyForScoring(),
+                'editable' => $this->scoringService->canEditScore($pertandingan),
                 'pemenang_id' => $pertandingan->id_pemenang,
                 'skor' => $pertandingan->skor->map(function ($s) {
                     return [
@@ -134,6 +135,7 @@ class PertandinganController extends Controller
         $this->tournamentAccess->assertPertandinganAccess($pertandingan);
 
         try {
+            $wasCompleted = $pertandingan->status === 'completed';
             $pertandingan = $this->scoringService->recordScore($pertandingan, $request->validated()['sets']);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -141,7 +143,9 @@ class PertandinganController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Skor berhasil disimpan. Klasemen grup telah diperbarui.',
+            'message' => $wasCompleted
+                ? 'Skor berhasil diperbarui.'
+                : 'Skor berhasil disimpan. Klasemen grup telah diperbarui.',
             'data' => [
                 'id' => $pertandingan->id,
                 'status' => $pertandingan->status,

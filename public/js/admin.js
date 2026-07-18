@@ -66,7 +66,10 @@ const BornPadelAdmin = (function () {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            throw new Error(data.message || 'Terjadi kesalahan.');
+            const firstValidationError = data.errors
+                ? Object.values(data.errors).flat().find(Boolean)
+                : null;
+            throw new Error(firstValidationError || data.message || 'Terjadi kesalahan.');
         }
 
         return data;
@@ -552,6 +555,209 @@ const BornPadelAdmin = (function () {
             });
         }
 
+        const generateMatchesBtn = document.getElementById('btn-generate-group-matches');
+
+        if (generateMatchesBtn) {
+            generateMatchesBtn.addEventListener('click', async () => {
+                const confirmed = await confirmAction({
+                    title: 'Buat matchmaking fase grup?',
+                    text: 'Jadwal round-robin akan dibuat dan susunan grup akan dikunci. Setelah ini peserta tidak dapat ditukar atau diacak ulang.',
+                    confirmText: 'Ya, buat matchmaking',
+                });
+                if (!confirmed) return;
+
+                const original = generateMatchesBtn.innerHTML;
+                setButtonLoading(generateMatchesBtn, true);
+
+                try {
+                    const data = await apiRequest(generateMatchesBtn.dataset.url, 'POST', {
+                        id_turnamen: parseInt(generateMatchesBtn.dataset.turnamen, 10),
+                    });
+                    showToast(data.message);
+                    reloadPage();
+                } catch (e) {
+                    showToast(e.message, 'error');
+                    setButtonLoading(generateMatchesBtn, false, original);
+                }
+            });
+        }
+
+        const groupSwapContainer = document.getElementById('matchmaking-groups-accordion');
+        const groupSwapModalEl = document.getElementById('groupMemberSwapModal');
+
+        if (groupSwapContainer
+            && groupSwapModalEl
+            && groupSwapContainer.dataset.groupSwap === '1'
+            && typeof bootstrap !== 'undefined') {
+            const groupSwapModal = new bootstrap.Modal(groupSwapModalEl);
+            const groupSwapList = document.getElementById('group-swap-list');
+            const groupSwapSourceLabel = document.getElementById('group-swap-source-label');
+            const groupSwapSourceGroup = document.getElementById('group-swap-source-group');
+            const swapUrl = groupSwapContainer.dataset.swapUrl;
+            const turnamenId = parseInt(groupSwapContainer.dataset.turnamen || '0', 10);
+            let swapSource = null;
+
+            const escapeHtml = (value) => {
+                const div = document.createElement('div');
+                div.textContent = value == null ? '' : String(value);
+                return div.innerHTML;
+            };
+
+            const collectSwapCandidates = (sourceMemberId, sourceGroupId) =>
+                Array.from(groupSwapContainer.querySelectorAll('.group-member-swap-source'))
+                    .map((el) => ({
+                        id: parseInt(el.dataset.memberId || '0', 10),
+                        groupId: el.dataset.groupId,
+                        groupName: el.dataset.groupName || '',
+                        label: el.dataset.label || el.textContent.trim(),
+                    }))
+                    .filter((candidate) =>
+                        candidate.id
+                        && candidate.id !== sourceMemberId
+                        && String(candidate.groupId) !== String(sourceGroupId)
+                    );
+
+            const openSwapModal = () => {
+                if (!swapSource) {
+                    return;
+                }
+
+                groupSwapSourceLabel.textContent = swapSource.label;
+                groupSwapSourceGroup.textContent = swapSource.groupName
+                    ? ` (${swapSource.groupName})`
+                    : '';
+
+                const candidates = collectSwapCandidates(swapSource.id, swapSource.groupId);
+                const grouped = {};
+
+                candidates.forEach((candidate) => {
+                    const key = candidate.groupName || 'Grup lain';
+                    if (!grouped[key]) {
+                        grouped[key] = [];
+                    }
+                    grouped[key].push(candidate);
+                });
+
+                const sections = Object.keys(grouped).map((groupName) => {
+                    const items = grouped[groupName]
+                        .map((candidate) => `
+                            <button type="button"
+                                    class="list-group-item list-group-item-action d-flex align-items-center group-swap-option"
+                                    data-member-id="${candidate.id}">
+                                <i class="bi bi-arrow-left-right me-2 text-muted"></i>
+                                <span>${escapeHtml(candidate.label)}</span>
+                            </button>`)
+                        .join('');
+
+                    return `
+                        <div class="mb-2">
+                            <div class="small text-muted fw-semibold px-3 py-1">${escapeHtml(groupName)}</div>
+                            ${items}
+                        </div>`;
+                });
+
+                groupSwapList.innerHTML = sections.length
+                    ? sections.join('')
+                    : '<div class="text-muted small p-3 text-center">Tidak ada peserta di grup lain yang dapat ditukar.</div>';
+
+                groupSwapModal.show();
+            };
+
+            const startSwapFromEl = (memberEl) => {
+                swapSource = {
+                    id: parseInt(memberEl.dataset.memberId || '0', 10),
+                    groupId: memberEl.dataset.groupId,
+                    groupName: memberEl.dataset.groupName || '',
+                    label: memberEl.dataset.label || memberEl.textContent.trim(),
+                };
+
+                if (!swapSource.id) {
+                    return;
+                }
+
+                openSwapModal();
+            };
+
+            groupSwapContainer.addEventListener('click', (event) => {
+                const memberEl = event.target.closest('.group-member-swap-source');
+                if (!memberEl || !groupSwapContainer.contains(memberEl)) {
+                    return;
+                }
+
+                event.preventDefault();
+                startSwapFromEl(memberEl);
+            });
+
+            groupSwapContainer.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') {
+                    return;
+                }
+
+                const memberEl = event.target.closest('.group-member-swap-source');
+                if (!memberEl || !groupSwapContainer.contains(memberEl)) {
+                    return;
+                }
+
+                event.preventDefault();
+                startSwapFromEl(memberEl);
+            });
+
+            groupSwapList.addEventListener('click', async (event) => {
+                const option = event.target.closest('.group-swap-option');
+                if (!option || !swapSource) {
+                    return;
+                }
+
+                const secondId = parseInt(option.dataset.memberId || '0', 10);
+                if (!secondId) {
+                    return;
+                }
+
+                option.disabled = true;
+
+                try {
+                    const data = await apiRequest(swapUrl, 'PATCH', {
+                        id_turnamen: turnamenId,
+                        first_member_id: swapSource.id,
+                        second_member_id: secondId,
+                    });
+                    groupSwapModal.hide();
+                    showToast(data.message);
+                    reloadPage();
+                } catch (e) {
+                    option.disabled = false;
+                    showToast(e.message, 'error');
+                }
+            });
+        }
+
+        const resetGroupsBtn = document.getElementById('btn-reset-groups');
+
+        if (resetGroupsBtn) {
+            resetGroupsBtn.addEventListener('click', async () => {
+                const confirmed = await confirmAction({
+                    title: 'Reset grup dan matchmaking?',
+                    text: 'Semua grup dan pertandingan terjadwal akan dihapus. Pendaftaran dan pasangan tetap disimpan.',
+                    confirmText: 'Ya, reset data',
+                });
+                if (!confirmed) return;
+
+                const original = resetGroupsBtn.innerHTML;
+                setButtonLoading(resetGroupsBtn, true);
+
+                try {
+                    const data = await apiRequest(resetGroupsBtn.dataset.url, 'DELETE', {
+                        id_turnamen: parseInt(resetGroupsBtn.dataset.turnamen, 10),
+                    });
+                    showToast(data.message);
+                    reloadPage();
+                } catch (e) {
+                    showToast(e.message, 'error');
+                    setButtonLoading(resetGroupsBtn, false, original);
+                }
+            });
+        }
+
         const endGroupBtn = document.getElementById('btn-end-group-stage');
 
         if (endGroupBtn && !endGroupBtn.disabled) {
@@ -738,14 +944,14 @@ const BornPadelAdmin = (function () {
                         title: isMahjong ? 'Buat grup berdasarkan rating?' : 'Kelompokkan pemain berdasarkan rating?',
                         text: isMahjong
                             ? `${previewText}. Tidak ada pertandingan head-to-head.`
-                            : `${previewText}. Jadwal pertandingan akan dibuat. Tindakan ini tidak dapat diulang.`,
+                            : `${previewText}. Grup dapat diubah kembali sebelum matchmaking dibuat.`,
                         confirmText: isMahjong ? 'Ya, buat grup' : 'Ya, buat grup rating',
                     }
                     : {
                         title: isMahjong ? 'Buat grup Mahjong?' : 'Acak pemain ke grup?',
                         text: isMahjong
                             ? `${previewText}. Tidak ada pertandingan head-to-head.`
-                            : `${previewText}. Jadwal pertandingan akan dibuat. Tindakan ini tidak dapat diulang.`,
+                            : `${previewText}. Grup dapat diubah kembali sebelum matchmaking dibuat.`,
                         confirmText: isMahjong ? 'Ya, buat grup' : 'Ya, random grup',
                     });
                 if (!confirmed) return;
@@ -786,10 +992,14 @@ const BornPadelAdmin = (function () {
         const saveBtn = document.getElementById('btn-save-score');
         const metaEl = document.getElementById('score-modal-meta');
         const readonlyEl = document.getElementById('score-modal-readonly');
+        const passwordWrap = document.getElementById('score-password-wrap');
+        const passwordInput = document.getElementById('score-confirm-password');
+        const titleEl = document.getElementById('score-modal-title');
         const MIN_SETS = 1;
         const MAX_SETS = 7;
         let storeUrl = null;
         let isReadonly = false;
+        let isEditMode = false;
 
         const buildSetRow = (setNumber, values = {}) => {
             const row = document.createElement('div');
@@ -868,7 +1078,18 @@ const BornPadelAdmin = (function () {
             form.classList.remove('d-none');
             readonlyEl.classList.add('d-none');
             saveBtn.classList.remove('d-none');
+            saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Simpan & Selesaikan';
+            if (titleEl) {
+                titleEl.innerHTML = '<i class="bi bi-trophy me-2"></i>Input Skor Pertandingan';
+            }
+            if (passwordWrap) {
+                passwordWrap.classList.add('d-none');
+            }
+            if (passwordInput) {
+                passwordInput.value = '';
+            }
             isReadonly = false;
+            isEditMode = false;
         };
 
         if (addSetBtn) {
@@ -914,7 +1135,7 @@ const BornPadelAdmin = (function () {
                     if (addSetBtn) addSetBtn.classList.add('d-none');
                     readonlyEl.classList.remove('d-none');
                     readonlyEl.innerHTML = '<p class="text-muted mb-0">Menunggu kedua pemain ditentukan dari pertandingan sebelumnya.</p>';
-                } else if (readonly || match.status === 'completed') {
+                } else if (readonly || (match.status === 'completed' && !match.editable)) {
                     isReadonly = true;
                     form.classList.add('d-none');
                     saveBtn.classList.add('d-none');
@@ -928,8 +1149,23 @@ const BornPadelAdmin = (function () {
                             </div>`
                           ).join('')
                         : '<p class="text-muted mb-0">Belum ada skor.</p>';
-                } else if (match.skor.length) {
-                    renderSets(match.skor);
+                } else {
+                    if (match.skor.length) {
+                        renderSets(match.skor);
+                    }
+
+                    if (match.status === 'completed' && match.editable) {
+                        isEditMode = true;
+                        saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Perbarui Skor';
+                        if (titleEl) {
+                            titleEl.innerHTML = '<i class="bi bi-pencil-square me-2"></i>Edit Skor Pertandingan';
+                        }
+                        if (passwordWrap) {
+                            passwordWrap.classList.remove('d-none');
+                        }
+                    } else {
+                        saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Simpan & Selesaikan';
+                    }
                 }
 
                 modal.show();
@@ -971,12 +1207,25 @@ const BornPadelAdmin = (function () {
                 return;
             }
 
+            const payload = { sets };
+
+            if (isEditMode) {
+                const password = (passwordInput?.value || '').trim();
+                if (!password) {
+                    errorEl.textContent = 'Password wajib diisi untuk mengubah skor.';
+                    errorEl.classList.remove('d-none');
+                    passwordInput?.focus();
+                    return;
+                }
+                payload.password = password;
+            }
+
             errorEl.classList.add('d-none');
             const original = saveBtn.innerHTML;
             setButtonLoading(saveBtn, true);
 
             try {
-                const data = await apiRequest(storeUrl, 'POST', { sets });
+                const data = await apiRequest(storeUrl, 'POST', payload);
                 showToast(data.message);
                 modal.hide();
                 reloadPage();

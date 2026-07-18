@@ -1171,6 +1171,117 @@ class KnockoutBracketService
         }
     }
 
+    /**
+     * A knockout match is editable when completed with scores and every
+     * immediate downstream match is still unplayed.
+     */
+    public function canEditKnockoutScore(Pertandingan $pertandingan): bool
+    {
+        if ($pertandingan->id_grup || $pertandingan->status !== 'completed') {
+            return false;
+        }
+
+        if (! $pertandingan->relationLoaded('skor')) {
+            $pertandingan->load('skor');
+        }
+
+        if ($pertandingan->skor->isEmpty()) {
+            return false;
+        }
+
+        $turnamen = $pertandingan->relationLoaded('turnamen')
+            ? $pertandingan->turnamen
+            : Turnamen::find($pertandingan->id_turnamen);
+
+        if (! $turnamen || $turnamen->isMahjong() || $turnamen->status === 'completed') {
+            return false;
+        }
+
+        return ! $this->hasPlayedDownstreamMatch($pertandingan);
+    }
+
+    public function hasPlayedDownstreamMatch(Pertandingan $pertandingan): bool
+    {
+        foreach ([$pertandingan->id_next_pertandingan, $pertandingan->id_next_pertandingan_kalah] as $nextId) {
+            if (! $nextId) {
+                continue;
+            }
+
+            $next = Pertandingan::query()
+                ->withCount('skor')
+                ->find($nextId);
+
+            if (! $next) {
+                continue;
+            }
+
+            if ($next->status === 'completed' || (int) $next->skor_count > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Clear this feeder's occupant slots in immediate next matches.
+     */
+    public function clearAdvancementFrom(Pertandingan $pertandingan): void
+    {
+        if ($pertandingan->id_grup) {
+            return;
+        }
+
+        if ($pertandingan->id_next_pertandingan) {
+            $this->clearFeederSlot(
+                (int) $pertandingan->id_next_pertandingan,
+                (int) $pertandingan->id,
+                'id_next_pertandingan'
+            );
+        }
+
+        if ($pertandingan->id_next_pertandingan_kalah) {
+            $this->clearFeederSlot(
+                (int) $pertandingan->id_next_pertandingan_kalah,
+                (int) $pertandingan->id,
+                'id_next_pertandingan_kalah'
+            );
+        }
+    }
+
+    protected function clearFeederSlot(int $nextMatchId, int $feederMatchId, string $feederColumn): void
+    {
+        $next = Pertandingan::find($nextMatchId);
+
+        if (! $next) {
+            return;
+        }
+
+        if ($next->status === 'completed' || $next->skor()->exists()) {
+            throw new RuntimeException('Pertandingan berikutnya sudah dimainkan, skor tidak dapat diubah.');
+        }
+
+        $feeders = Pertandingan::query()
+            ->where($feederColumn, $next->id)
+            ->orderBy('id')
+            ->pluck('id')
+            ->values();
+
+        $slot = $feeders->search($feederMatchId);
+
+        if ($slot === 0) {
+            $next->update([
+                'id_pemain1' => null,
+                'id_peserta1' => null,
+            ]);
+        } elseif ($slot === 1) {
+            $next->update([
+                'id_pemain2' => null,
+                'id_peserta2' => null,
+            ]);
+        }
+    }
+
     protected function resolveSidePemainIds(Pertandingan $match, int $side): array
     {
         $pesertaId = $side === 1 ? $match->id_peserta1 : $match->id_peserta2;
