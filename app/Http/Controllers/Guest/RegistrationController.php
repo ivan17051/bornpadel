@@ -7,6 +7,7 @@ use App\Http\Requests\LookupPemainRegistrationRequest;
 use App\Http\Requests\StorePemainRegistrationRequest;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenPeserta;
 use App\Services\PemainRegistrationService;
 
 class RegistrationController extends Controller
@@ -160,7 +161,9 @@ class RegistrationController extends Controller
                     $request->file('foto'),
                     $request->playerTwoPayload(),
                     $request->file('foto_2'),
-                    $buktiBayar
+                    $buktiBayar,
+                    TurnamenPeserta::SUMBER_INTERNAL,
+                    false
                 );
 
                 $pemain = $pair['pemain'];
@@ -170,7 +173,9 @@ class RegistrationController extends Controller
                     $turnamen,
                     $request->playerOnePayload(),
                     $request->file('foto'),
-                    $buktiBayar
+                    $buktiBayar,
+                    TurnamenPeserta::SUMBER_INTERNAL,
+                    false
                 );
                 $partner = null;
             }

@@ -198,16 +198,19 @@ class MatchmakingController extends Controller
         }
 
         $request->validate([
-            'jumlah_lolos' => ['required', 'integer', 'min:1', 'max:8'],
+            'qualification_mode' => ['nullable', 'in:per_group,total'],
+            'jumlah_lolos' => ['required', 'integer', 'min:1'],
         ], [
             'jumlah_lolos.required' => 'Jumlah peserta lolos wajib diisi.',
             'jumlah_lolos.min' => 'Jumlah peserta lolos minimal 1.',
+            'qualification_mode.in' => 'Mode kualifikasi tidak valid.',
         ]);
 
+        $mode = $request->input('qualification_mode', KnockoutBracketService::QUALIFICATION_PER_GROUP);
+        $jumlahLolos = (int) $request->input('jumlah_lolos');
+
         try {
-            $jumlahLolos = (int) $request->input('jumlah_lolos');
-            $result = $this->knockoutBracketService->generateKnockoutBracket($turnamen, $jumlahLolos);
-            $result['jumlah_lolos_per_grup'] = $jumlahLolos;
+            $result = $this->knockoutBracketService->generateKnockoutBracket($turnamen, $jumlahLolos, $mode);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -216,13 +219,18 @@ class MatchmakingController extends Controller
             ? sprintf(' %d BYE diberikan ke unggulan teratas.', $result['bye_count'])
             : '';
 
+        $qualificationNote = ! empty($result['qualification_summary'])
+            ? ' ' . $result['qualification_summary']
+            : '';
+
         return response()->json([
             'success' => true,
             'message' => sprintf(
-                'Bracket knockout berhasil dibuat (%s) dengan %d pertandingan.%s',
+                'Bracket knockout berhasil dibuat (%s) dengan %d pertandingan.%s%s',
                 implode(' → ', $result['rounds']),
                 $result['matches_created'],
-                $byeMessage
+                $byeMessage,
+                $qualificationNote
             ),
             'redirect_url' => route('admin.bracket.index', ['id_turnamen' => $turnamen->id]),
             'data' => $result,

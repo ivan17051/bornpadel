@@ -100,6 +100,11 @@
                                 {{ optional($item->doc)->format('d M Y') ?? '—' }}
                             </td>
                             <td class="text-end text-nowrap">
+                                <a href="{{ route('admin.turnamen-operasi.index', ['id_turnamen' => $item->id]) }}"
+                                   class="btn btn-sm btn-outline-success"
+                                   title="Kelola turnamen">
+                                    <i class="bi bi-gear-wide-connected"></i>
+                                </a>
                                 <a href="{{ route('admin.turnamen.edit', $item) }}"
                                    class="btn btn-sm btn-outline-primary"
                                    title="Edit">

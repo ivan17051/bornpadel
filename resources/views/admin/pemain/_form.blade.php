@@ -88,14 +88,14 @@
     @endif
 
     @if ($isExisting)
-        <div class="alert alert-info py-2 small mb-3">
-            <i class="bi bi-person-check me-1"></i>
-            Data pemain ditemukan. Periksa dan perbarui jika perlu.
-        </div>
+        @include('admin.pemain.partials.existing-profile-banner', [
+            'pemain' => $existingPemain,
+            'exceptTurnamenId' => optional($selectedTurnamen)->id,
+        ])
     @else
         <div class="alert alert-light border py-2 small mb-3">
             <i class="bi bi-person-plus me-1"></i>
-            Nomor HP belum terdaftar. Lengkapi data di bawah.
+            Nomor HP belum terdaftar. Lengkapi data di bawah untuk membuat profil baru.
         </div>
     @endif
 
@@ -108,6 +108,7 @@
         'previewId' => 'admin-foto-preview',
         'phoneReadonly' => true,
         'phoneValue' => $noHp,
+        'lockUntilEdit' => $isExisting,
     ])
 
     <div class="mb-3 mt-3">

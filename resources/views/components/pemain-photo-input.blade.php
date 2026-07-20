@@ -6,6 +6,7 @@
     'optional' => true,
     'previewSrc' => null,
     'showPreview' => true,
+    'disabled' => false,
 ])
 
 @php
@@ -48,7 +49,8 @@
            accept="image/jpeg,image/png,image/webp"
            data-pemain-photo-input
            data-preview-target="{{ $previewId }}"
-           data-placeholder="{{ $placeholder }}">
+           data-placeholder="{{ $placeholder }}"
+           @if ($disabled ?? false) disabled @endif>
     @error($inputName)
         <div class="invalid-feedback">{{ $message }}</div>
     @enderror

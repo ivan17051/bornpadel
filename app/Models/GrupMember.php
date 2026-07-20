@@ -95,6 +95,13 @@ class GrupMember extends Model
         return ((int) ($a['id_peserta'] ?? 0)) <=> ((int) ($b['id_peserta'] ?? 0));
     }
 
+    public static function formatGameDifference($value): string
+    {
+        $diff = (int) $value;
+
+        return $diff > 0 ? '+' . $diff : (string) $diff;
+    }
+
     protected static function standingTimestampValue($value): int
     {
         if ($value === null || $value === '') {

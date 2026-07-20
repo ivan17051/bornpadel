@@ -4,13 +4,6 @@
 
 @section('content')
 @php
-    $photoService = app(\App\Services\PemainPhotoService::class);
-    $previewSrc = $existingPemain && $existingPemain->foto
-        ? $photoService->url($existingPemain->foto)
-        : null;
-    $previewSrc2 = ($existingPemain2 ?? null) && $existingPemain2->foto
-        ? $photoService->url($existingPemain2->foto)
-        : null;
     $isDouble = $turnamen->isDouble();
     $isPairMode = $isDouble && ($registrationMode ?? 'single') === 'pair';
     $capacityLabel = $turnamen->maks_peserta
@@ -18,6 +11,7 @@
         : 'Tidak Terbatas';
     $hargaSatuan = (float) $turnamen->harga;
     $hargaTampil = $isPairMode ? $hargaSatuan * 2 : $hargaSatuan;
+    $bothExisting = $isExisting && (! $isPairMode || ($isExisting2 ?? false));
 @endphp
 
 <div class="row justify-content-center">
@@ -59,15 +53,16 @@
             </div>
         </div>
 
-        @if ($isPairMode)
-            <div class="alert alert-info guest-card mb-4">
-                <i class="bi bi-people me-2"></i>
-                Lengkapi data kedua pemain. Keduanya akan didaftarkan dan dipasangkan secara otomatis.
+        @if ($isPairMode && ($isExisting || ($isExisting2 ?? false)))
+            <div class="alert alert-warning guest-card mb-4">
+                <i class="bi bi-shield-check me-2"></i>
+                Nomor yang sudah punya profil hanya perlu dikonfirmasi. Data profil tidak bisa diubah lewat form ini.
             </div>
         @elseif ($isExisting)
-            <div class="alert alert-info guest-card mb-4">
+            <div class="alert alert-warning guest-card mb-4">
                 <i class="bi bi-person-check me-2"></i>
-                Data pemain ditemukan. Periksa dan perbarui jika ada perubahan, lalu kirim pendaftaran turnamen ini.
+                Profil dengan nomor ini sudah ada. Konfirmasi jika ini Anda, lalu kirim pendaftaran.
+                Perubahan profil hanya dapat dilakukan oleh admin.
             </div>
         @else
             <div class="alert alert-light border guest-card mb-4">
@@ -90,16 +85,24 @@
                         <h6 class="fw-semibold text-primary mb-3">
                             <i class="bi bi-1-circle me-1"></i> Pemain 1
                         </h6>
-                        @include('guest.partials.register-player-fields', [
-                            'prefix' => '',
-                            'labelPrefix' => 'Peserta',
-                            'existingPemain' => $existingPemain,
-                            'previewSrc' => $previewSrc,
-                            'inputId' => 'guest-foto',
-                            'previewId' => 'guest-foto-preview',
-                            'phoneReadonly' => true,
-                            'phoneValue' => $noHp,
-                        ])
+                        @if ($isExisting)
+                            @include('guest.partials.register-existing-confirm', [
+                                'pemain' => $existingPemain,
+                                'phoneValue' => $noHp,
+                                'prefix' => '',
+                            ])
+                        @else
+                            @include('guest.partials.register-player-fields', [
+                                'prefix' => '',
+                                'labelPrefix' => 'Peserta',
+                                'existingPemain' => null,
+                                'previewSrc' => null,
+                                'inputId' => 'guest-foto',
+                                'previewId' => 'guest-foto-preview',
+                                'phoneReadonly' => true,
+                                'phoneValue' => $noHp,
+                            ])
+                        @endif
                     </div>
 
                     @if ($isPairMode)
@@ -107,17 +110,25 @@
                             <h6 class="fw-semibold text-primary mb-3">
                                 <i class="bi bi-2-circle me-1"></i> Pemain 2
                             </h6>
-                            @include('guest.partials.register-player-fields', [
-                                'prefix' => 'player_2',
-                                'labelPrefix' => 'Pemain 2',
-                                'existingPemain' => $existingPemain2 ?? null,
-                                'previewSrc' => $previewSrc2,
-                                'inputId' => 'guest-foto-2',
-                                'previewId' => 'guest-foto-2-preview',
-                                'inputName' => 'foto_2',
-                                'phoneReadonly' => true,
-                                'phoneValue' => $noHp2,
-                            ])
+                            @if ($isExisting2 ?? false)
+                                @include('guest.partials.register-existing-confirm', [
+                                    'pemain' => $existingPemain2,
+                                    'phoneValue' => $noHp2,
+                                    'prefix' => 'player_2',
+                                ])
+                            @else
+                                @include('guest.partials.register-player-fields', [
+                                    'prefix' => 'player_2',
+                                    'labelPrefix' => 'Pemain 2',
+                                    'existingPemain' => null,
+                                    'previewSrc' => null,
+                                    'inputId' => 'guest-foto-2',
+                                    'previewId' => 'guest-foto-2-preview',
+                                    'inputName' => 'foto_2',
+                                    'phoneReadonly' => true,
+                                    'phoneValue' => $noHp2,
+                                ])
+                            @endif
                         </div>
                     @endif
 
@@ -136,10 +147,17 @@
 
                     <div class="d-grid gap-2 mt-2">
                         <button type="submit" class="btn btn-bp btn-lg">
-                            <i class="bi bi-send me-2"></i> Kirim Pendaftaran
+                            @if ($bothExisting)
+                                <i class="bi bi-check2-circle me-2"></i> Ya, Ini Saya — Daftar
+                            @elseif ($isExisting || ($isExisting2 ?? false))
+                                <i class="bi bi-send me-2"></i> Konfirmasi & Kirim Pendaftaran
+                            @else
+                                <i class="bi bi-send me-2"></i> Kirim Pendaftaran
+                            @endif
                         </button>
                         <a href="{{ route('guest.register', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left me-1"></i> Ganti Nomor HP
+                            <i class="bi bi-arrow-left me-1"></i>
+                            {{ ($isExisting || ($isExisting2 ?? false)) ? 'Bukan Saya — Ganti Nomor HP' : 'Ganti Nomor HP' }}
                         </a>
                     </div>
                 </form>

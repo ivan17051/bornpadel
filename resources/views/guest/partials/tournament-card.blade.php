@@ -14,8 +14,9 @@
         ? number_format($item->maks_peserta)
         : 'Tidak Terbatas';
     $pesertaLabel = $item->registered_count ?? 0;
+    $registerUrl = route('guest.register', ['id_turnamen' => $item->id]);
     $actionCount = $item->isRegistrationOpen()
-        ? 2
+        ? 3
         : ($item->isMahjong() ? 2 : 3);
 @endphp
 <div class="col-12 col-md-6">
@@ -69,10 +70,17 @@
                     <i class="bi bi-people me-1"></i> Daftar Peserta
                 </a>
                 @if ($item->isRegistrationOpen())
-                    <a href="{{ route('guest.register', ['id_turnamen' => $item->id]) }}"
+                    <a href="{{ $registerUrl }}"
                        class="btn btn-bp">
                         <i class="bi bi-person-plus me-1"></i> Daftar
                     </a>
+                    <button type="button"
+                            class="btn btn-outline-secondary js-share-register"
+                            data-share-url="{{ $registerUrl }}"
+                            data-share-title="{{ $item->nama }}"
+                            data-share-text="Daftar turnamen {{ $item->nama }} di Born Padel">
+                        <i class="bi bi-share me-1"></i> Bagikan
+                    </button>
                 @else
                     <a href="{{ route('guest.standings', ['id_turnamen' => $item->id]) }}"
                        class="btn btn-outline-success">

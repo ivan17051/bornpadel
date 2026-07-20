@@ -60,12 +60,13 @@
 
         <div class="card guest-card">
             <div class="card-header py-3">
-                <i class="bi bi-phone me-2"></i> Verifikasi Nomor HP
+                <i class="bi bi-phone me-2"></i> Cek Nomor HP
             </div>
             <div class="card-body p-4">
                 <p class="text-muted small mb-4">
-                    Pilih mode pendaftaran, lalu masukkan nomor HP. Jika sudah pernah terdaftar,
-                    data akan ditampilkan pada langkah berikutnya untuk diperiksa.
+                    Pilih mode pendaftaran, lalu masukkan nomor HP.
+                    Jika nomor sudah punya profil, Anda hanya perlu mengonfirmasi data yang ada
+                    (profil tidak bisa diubah lewat form pendaftaran).
                 </p>
 
                 <form action="{{ route('guest.register.lookup') }}" method="POST" novalidate id="register-lookup-form">

@@ -53,7 +53,7 @@
                                             @else
                                                 <th class="text-center">Poin</th>
                                                 <th class="text-center d-none d-sm-table-cell">Set</th>
-                                                <th class="text-center d-none d-md-table-cell">Games</th>
+                                                <th class="text-center d-none d-md-table-cell" title="Selisih game (game dimenangkan − game dikalahkan)">GD</th>
                                                 @if ($showHistory)
                                                     <th class="text-end" style="width:4rem"></th>
                                                 @endif
@@ -86,7 +86,7 @@
                                                         <span class="badge text-bg-primary">{{ $row['poin_didapat'] }}</span>
                                                     </td>
                                                     <td class="text-center d-none d-sm-table-cell">{{ $row['set_menang'] }}</td>
-                                                    <td class="text-center d-none d-md-table-cell">{{ $row['games_menang'] }}</td>
+                                                    <td class="text-center d-none d-md-table-cell">{{ $row['games_diff_label'] ?? \App\Models\GrupMember::formatGameDifference($row['games_menang'] ?? 0) }}</td>
                                                     @if ($showHistory)
                                                         <td class="text-end">
                                                             @if (! empty($row['id_peserta']))

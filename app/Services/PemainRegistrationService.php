@@ -260,9 +260,10 @@ class PemainRegistrationService
         array $data,
         ?UploadedFile $foto = null,
         ?UploadedFile $buktiBayar = null,
-        string $sumber = TurnamenPeserta::SUMBER_INTERNAL
+        string $sumber = TurnamenPeserta::SUMBER_INTERNAL,
+        bool $updateExistingProfile = true
     ): Pemain {
-        $pemain = $this->upsertPemain($data, $foto);
+        $pemain = $this->upsertPemain($data, $foto, $updateExistingProfile);
 
         if ($this->isRegisteredForTournament($pemain, $turnamen)) {
             throw new RuntimeException('Nomor HP sudah terdaftar pada turnamen ini.');
@@ -291,14 +292,15 @@ class PemainRegistrationService
         array $player2,
         ?UploadedFile $foto2,
         ?UploadedFile $buktiBayar = null,
-        string $sumber = TurnamenPeserta::SUMBER_INTERNAL
+        string $sumber = TurnamenPeserta::SUMBER_INTERNAL,
+        bool $updateExistingProfile = true
     ): array {
         if (trim($player1['no_hp']) === trim($player2['no_hp'])) {
             throw new RuntimeException('Nomor HP pemain 1 dan pemain 2 tidak boleh sama.');
         }
 
-        $pemain = $this->upsertPemain($player1, $foto1);
-        $partner = $this->upsertPemain($player2, $foto2);
+        $pemain = $this->upsertPemain($player1, $foto1, $updateExistingProfile);
+        $partner = $this->upsertPemain($player2, $foto2, $updateExistingProfile);
 
         if ($this->isRegisteredForTournament($pemain, $turnamen)) {
             throw new RuntimeException('Nomor HP pemain 1 sudah terdaftar pada turnamen ini.');
@@ -335,15 +337,19 @@ class PemainRegistrationService
         ];
     }
 
-    public function upsertPemain(array $data, ?UploadedFile $foto = null): Pemain
+    public function upsertPemain(array $data, ?UploadedFile $foto = null, bool $updateExisting = true): Pemain
     {
         $existing = $this->findPemainByPhone($data['no_hp']);
 
         if ($existing) {
+            if (! $updateExisting) {
+                return $existing;
+            }
+
             $updatePayload = array_merge([
                 'nama' => $data['nama'],
                 'gender' => $data['gender'],
-                'rating' => $data['rating'] ?? 0,
+                'rating' => $data['rating'] ?? $existing->rating ?? 0,
             ], $this->resolveBirthFields($data));
 
             if ($foto) {

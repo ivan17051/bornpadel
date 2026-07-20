@@ -100,56 +100,121 @@ class KnockoutBracketService
 
 
 
-    public function getQualifiers(Turnamen $turnamen, int $jumlahLolos = 2): Collection
+    public const QUALIFICATION_PER_GROUP = 'per_group';
 
-    {
+    public const QUALIFICATION_TOTAL = 'total';
 
-        if ($jumlahLolos < 1) {
-
-            throw new RuntimeException('Jumlah lolos minimal 1.');
-
+    public function getQualifiers(
+        Turnamen $turnamen,
+        int $jumlahLolos = 2,
+        string $mode = self::QUALIFICATION_PER_GROUP
+    ): Collection {
+        if ($mode === self::QUALIFICATION_TOTAL) {
+            return $this->getQualifiersByTotal($turnamen, $jumlahLolos);
         }
 
+        return $this->getQualifiersPerGroup($turnamen, $jumlahLolos);
+    }
 
+    public function describeTotalQualification(Turnamen $turnamen, int $totalSlots): array
+    {
+        $standings = $this->leaderboardService->getStandings($turnamen->id);
+        $groupCount = $standings->count();
+        $participantCount = $standings->sum(fn (array $grup) => $grup['standings']->count());
+
+        if ($groupCount < 1) {
+            throw new RuntimeException('Belum ada klasemen grup.');
+        }
+
+        if ($totalSlots < 2) {
+            throw new RuntimeException('Jumlah lolos minimal 2.');
+        }
+
+        if ($totalSlots > $participantCount) {
+            throw new RuntimeException('Jumlah lolos melebihi jumlah peserta di fase grup.');
+        }
+
+        if ($totalSlots < $groupCount) {
+            throw new RuntimeException('Jumlah lolos minimal sama dengan jumlah grup (minimal juara 1 tiap grup).');
+        }
+
+        $base = intdiv($totalSlots, $groupCount);
+        $extra = $totalSlots % $groupCount;
+        $automaticCount = 0;
+
+        foreach ($standings as $grup) {
+            $automaticCount += min($base, $grup['standings']->count());
+        }
+
+        $luckyNeeded = max(0, $totalSlots - $automaticCount);
+
+        return [
+            'group_count' => $groupCount,
+            'participant_count' => $participantCount,
+            'total_slots' => $totalSlots,
+            'base_per_group' => $base,
+            'lucky_loser_slots' => $luckyNeeded,
+            'automatic_count' => $automaticCount,
+            'summary' => $luckyNeeded > 0
+                ? sprintf(
+                    '%d grup × top %d = %d, lalu %d terbaik dari sisa = %d lolos.',
+                    $groupCount,
+                    $base,
+                    $automaticCount,
+                    $luckyNeeded,
+                    $totalSlots
+                )
+                : sprintf(
+                    '%d grup × top %d = %d lolos.',
+                    $groupCount,
+                    $base,
+                    $totalSlots
+                ),
+        ];
+    }
+
+    public function getQualifiersPerGroup(Turnamen $turnamen, int $jumlahLolos = 2): Collection
+    {
+        if ($jumlahLolos < 1) {
+            throw new RuntimeException('Jumlah lolos minimal 1.');
+        }
 
         $standings = $this->leaderboardService->getStandings($turnamen->id);
 
-
-
         $qualifiers = $standings->flatMap(function (array $grup) use ($jumlahLolos) {
-
             return $grup['standings']->take($jumlahLolos)->map(function (array $row) use ($grup) {
-
-                return [
-
-                    'id_pemain' => $row['id_pemain'],
-
-                    'id_peserta' => $row['id_peserta'] ?? null,
-
-                    'nama' => $row['nama'],
-
-                    'grup' => $grup['nama'],
-
-                    'rank' => $row['rank'],
-
-                    'poin_didapat' => $row['poin_didapat'],
-
-                    'set_menang' => $row['set_menang'],
-
-                    'games_menang' => $row['games_menang'],
-
-                    'stats_reached_at' => $row['stats_reached_at'] ?? null,
-
-                ];
-
+                return $this->mapStandingRowToQualifier($row, $grup, 'automatic');
             });
-
         })->values();
 
+        return $this->seedQualifiers($qualifiers);
+    }
 
+    public function getQualifiersByTotal(Turnamen $turnamen, int $totalSlots): Collection
+    {
+        $plan = $this->describeTotalQualification($turnamen, $totalSlots);
+        $standings = $this->leaderboardService->getStandings($turnamen->id);
+        $base = $plan['base_per_group'];
 
-        return $qualifiers
+        $automatic = collect();
+        $remaining = collect();
 
+        foreach ($standings as $grup) {
+            $rows = $grup['standings']->values();
+            $take = min($base, $rows->count());
+
+            foreach ($rows->take($take) as $row) {
+                $automatic->push($this->mapStandingRowToQualifier($row, $grup, 'automatic'));
+            }
+
+            foreach ($rows->slice($take) as $row) {
+                $remaining->push($this->mapStandingRowToQualifier($row, $grup, 'lucky_loser'));
+            }
+        }
+
+        $needed = max(0, $totalSlots - $automatic->count());
+
+        $luckyLosers = $remaining
             ->sort(function (array $a, array $b) {
                 if ($a['rank'] !== $b['rank']) {
                     return $a['rank'] <=> $b['rank'];
@@ -157,57 +222,100 @@ class KnockoutBracketService
 
                 return GrupMember::comparePadelStandingRows($a, $b);
             })
+            ->take($needed)
+            ->values();
 
-            ->values()
+        $qualifiers = $automatic->concat($luckyLosers)->values();
 
-            ->map(function (array $qualifier, int $index) {
-
-                $qualifier['seed'] = $index + 1;
-
-
-
-                return $qualifier;
-
-            });
-
-    }
-
-
-
-    public function generateKnockoutBracket(Turnamen $turnamen, int $jumlahLolos = 2): array
-
-    {
-
-        if (! $this->canEndGroupStage($turnamen)) {
-
-            throw new RuntimeException('Fase grup belum selesai atau bracket knockout sudah dibuat.');
-
+        if ($qualifiers->count() < $totalSlots) {
+            throw new RuntimeException('Peserta tidak cukup untuk mengisi kuota lolos knockout.');
         }
 
+        return $this->seedQualifiers($qualifiers);
+    }
 
+    public function generateKnockoutBracket(
+        Turnamen $turnamen,
+        int $jumlahLolos = 2,
+        string $mode = self::QUALIFICATION_PER_GROUP
+    ): array {
+        if (! $this->canEndGroupStage($turnamen)) {
+            throw new RuntimeException('Fase grup belum selesai atau bracket knockout sudah dibuat.');
+        }
 
-        $qualifiers = $this->getQualifiers($turnamen, $jumlahLolos);
+        if (! in_array($mode, [self::QUALIFICATION_PER_GROUP, self::QUALIFICATION_TOTAL], true)) {
+            throw new RuntimeException('Mode kualifikasi tidak valid.');
+        }
 
-
+        $qualifiers = $this->getQualifiers($turnamen, $jumlahLolos, $mode);
 
         if ($qualifiers->count() < 2) {
-
             throw new RuntimeException('Minimal 2 peserta lolos diperlukan untuk bracket knockout.');
-
         }
 
+        return DB::transaction(function () use ($turnamen, $qualifiers, $mode, $jumlahLolos) {
+            $result = $this->createSeededBracket($turnamen, $qualifiers);
+            $result['qualification_mode'] = $mode;
 
+            if ($mode === self::QUALIFICATION_TOTAL) {
+                $plan = $this->describeTotalQualification($turnamen, $jumlahLolos);
+                $result['jumlah_lolos_total'] = $jumlahLolos;
+                $result['jumlah_lolos_per_grup'] = $plan['base_per_group'];
+                $result['lucky_loser_slots'] = $plan['lucky_loser_slots'];
+                $result['qualification_summary'] = $plan['summary'];
+            } else {
+                $result['jumlah_lolos_per_grup'] = $jumlahLolos;
+                $result['jumlah_lolos_total'] = $qualifiers->count();
+                $result['lucky_loser_slots'] = 0;
+                $result['qualification_summary'] = null;
+            }
 
-        return DB::transaction(function () use ($turnamen, $qualifiers) {
-
-            return $this->createSeededBracket($turnamen, $qualifiers);
-
+            return $result;
         });
-
     }
 
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $grup
+     * @return array<string, mixed>
+     */
+    protected function mapStandingRowToQualifier(array $row, array $grup, string $path): array
+    {
+        return [
+            'id_pemain' => $row['id_pemain'],
+            'id_peserta' => $row['id_peserta'] ?? null,
+            'nama' => $row['nama'],
+            'grup' => $grup['nama'],
+            'rank' => $row['rank'],
+            'poin_didapat' => $row['poin_didapat'],
+            'set_menang' => $row['set_menang'],
+            'games_menang' => $row['games_menang'],
+            'stats_reached_at' => $row['stats_reached_at'] ?? null,
+            'qualification_path' => $path,
+        ];
+    }
 
+    /**
+     * @param  Collection<int, array<string, mixed>>  $qualifiers
+     * @return Collection<int, array<string, mixed>>
+     */
+    protected function seedQualifiers(Collection $qualifiers): Collection
+    {
+        return $qualifiers
+            ->sort(function (array $a, array $b) {
+                if ($a['rank'] !== $b['rank']) {
+                    return $a['rank'] <=> $b['rank'];
+                }
 
+                return GrupMember::comparePadelStandingRows($a, $b);
+            })
+            ->values()
+            ->map(function (array $qualifier, int $index) {
+                $qualifier['seed'] = $index + 1;
+
+                return $qualifier;
+            });
+    }
     protected function createSeededBracket(Turnamen $turnamen, Collection $qualifiers): array
 
     {

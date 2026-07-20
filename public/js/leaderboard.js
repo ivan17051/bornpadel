@@ -31,6 +31,15 @@
             </td>`;
     };
 
+    const formatGameDiff = (value) => {
+        if (typeof value === 'string' && (value.startsWith('+') || value.startsWith('-') || value === '0')) {
+            return value;
+        }
+
+        const diff = Number(value) || 0;
+        return diff > 0 ? `+${diff}` : String(diff);
+    };
+
     const renderNameCell = (row) => {
         const ids = row.pemain_ids || (row.id_pemain ? [row.id_pemain] : []);
 
@@ -186,7 +195,7 @@
                         <td class="fw-semibold">${renderNameCell(row)}</td>
                         <td class="text-center"><span class="badge text-bg-primary">${row.poin_didapat}</span></td>
                         <td class="text-center d-none d-sm-table-cell">${row.set_menang}</td>
-                        <td class="text-center d-none d-md-table-cell">${row.games_menang}</td>
+                        <td class="text-center d-none d-md-table-cell">${formatGameDiff(row.games_diff_label ?? row.games_menang)}</td>
                         ${renderHistoryButton(row, grup.id)}
                     </tr>`;
             }).join('');
@@ -204,7 +213,7 @@
                         <th>Pemain</th>
                         <th class="text-center">Poin</th>
                         <th class="text-center d-none d-sm-table-cell">Set</th>
-                        <th class="text-center d-none d-md-table-cell">Games</th>
+                        <th class="text-center d-none d-md-table-cell" title="Selisih game">GD</th>
                         ${showGroupHistory ? '<th class="text-end" style="width:4rem"></th>' : ''}
                    </tr>`;
 

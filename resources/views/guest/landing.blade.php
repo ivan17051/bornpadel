@@ -173,10 +173,63 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('completed-tournament-filter');
-    if (!form) return;
+    if (form) {
+        form.querySelectorAll('select').forEach((select) => {
+            select.addEventListener('change', () => form.submit());
+        });
+    }
 
-    form.querySelectorAll('select').forEach((select) => {
-        select.addEventListener('change', () => form.submit());
+    async function copyShareUrl(url) {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(url);
+            return;
+        }
+
+        const input = document.createElement('input');
+        input.value = url;
+        input.setAttribute('readonly', '');
+        input.style.position = 'absolute';
+        input.style.left = '-9999px';
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+    }
+
+    document.querySelectorAll('.js-share-register').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const url = button.dataset.shareUrl;
+            const title = button.dataset.shareTitle || 'Born Padel';
+            const text = button.dataset.shareText || title;
+            const originalHtml = button.innerHTML;
+
+            try {
+                if (navigator.share) {
+                    await navigator.share({ title, text, url });
+                    return;
+                }
+
+                await copyShareUrl(url);
+                button.innerHTML = '<i class="bi bi-check2 me-1"></i> Link Disalin';
+                window.setTimeout(() => {
+                    button.innerHTML = originalHtml;
+                }, 2000);
+            } catch (error) {
+                if (error && error.name === 'AbortError') {
+                    return;
+                }
+
+                try {
+                    await copyShareUrl(url);
+                    button.innerHTML = '<i class="bi bi-check2 me-1"></i> Link Disalin';
+                    window.setTimeout(() => {
+                        button.innerHTML = originalHtml;
+                    }, 2000);
+                } catch (_) {
+                    window.prompt('Salin link pendaftaran:', url);
+                }
+            }
+        });
     });
 });
 </script>

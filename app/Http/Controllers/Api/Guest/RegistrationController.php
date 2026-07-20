@@ -40,7 +40,9 @@ class RegistrationController extends Controller
                     $request->file('foto'),
                     $request->playerTwoPayload(),
                     $request->file('foto_2'),
-                    $buktiBayar
+                    $buktiBayar,
+                    TurnamenPeserta::SUMBER_INTERNAL,
+                    false
                 );
 
                 $pemain = $pair['pemain'];
@@ -55,7 +57,9 @@ class RegistrationController extends Controller
                     $turnamen,
                     $request->playerOnePayload(),
                     $request->file('foto'),
-                    $buktiBayar
+                    $buktiBayar,
+                    TurnamenPeserta::SUMBER_INTERNAL,
+                    false
                 );
                 $partner = null;
                 $pasangan = null;

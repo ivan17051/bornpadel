@@ -63,7 +63,7 @@
                 @if (! $showForm)
                     <div class="alert alert-light border mb-4">
                         <i class="bi bi-search me-2"></i>
-                        Masukkan nomor HP pemain {{ $slot }}. Jika sudah ada di database, data akan ditampilkan untuk diperiksa dan diperbarui.
+                        Masukkan nomor HP pemain {{ $slot }}. Jika sudah ada di database, profil existing akan ditampilkan dengan jelas.
                     </div>
                     <form action="{{ route('admin.pemain.peserta.slot.lookup', ['peserta' => $peserta->id, 'slot' => $slot]) }}" method="POST">
                         @csrf
@@ -82,14 +82,14 @@
                     </form>
                 @else
                     @if ($existingPemain)
-                        <div class="alert alert-info py-2 small mb-3">
-                            <i class="bi bi-person-check me-1"></i>
-                            Data pemain ditemukan. Periksa dan perbarui jika perlu.
-                        </div>
+                        @include('admin.pemain.partials.existing-profile-banner', [
+                            'pemain' => $existingPemain,
+                            'exceptTurnamenId' => $peserta->id_turnamen,
+                        ])
                     @else
                         <div class="alert alert-light border py-2 small mb-3">
                             <i class="bi bi-person-plus me-1"></i>
-                            Nomor HP belum terdaftar. Lengkapi data di bawah.
+                            Nomor HP belum terdaftar. Lengkapi data di bawah untuk membuat profil baru.
                         </div>
                     @endif
 
@@ -106,6 +106,7 @@
                             'previewId' => 'slot-foto-preview',
                             'phoneReadonly' => true,
                             'phoneValue' => $noHp,
+                            'lockUntilEdit' => (bool) $existingPemain,
                         ])
                         <div class="d-flex gap-2 mt-4">
                             <button type="submit" class="btn btn-primary">

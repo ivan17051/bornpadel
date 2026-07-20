@@ -166,14 +166,14 @@
                             @endphp
                             <tr data-peserta-id="{{ $entry->id }}">
                                 <td>{{ $peserta->firstItem() + $loop->index }}</td>
-                                <td>@include('admin.pemain.partials.pemain-cell', ['pemain' => $pemain1])</td>
+                                <td>@include('admin.pemain.partials.pemain-cell', ['pemain' => $pemain1, 'turnamen' => $turnamen])</td>
                                 <td class="d-none d-lg-table-cell">
                                     {{ $pemain1 && $pemain1->gender === 'male' ? 'Laki-laki' : ($pemain1 ? 'Perempuan' : '—') }}
                                 </td>
                                 <td class="d-none d-lg-table-cell">
                                     {{ $pemain1 ? number_format($pemain1->rating, 1) : '—' }}
                                 </td>
-                                <td>@include('admin.pemain.partials.pemain-cell', ['pemain' => $pemain2])</td>
+                                <td>@include('admin.pemain.partials.pemain-cell', ['pemain' => $pemain2, 'turnamen' => $turnamen])</td>
                                 <td class="d-none d-lg-table-cell">
                                     {{ $pemain2 && $pemain2->gender === 'male' ? 'Laki-laki' : ($pemain2 ? 'Perempuan' : '—') }}
                                 </td>
@@ -234,6 +234,11 @@
                                         <x-pemain-link :pemain="$item" class="text-decoration-none text-dark" />
                                     </strong>
                                     <div class="small text-muted d-md-none">{{ $item->no_hp }}</div>
+                                    @if ($turnamen && $item->hasPriorRegistrations($turnamen->id))
+                                        <span class="badge text-bg-warning text-dark mt-1" title="Profil sudah ada sebelum turnamen ini">
+                                            Profil existing
+                                        </span>
+                                    @endif
                                 </td>
                                 @if ($showPartnerColumn)
                                     <td>

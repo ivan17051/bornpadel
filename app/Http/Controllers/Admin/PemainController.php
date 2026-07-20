@@ -170,13 +170,16 @@ class PemainController extends Controller
         $buktiBayar = $request->file('bukti_bayar');
 
         try {
+            $existing = $this->registrationService->findPemainByPhone($data['no_hp']);
+            $updateExisting = ! $existing || $request->input('profile_unlocked') === '1';
+
             $pemain = $this->registrationService->upsertPemain([
                 'no_hp' => $data['no_hp'],
                 'nama' => $data['nama'],
                 'tgl_lahir' => $data['tgl_lahir'] ?? null,
                 'gender' => $data['gender'],
                 'rating' => $data['rating'] ?? null,
-            ], $request->file('foto'));
+            ], $request->file('foto'), $updateExisting);
 
             if ($this->registrationService->isRegisteredForTournament($pemain, $turnamen)) {
                 throw new \RuntimeException('Pemain sudah terdaftar pada turnamen ini.');
@@ -310,13 +313,16 @@ class PemainController extends Controller
         }
 
         try {
+            $existing = $this->registrationService->findPemainByPhone($data['no_hp']);
+            $updateExisting = ! $existing || $request->input('profile_unlocked') === '1';
+
             $pemain = $this->registrationService->upsertPemain([
                 'no_hp' => $data['no_hp'],
                 'nama' => $data['nama'],
                 'tgl_lahir' => $data['tgl_lahir'] ?? null,
                 'gender' => $data['gender'],
                 'rating' => $data['rating'] ?? null,
-            ], $request->file('foto'));
+            ], $request->file('foto'), $updateExisting);
 
             if ($this->registrationService->isRegisteredForTournament($pemain, $peserta->turnamen)) {
                 throw new \RuntimeException('Pemain ' . $slot . ' sudah terdaftar pada turnamen ini.');

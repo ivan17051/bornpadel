@@ -72,6 +72,7 @@ class LeaderboardService
                             'poin_didapat' => $member->poin_didapat,
                             'set_menang' => $member->set_menang,
                             'games_menang' => $member->games_menang,
+                            'games_diff_label' => GrupMember::formatGameDifference($member->games_menang),
                             'stats_reached_at' => optional($member->stats_reached_at)->toIso8601String(),
                         ];
 

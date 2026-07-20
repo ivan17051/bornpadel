@@ -764,10 +764,78 @@ const BornPadelAdmin = (function () {
             const modalEl = document.getElementById('endGroupStageModal');
             const confirmBtn = document.getElementById('btn-confirm-end-group-stage');
             const jumlahInput = document.getElementById('jumlah-lolos-input');
+            const jumlahTotalInput = document.getElementById('jumlah-lolos-total-input');
+            const perGroupWrap = document.getElementById('jumlah-lolos-per-group-wrap');
+            const totalWrap = document.getElementById('jumlah-lolos-total-wrap');
+            const totalPreview = document.getElementById('jumlah-lolos-total-preview');
+            const modeInputs = modalEl
+                ? modalEl.querySelectorAll('input[name="qualification_mode"]')
+                : [];
             const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
             const isMahjong = endGroupBtn.dataset.mahjong === '1';
 
+            const selectedMode = () => {
+                const checked = modalEl?.querySelector('input[name="qualification_mode"]:checked');
+                return checked ? checked.value : 'per_group';
+            };
+
+            const updateTotalPreview = () => {
+                if (!jumlahTotalInput || !totalPreview) return;
+
+                const total = parseInt(jumlahTotalInput.value || '0', 10);
+                const groups = parseInt(jumlahTotalInput.dataset.groupCount || endGroupBtn.dataset.groupCount || '0', 10);
+                const participants = parseInt(
+                    jumlahTotalInput.dataset.participantCount || endGroupBtn.dataset.participantCount || '0',
+                    10
+                );
+
+                if (!total || !groups) {
+                    totalPreview.textContent = '';
+                    return;
+                }
+
+                if (total < groups) {
+                    totalPreview.textContent = `Minimal ${groups} (juara 1 tiap grup).`;
+                    return;
+                }
+
+                if (participants && total > participants) {
+                    totalPreview.textContent = `Maksimal ${participants} peserta di fase grup.`;
+                    return;
+                }
+
+                const base = Math.floor(total / groups);
+                const automatic = base * groups;
+                const extra = total - automatic;
+
+                totalPreview.textContent = extra > 0
+                    ? `${groups} grup × top ${base} = ${automatic}, lalu ${extra} terbaik dari sisa = ${total} lolos.`
+                    : `${groups} grup × top ${base} = ${total} lolos.`;
+            };
+
+            const syncQualificationModeUi = () => {
+                if (isMahjong) return;
+
+                const mode = selectedMode();
+                const isTotal = mode === 'total';
+
+                if (perGroupWrap) perGroupWrap.classList.toggle('d-none', isTotal);
+                if (totalWrap) totalWrap.classList.toggle('d-none', !isTotal);
+                if (jumlahInput) jumlahInput.required = !isTotal;
+                if (jumlahTotalInput) jumlahTotalInput.required = isTotal;
+                if (isTotal) updateTotalPreview();
+            };
+
+            modeInputs.forEach((input) => {
+                input.addEventListener('change', syncQualificationModeUi);
+            });
+
+            if (jumlahTotalInput) {
+                jumlahTotalInput.addEventListener('input', updateTotalPreview);
+            }
+
             endGroupBtn.addEventListener('click', () => {
+                syncQualificationModeUi();
                 if (modal) {
                     modal.show();
                 }
@@ -775,8 +843,16 @@ const BornPadelAdmin = (function () {
 
             if (confirmBtn) {
                 confirmBtn.addEventListener('click', async () => {
-                    const parsed = parseInt(jumlahInput?.value || '0', 10);
-                    const minLolos = isMahjong ? 4 : 1;
+                    const mode = isMahjong ? 'per_group' : selectedMode();
+                    const parsed = parseInt(
+                        (mode === 'total' ? jumlahTotalInput?.value : jumlahInput?.value) || '0',
+                        10
+                    );
+                    const minLolos = isMahjong
+                        ? 4
+                        : (mode === 'total'
+                            ? Math.max(2, parseInt(endGroupBtn.dataset.groupCount || '2', 10))
+                            : 1);
 
                     if (!parsed || parsed < minLolos) {
                         showToast(`Jumlah lolos harus angka minimal ${minLolos}.`, 'error');
@@ -792,11 +868,17 @@ const BornPadelAdmin = (function () {
                     setButtonLoading(confirmBtn, true);
 
                     try {
-                        const data = await apiRequest(endGroupBtn.dataset.url, 'POST', {
+                        const payload = {
                             tournament_id: parseInt(endGroupBtn.dataset.turnamen, 10),
                             id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
                             jumlah_lolos: parsed,
-                        });
+                        };
+
+                        if (!isMahjong) {
+                            payload.qualification_mode = mode;
+                        }
+
+                        const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
                         modal?.hide();
                         showToast(data.message);
                         if (isMahjong) {

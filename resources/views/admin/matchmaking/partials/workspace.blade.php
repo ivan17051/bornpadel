@@ -186,6 +186,8 @@
                                 data-jenis="{{ $turnamen->jenis }}"
                                 data-mahjong="{{ $isMahjong ? '1' : '0' }}"
                                 data-max-lolos="{{ $activePlayerCount ?? $approvedCount }}"
+                                data-group-count="{{ $grup->count() }}"
+                                data-participant-count="{{ $grup->sum(fn ($g) => $g->members->count()) }}"
                                 {{ $canEndGroupStage ? '' : 'd-none' }}>
                             <i class="bi bi-flag me-1"></i> {{ $isMahjong ? 'Akhiri Babak' : 'Akhiri Fase Grup' }}
                         </button>
@@ -670,13 +672,34 @@
                                    required>
                         </div>
                     @else
-                        <p class="text-muted small">
-                            Tentukan berapa banyak {{ $unitLabel ?? 'peserta' }} teratas dari setiap grup yang lolos ke babak knockout.
-                            Sistem akan memberikan <strong>BYE</strong> otomatis kepada unggulan jika jumlah lolos bukan pangkat dua.
+                        @php
+                            $unit = $turnamen->isDouble() ? 'pasangan' : 'pemain';
+                            $groupCount = $grup->count();
+                            $participantCount = $grup->sum(fn ($g) => $g->members->count());
+                            $defaultTotal = min(
+                                $participantCount,
+                                max($groupCount, (int) (2 ** floor(log(max(2, $participantCount), 2))))
+                            );
+                        @endphp
+                        <p class="text-muted small mb-3">
+                            Pilih cara menentukan {{ $unit }} yang lolos ke knockout.
+                            Sistem memberikan <strong>BYE</strong> otomatis jika jumlah lolos bukan pangkat dua.
                         </p>
-                        <div class="mb-0">
+
+                        <div class="mb-3">
+                            <label class="form-label d-block">Mode kualifikasi</label>
+                            <div class="btn-group w-100" role="group" aria-label="Mode kualifikasi">
+                                <input type="radio" class="btn-check" name="qualification_mode" id="qualification-mode-per-group" value="per_group" checked autocomplete="off">
+                                <label class="btn btn-outline-primary" for="qualification-mode-per-group">Per grup</label>
+
+                                <input type="radio" class="btn-check" name="qualification_mode" id="qualification-mode-total" value="total" autocomplete="off">
+                                <label class="btn btn-outline-primary" for="qualification-mode-total">Total lolos</label>
+                            </div>
+                        </div>
+
+                        <div class="mb-2" id="jumlah-lolos-per-group-wrap">
                             <label for="jumlah-lolos-input" class="form-label">
-                                Jumlah {{ $turnamen->isDouble() ? 'pasangan' : 'pemain' }} lolos per grup
+                                Jumlah {{ $unit }} lolos per grup
                             </label>
                             <input type="number"
                                    id="jumlah-lolos-input"
@@ -685,6 +708,22 @@
                                    max="8"
                                    value="2"
                                    required>
+                            <div class="form-text">Contoh: 2 = juara 1 &amp; 2 tiap grup.</div>
+                        </div>
+
+                        <div class="mb-2 d-none" id="jumlah-lolos-total-wrap">
+                            <label for="jumlah-lolos-total-input" class="form-label">
+                                Total {{ $unit }} lolos ke knockout
+                            </label>
+                            <input type="number"
+                                   id="jumlah-lolos-total-input"
+                                   class="form-control"
+                                   min="{{ max(2, $groupCount) }}"
+                                   max="{{ max(2, $participantCount) }}"
+                                   value="{{ $defaultTotal }}"
+                                   data-group-count="{{ $groupCount }}"
+                                   data-participant-count="{{ $participantCount }}">
+                            <div class="form-text" id="jumlah-lolos-total-preview"></div>
                         </div>
                     @endif
                 </div>

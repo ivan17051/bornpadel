@@ -320,15 +320,87 @@ class MatchScoringService
 
         $winnerMember->increment('poin_didapat', 2 * $sign);
         $winnerMember->increment('set_menang', $winnerSets * $sign);
-        $winnerMember->increment('games_menang', $winnerGames * $sign);
+        $winnerMember->increment('games_menang', ($winnerGames - $loserGames) * $sign);
 
         $loserMember->increment('set_menang', $loserSets * $sign);
-        $loserMember->increment('games_menang', $loserGames * $sign);
+        $loserMember->increment('games_menang', ($loserGames - $winnerGames) * $sign);
 
         if (! $reverse) {
             $winnerMember->fresh()->stampStatsReachedAt();
             $loserMember->fresh()->stampStatsReachedAt();
         }
+    }
+
+    /**
+     * Rebuild padel group standings (poin/set/GD) from completed group match scores.
+     */
+    public function recalculateGroupStandingsForTurnamen(Turnamen $turnamen): void
+    {
+        if ($turnamen->isMahjong()) {
+            return;
+        }
+
+        $turnamen->loadMissing(['grup']);
+
+        foreach ($turnamen->grup as $grup) {
+            $this->recalculateGroupStandingsForGrup((int) $grup->id);
+        }
+    }
+
+    public function recalculateGroupStandingsForGrup(int $grupId): void
+    {
+        DB::transaction(function () use ($grupId) {
+            GrupMember::where('id_grup', $grupId)->update([
+                'poin_didapat' => 0,
+                'set_menang' => 0,
+                'games_menang' => 0,
+                'stats_reached_at' => null,
+            ]);
+
+            $matches = Pertandingan::query()
+                ->where('id_grup', $grupId)
+                ->where('status', 'completed')
+                ->with('skor')
+                ->orderBy('id')
+                ->get();
+
+            foreach ($matches as $match) {
+                if (! $match->id_pemain1 || ! $match->id_pemain2 || $match->skor->isEmpty()) {
+                    continue;
+                }
+
+                $sets = $match->skor
+                    ->sortBy('set_ke')
+                    ->map(fn (PertandinganSkor $score) => [
+                        'skor_pemain1' => (int) $score->skor_pemain1,
+                        'skor_pemain2' => (int) $score->skor_pemain2,
+                    ])
+                    ->values()
+                    ->all();
+
+                $result = $this->calculateMatchResult(
+                    $sets,
+                    (int) $match->id_pemain1,
+                    (int) $match->id_pemain2
+                );
+
+                $winnerPesertaId = $match->id_peserta_pemenang
+                    ?: $match->resolvePesertaIdForPemain($result['winner_id']);
+                $loserPesertaId = $match->resolvePesertaIdForPemain($result['loser_id']);
+
+                $this->applyGrupMemberStats(
+                    $grupId,
+                    $result['winner_id'],
+                    $result['loser_id'],
+                    $winnerPesertaId,
+                    $loserPesertaId,
+                    $result['winner_sets'],
+                    $result['loser_sets'],
+                    $result['winner_games'],
+                    $result['loser_games']
+                );
+            }
+        });
     }
 
     protected function findGrupMember(int $grupId, int $pemainId, ?int $pesertaId): ?GrupMember

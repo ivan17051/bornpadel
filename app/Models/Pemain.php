@@ -90,4 +90,26 @@ class Pemain extends Model
     {
         return $query->whereHas('turnamenPesertaAsPemain1');
     }
+
+    public function hasPriorRegistrations(?int $exceptTurnamenId = null): bool
+    {
+        $query = $this->turnamenPesertaAsPemain1();
+
+        if ($exceptTurnamenId) {
+            $query->where('id_turnamen', '!=', $exceptTurnamenId);
+        }
+
+        return $query->exists();
+    }
+
+    public function priorRegistrationCount(?int $exceptTurnamenId = null): int
+    {
+        $query = $this->turnamenPesertaAsPemain1();
+
+        if ($exceptTurnamenId) {
+            $query->where('id_turnamen', '!=', $exceptTurnamenId);
+        }
+
+        return (int) $query->count();
+    }
 }

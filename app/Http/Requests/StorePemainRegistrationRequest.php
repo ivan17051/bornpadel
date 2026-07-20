@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\NormalizesPhoneNumbers;
+use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Services\PemainRegistrationService;
 use Illuminate\Foundation\Http\FormRequest;
@@ -37,8 +38,9 @@ class StorePemainRegistrationRequest extends FormRequest
     public function rules()
     {
         $turnamen = $this->resolveTurnamen();
+        $existingPlayerOne = $this->existingPlayerOne();
         $rules = array_merge(
-            $this->playerFieldRules(''),
+            $this->playerFieldRules('', (bool) $existingPlayerOne),
             [
                 'id_turnamen' => ['nullable', 'integer', 'exists:m_turnamen,id'],
                 'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
@@ -55,7 +57,8 @@ class StorePemainRegistrationRequest extends FormRequest
             $rules['registration_mode'] = ['nullable', 'in:single,pair'];
 
             if ($this->input('registration_mode') === 'pair') {
-                $rules = array_merge($rules, $this->playerFieldRules('player_2', true));
+                $existingPlayerTwo = $this->existingPlayerTwo();
+                $rules = array_merge($rules, $this->playerFieldRules('player_2', (bool) $existingPlayerTwo));
                 $rules['foto_2'] = ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'];
             }
         }
@@ -104,6 +107,18 @@ class StorePemainRegistrationRequest extends FormRequest
 
     public function playerOnePayload(): array
     {
+        $existing = $this->existingPlayerOne();
+
+        if ($existing) {
+            return [
+                'nama' => $existing->nama,
+                'tgl_lahir' => optional($existing->tgl_lahir)->format('Y-m-d'),
+                'gender' => $existing->gender,
+                'no_hp' => $existing->no_hp,
+                'rating' => $existing->rating,
+            ];
+        }
+
         return [
             'nama' => $this->input('nama'),
             'tgl_lahir' => $this->input('tgl_lahir'),
@@ -115,6 +130,18 @@ class StorePemainRegistrationRequest extends FormRequest
 
     public function playerTwoPayload(): array
     {
+        $existing = $this->existingPlayerTwo();
+
+        if ($existing) {
+            return [
+                'nama' => $existing->nama,
+                'tgl_lahir' => optional($existing->tgl_lahir)->format('Y-m-d'),
+                'gender' => $existing->gender,
+                'no_hp' => $existing->no_hp,
+                'rating' => $existing->rating,
+            ];
+        }
+
         return [
             'nama' => $this->input('player_2.nama'),
             'tgl_lahir' => $this->input('player_2.tgl_lahir'),
@@ -124,18 +151,52 @@ class StorePemainRegistrationRequest extends FormRequest
         ];
     }
 
-    protected function playerFieldRules(string $prefix, bool $required = false): array
+    public function existingPlayerOne(): ?Pemain
     {
-        $requiredRule = $required ? 'required' : 'required';
+        $noHp = trim((string) $this->input('no_hp', ''));
+
+        if ($noHp === '') {
+            return null;
+        }
+
+        return app(PemainRegistrationService::class)->findPemainByPhone($noHp);
+    }
+
+    public function existingPlayerTwo(): ?Pemain
+    {
+        $noHp = trim((string) $this->input('player_2.no_hp', ''));
+
+        if ($noHp === '') {
+            return null;
+        }
+
+        return app(PemainRegistrationService::class)->findPemainByPhone($noHp);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    protected function playerFieldRules(string $prefix, bool $existingProfile): array
+    {
         $key = function (string $name) use ($prefix) {
             return $prefix === '' ? $name : $prefix . '.' . $name;
         };
 
+        if ($existingProfile) {
+            return [
+                $key('no_hp') => ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
+                $key('nama') => ['nullable', 'string', 'max:255'],
+                $key('tgl_lahir') => ['nullable', 'date', 'before:today'],
+                $key('gender') => ['nullable', 'in:male,female'],
+                $key('rating') => ['nullable', 'numeric', 'min:0', 'max:10'],
+            ];
+        }
+
         return [
-            $key('nama') => [$requiredRule, 'string', 'max:255'],
+            $key('nama') => ['required', 'string', 'max:255'],
             $key('tgl_lahir') => ['nullable', 'date', 'before:today'],
-            $key('gender') => [$requiredRule, 'in:male,female'],
-            $key('no_hp') => [$requiredRule, 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
+            $key('gender') => ['required', 'in:male,female'],
+            $key('no_hp') => ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
             $key('rating') => ['nullable', 'numeric', 'min:0', 'max:10'],
         ];
     }

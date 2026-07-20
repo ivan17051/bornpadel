@@ -67,6 +67,18 @@
                         </div>
                     </form>
                 @else
+                    @if ($existingPemain)
+                        @include('admin.pemain.partials.existing-profile-banner', [
+                            'pemain' => $existingPemain,
+                            'exceptTurnamenId' => $peserta->id_turnamen,
+                        ])
+                    @else
+                        <div class="alert alert-light border py-2 small mb-3">
+                            <i class="bi bi-person-plus me-1"></i>
+                            Nomor HP belum terdaftar. Lengkapi data di bawah untuk membuat profil baru.
+                        </div>
+                    @endif
+
                     <form action="{{ route('admin.pemain.peserta.partner.store', $peserta) }}" method="POST" enctype="multipart/form-data">
                         @csrf
                         @include('admin.pemain.partials.player-fields', [
@@ -78,6 +90,7 @@
                             'previewId' => 'partner-foto-preview',
                             'phoneReadonly' => true,
                             'phoneValue' => $noHp,
+                            'lockUntilEdit' => (bool) $existingPemain,
                         ])
                         <div class="d-flex gap-2 mt-4">
                             <button type="submit" class="btn btn-primary">
