@@ -13,18 +13,16 @@ class PemainController extends Controller
         $pemain->loadMissing([]);
 
         $tournamentHistory = TurnamenPeserta::query()
-            ->involvingPemain($pemain->id)
+            ->where('id_pemain1', $pemain->id)
             ->with(['turnamen', 'pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1'])
             ->latest()
             ->get()
-            ->map(function (TurnamenPeserta $peserta) use ($pemain) {
+            ->map(function (TurnamenPeserta $peserta) {
                 return [
                     'turnamen' => $peserta->turnamen,
                     'status' => $peserta->status,
                     'status_label' => $peserta->status_label,
-                    'partner' => (int) $peserta->id_pemain1 === (int) $pemain->id
-                        ? $peserta->partner_pemain
-                        : $peserta->pemain1,
+                    'partner' => $peserta->partner_pemain,
                     'registered_at' => $peserta->created_at,
                 ];
             });

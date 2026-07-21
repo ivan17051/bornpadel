@@ -220,8 +220,15 @@
             return `
                 <div class="col-lg-6">
                     <div class="card h-100 border-0 shadow-sm">
-                        <div class="card-header bg-white fw-semibold py-3">
-                            <i class="bi bi-diagram-3 me-2 text-primary"></i>${grup.nama}
+                        <div class="card-header bg-white fw-semibold py-3 d-flex align-items-center justify-content-between gap-2">
+                            <span>
+                                <i class="bi bi-diagram-3 me-2 text-primary"></i>${grup.nama}
+                                ${grup.matches_complete
+                                    ? `&nbsp;<span class="text-success" title="Semua pertandingan grup sudah selesai">
+                                           <i class="bi bi-check-circle"></i>
+                                       </span>`
+                                    : ''}
+                            </span>
                         </div>
                         <div class="card-body p-0">
                             <div class="table-responsive">

@@ -52,15 +52,25 @@ class LeaderboardService
                     $query->orderedForPadelStandings();
                 }
             }])
+            ->withCount([
+                'pertandingan as matches_total',
+                'pertandingan as matches_completed' => function ($query) {
+                    $query->where('status', 'completed');
+                },
+            ])
             ->orderBy('nama')
             ->get()
             ->map(function (Grup $grup) use ($turnamen) {
+                $matchesTotal = (int) ($grup->matches_total ?? 0);
+                $matchesCompleted = (int) ($grup->matches_completed ?? 0);
+
                 return [
                     'id' => $grup->id,
                     'nama' => $grup->nama,
                     'babak' => $grup->babak,
                     'is_double' => $turnamen->isDouble(),
                     'is_mahjong' => $turnamen->isMahjong(),
+                    'matches_complete' => $matchesTotal > 0 && $matchesTotal === $matchesCompleted,
                     'standings' => $grup->members->values()->map(function ($member, $index) use ($turnamen, $grup) {
                         $row = [
                             'rank' => $index + 1,
