@@ -3,7 +3,7 @@
     $slot1Editable = $slot1Editable ?? false;
     $slot2Editable = $slot2Editable ?? false;
 @endphp
-<div class="bracket-match {{ $isThirdPlace ? 'is-third-place' : '' }} {{ ($match['status'] ?? '') === 'completed' ? 'is-completed' : '' }} {{ ! empty($match['pemenang_id']) ? 'has-winner' : '' }}">
+<div class="bracket-match {{ $isThirdPlace ? 'is-third-place' : '' }} {{ ($match['status'] ?? '') === 'completed' ? 'is-completed' : '' }} {{ ($match['status'] ?? '') === 'cancelled' ? 'is-cancelled' : '' }} {{ ! empty($match['pemenang_id']) ? 'has-winner' : '' }}">
     <div class="bracket-player {{ ! empty($match['pemenang_id']) && ($match['pemain1_id'] ?? null) === $match['pemenang_id'] ? 'is-winner' : '' }} {{ empty($match['pemain1_id']) && empty($match['pemain1_ids']) ? 'is-tbd' : '' }} {{ $slot1Editable ? 'is-editable' : '' }}"
         @if($slot1Editable)
             role="button"
@@ -50,7 +50,9 @@
             <span class="bracket-score-badge">{{ collect(explode(', ', $match['skor']))->map(fn($s) => explode('-', $s)[1] ?? '')->implode(' ') }}</span>
         @endif
     </div>
-    @if (($match['status'] ?? '') === 'scheduled' && ! empty($match['pemain1_id']) && ! empty($match['pemain2_id']))
+    @if (($match['status'] ?? '') === 'cancelled')
+        <div class="bracket-match-status"><span class="badge bg-danger">Dibatalkan</span></div>
+    @elseif (($match['status'] ?? '') === 'scheduled' && ! empty($match['pemain1_id']) && ! empty($match['pemain2_id']))
         <div class="bracket-match-status"><span class="badge bg-secondary">Upcoming</span></div>
     @elseif (($match['status'] ?? '') === 'scheduled')
         <div class="bracket-match-status"><span class="badge bg-light text-dark border">Menunggu</span></div>

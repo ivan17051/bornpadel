@@ -196,7 +196,8 @@
                                     id="btn-complete-tournament"
                                     class="btn btn-dark"
                                     data-url="{{ route('admin.matchmaking.complete-tournament') }}"
-                                    data-turnamen="{{ $turnamen->id }}">
+                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-pending-third-place="{{ ($hasPendingThirdPlacePlayoff ?? false) ? '1' : '0' }}">
                                 <i class="bi bi-trophy me-1"></i> Selesaikan Turnamen
                             </button>
                         @endif
@@ -204,6 +205,16 @@
                             <a href="{{ $bracketUrl }}" class="btn btn-outline-success">
                                 <i class="bi bi-diagram-2 me-1"></i> Lihat Bracket
                             </a>
+                        @endif
+                        @if ($canResetKnockoutBracket ?? false)
+                            <button type="button"
+                                    id="btn-reset-bracket"
+                                    class="btn btn-outline-danger"
+                                    data-url="{{ route('admin.matchmaking.reset-bracket') }}"
+                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-has-scores="{{ ($hasKnockoutScores ?? false) ? '1' : '0' }}">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Bracket
+                            </button>
                         @endif
                     </div>
                 </div>

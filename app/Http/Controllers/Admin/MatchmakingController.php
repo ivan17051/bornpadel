@@ -13,6 +13,8 @@ use App\Services\MatchScoringService;
 use App\Services\TournamentAccessService;
 use App\Services\TournamentCompletionService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class MatchmakingController extends Controller
@@ -150,9 +152,18 @@ class MatchmakingController extends Controller
             'canReshuffle' => $turnamen && $isMahjong ? $this->mahjongService->canReshuffle($turnamen) : false,
             'canEndGroupStage' => $canEndGroupStage,
             'hasKnockoutBracket' => $hasKnockoutBracket,
+            'canResetKnockoutBracket' => $turnamen && ! $isMahjong
+                ? $this->knockoutBracketService->canResetKnockoutBracket($turnamen)
+                : false,
+            'hasKnockoutScores' => $turnamen && ! $isMahjong
+                ? $this->knockoutBracketService->hasKnockoutScores($turnamen)
+                : false,
             'canEditGroupScores' => $turnamen && ! $isMahjong && ! $hasKnockoutBracket,
             'knockoutRounds' => $knockoutRounds,
             'canCompleteTournament' => $turnamen ? $this->tournamentCompletionService->canComplete($turnamen) : false,
+            'hasPendingThirdPlacePlayoff' => $turnamen
+                ? $this->tournamentCompletionService->hasPendingThirdPlacePlayoff($turnamen)
+                : false,
             'mahjongIsFinal' => $turnamen && $isMahjong ? (bool) $turnamen->mahjong_is_final : false,
             'activePlayerCount' => $isMahjong && $turnamen ? $this->mahjongService->getGlobalRankings($turnamen)->count() : $approvedCount,
         ]);
@@ -308,7 +319,9 @@ class MatchmakingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Turnamen berhasil diselesaikan. Poin bonus juara telah ditambahkan.',
+            'message' => ! empty($result['cancelled_third_place'])
+                ? 'Turnamen berhasil diselesaikan. Perebutan juara 3 dibatalkan. Poin bonus juara telah ditambahkan.'
+                : 'Turnamen berhasil diselesaikan. Poin bonus juara telah ditambahkan.',
             'data' => $result,
         ]);
     }
@@ -468,6 +481,58 @@ class MatchmakingController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Grup dan matchmaking berhasil direset. Anda dapat membuat grup kembali.',
+        ]);
+    }
+
+    public function resetKnockoutBracket(Request $request)
+    {
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $hasScores = $this->knockoutBracketService->hasKnockoutScores($turnamen);
+
+            if ($hasScores) {
+                $request->validate([
+                    'password' => ['required', 'string'],
+                ], [
+                    'password.required' => 'Password wajib diisi untuk mereset bracket yang sudah ada skor.',
+                ]);
+
+                $user = $request->user();
+
+                if (! $user || ! \Illuminate\Support\Facades\Hash::check((string) $request->input('password'), $user->password)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Password tidak valid.',
+                    ], 422);
+                }
+            }
+
+            $result = $this->knockoutBracketService->resetKnockoutBracket($turnamen);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => collect($e->errors())->flatten()->first() ?: 'Validasi gagal.',
+            ], 422);
+        }
+
+        $message = sprintf(
+            'Bracket knockout berhasil direset (%d pertandingan dihapus). Anda dapat membuat bracket kembali.',
+            $result['deleted']
+        );
+
+        if (! empty($result['had_scores'])) {
+            $message .= sprintf(
+                ' Poin kemenangan knockout dibatalkan (%d pertandingan).',
+                $result['revoked_wins']
+            );
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => $result,
         ]);
     }
 

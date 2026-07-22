@@ -30,14 +30,14 @@ class KnockoutBracketService
 
     protected $leaderboardService;
 
+    protected $pointRewardService;
 
-
-    public function __construct(LeaderboardService $leaderboardService)
-
-    {
-
+    public function __construct(
+        LeaderboardService $leaderboardService,
+        PointRewardService $pointRewardService
+    ) {
         $this->leaderboardService = $leaderboardService;
-
+        $this->pointRewardService = $pointRewardService;
     }
 
 
@@ -58,6 +58,110 @@ class KnockoutBracketService
 
 
 
+    /**
+     * @return list<string>
+     */
+    public function knockoutRoundNames(): array
+    {
+        return ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final', 'Perebutan Juara 3'];
+    }
+
+    protected function knockoutMatchesQuery(Turnamen $turnamen)
+    {
+        return Pertandingan::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->whereNull('id_grup')
+            ->whereIn('nama_ronde', $this->knockoutRoundNames());
+    }
+
+    public function canResetKnockoutBracket(Turnamen $turnamen): bool
+    {
+        if ($turnamen->isMahjong() || $turnamen->status === 'completed') {
+            return false;
+        }
+
+        return $this->knockoutMatchesQuery($turnamen)->exists();
+    }
+
+    public function hasKnockoutScores(Turnamen $turnamen): bool
+    {
+        return $this->knockoutMatchesQuery($turnamen)
+            ->where(function ($query) {
+                $query->where('status', 'completed')
+                    ->orWhereHas('skor');
+            })
+            ->exists();
+    }
+
+    /**
+     * @return array{deleted: int, revoked_wins: int, had_scores: bool}
+     */
+    public function resetKnockoutBracket(Turnamen $turnamen): array
+    {
+        if (! $this->canResetKnockoutBracket($turnamen)) {
+            throw new RuntimeException(
+                'Reset bracket hanya tersedia saat turnamen ongoing dan bracket sudah dibuat.'
+            );
+        }
+
+        return DB::transaction(function () use ($turnamen) {
+            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+
+            if ($locked->status === 'completed') {
+                throw new RuntimeException('Turnamen sudah selesai dan tidak dapat direset bracket.');
+            }
+
+            $matches = $this->knockoutMatchesQuery($locked)
+                ->with(['skor'])
+                ->orderBy('id')
+                ->get();
+
+            if ($matches->isEmpty()) {
+                return [
+                    'deleted' => 0,
+                    'revoked_wins' => 0,
+                    'had_scores' => false,
+                ];
+            }
+
+            $hadScores = false;
+            $revokedWins = 0;
+
+            foreach ($matches as $match) {
+                $hasScore = $match->status === 'completed' || $match->skor->isNotEmpty();
+
+                if (! $hasScore) {
+                    continue;
+                }
+
+                $hadScores = true;
+
+                if ($match->id_pemenang || $match->id_peserta_pemenang) {
+                    $this->pointRewardService->revokeMatchWin(
+                        $match,
+                        $match->id_peserta_pemenang ? (int) $match->id_peserta_pemenang : null,
+                        $match->id_pemenang ? (int) $match->id_pemenang : null
+                    );
+                    $revokedWins++;
+                }
+            }
+
+            $ids = $matches->pluck('id');
+
+            Pertandingan::whereIn('id', $ids)->update([
+                'id_next_pertandingan' => null,
+                'id_next_pertandingan_kalah' => null,
+            ]);
+
+            Pertandingan::whereIn('id', $ids)->delete();
+
+            return [
+                'deleted' => $ids->count(),
+                'revoked_wins' => $revokedWins,
+                'had_scores' => $hadScores,
+            ];
+        });
+    }
     public function canEndGroupStage(Turnamen $turnamen): bool
 
     {

@@ -44,17 +44,29 @@ class MatchScoringService
 
     public function canEditKnockoutScore(Pertandingan $pertandingan): bool
     {
+        if ($pertandingan->status === 'cancelled') {
+            return false;
+        }
+
         return $this->knockoutBracketService->canEditKnockoutScore($pertandingan);
     }
 
     public function canEditScore(Pertandingan $pertandingan): bool
     {
+        if ($pertandingan->status === 'cancelled') {
+            return false;
+        }
+
         return $this->canEditGroupScore($pertandingan)
             || $this->canEditKnockoutScore($pertandingan);
     }
 
     public function recordScore(Pertandingan $pertandingan, array $sets): Pertandingan
     {
+        if ($pertandingan->status === 'cancelled') {
+            throw new RuntimeException('Pertandingan ini sudah dibatalkan dan tidak dapat diisi skor.');
+        }
+
         if ($pertandingan->status === 'completed') {
             if ($pertandingan->id_grup) {
                 return $this->updateCompletedGroupScore($pertandingan, $sets);

@@ -43,6 +43,7 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     Route::post('/matchmaking/close-registration', [MatchmakingController::class, 'closeRegistration']);
     Route::post('/matchmaking/random-grup', [MatchmakingController::class, 'randomGrup']);
     Route::post('/matchmaking/end-group-stage', [MatchmakingController::class, 'endGroupStage']);
+    Route::delete('/matchmaking/reset-bracket', [MatchmakingController::class, 'resetKnockoutBracket']);
     Route::post('/matchmaking/reshuffle-groups', [MatchmakingController::class, 'reshuffleGroups']);
     Route::patch('/matchmaking/grup-member/{member}/points', [MatchmakingController::class, 'updateMahjongPoints']);
     Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament']);

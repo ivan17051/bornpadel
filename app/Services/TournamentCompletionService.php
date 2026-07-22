@@ -30,19 +30,21 @@ class TournamentCompletionService
 
         $final = $this->getFinalMatch($turnamen);
 
-        if (! $final || $final->status !== 'completed') {
+        return $final && $final->status === 'completed';
+    }
+
+    public function hasPendingThirdPlacePlayoff(Turnamen $turnamen): bool
+    {
+        if ($turnamen->isMahjong()) {
             return false;
         }
 
-        // If a third-place playoff has both participants set, it must be played
-        // before the tournament can be finalised.
         $thirdPlace = $this->getThirdPlaceMatch($turnamen);
 
-        if ($thirdPlace && $thirdPlace->isReadyForScoring() && $thirdPlace->status !== 'completed') {
-            return false;
-        }
-
-        return true;
+        return $thirdPlace
+            && $thirdPlace->status !== 'completed'
+            && $thirdPlace->status !== 'cancelled'
+            && $thirdPlace->isReadyForScoring();
     }
 
     public function complete(Turnamen $turnamen): array
@@ -56,6 +58,7 @@ class TournamentCompletionService
         }
 
         return DB::transaction(function () use ($turnamen) {
+            $cancelledThirdPlace = $this->cancelUnfinishedThirdPlacePlayoff($turnamen);
             $placements = $this->resolvePlacements($turnamen);
             $placementConfig = config('tournament.points.placement', []);
             $awards = [];
@@ -82,8 +85,22 @@ class TournamentCompletionService
                 'turnamen' => $turnamen->fresh(),
                 'placements' => $placements,
                 'awards' => $awards,
+                'cancelled_third_place' => $cancelledThirdPlace,
             ];
         });
+    }
+
+    protected function cancelUnfinishedThirdPlacePlayoff(Turnamen $turnamen): bool
+    {
+        $thirdPlace = $this->getThirdPlaceMatch($turnamen);
+
+        if (! $thirdPlace || in_array($thirdPlace->status, ['completed', 'cancelled'], true)) {
+            return false;
+        }
+
+        $thirdPlace->update(['status' => 'cancelled']);
+
+        return true;
     }
 
     protected function getFinalMatch(Turnamen $turnamen): ?Pertandingan

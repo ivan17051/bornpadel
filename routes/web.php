@@ -95,6 +95,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/matchmaking/generate-group-matches', [MatchmakingController::class, 'generateGroupMatches'])->name('matchmaking.generate-group-matches');
         Route::patch('/matchmaking/swap-group-members', [MatchmakingController::class, 'swapGroupMembers'])->name('matchmaking.swap-group-members');
         Route::delete('/matchmaking/reset-groups', [MatchmakingController::class, 'resetGroupsAndMatches'])->name('matchmaking.reset-groups');
+        Route::delete('/matchmaking/reset-bracket', [MatchmakingController::class, 'resetKnockoutBracket'])->name('matchmaking.reset-bracket');
         Route::post('/matchmaking/end-group-stage', [MatchmakingController::class, 'endGroupStage'])->name('matchmaking.end-group-stage');
         Route::post('/matchmaking/reshuffle-groups', [MatchmakingController::class, 'reshuffleGroups'])->name('matchmaking.reshuffle-groups');
         Route::patch('/matchmaking/grup-member/{member}/points', [MatchmakingController::class, 'updateMahjongPoints'])->name('matchmaking.mahjong-points');

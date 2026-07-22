@@ -141,9 +141,18 @@ class MatchmakingPageService
             'canReshuffle' => $turnamen && $isMahjong ? $this->mahjongService->canReshuffle($turnamen) : false,
             'canEndGroupStage' => $canEndGroupStage,
             'hasKnockoutBracket' => $hasKnockoutBracket,
+            'canResetKnockoutBracket' => $turnamen && ! $isMahjong
+                ? $this->knockoutBracketService->canResetKnockoutBracket($turnamen)
+                : false,
+            'hasKnockoutScores' => $turnamen && ! $isMahjong
+                ? $this->knockoutBracketService->hasKnockoutScores($turnamen)
+                : false,
             'canEditGroupScores' => $turnamen && ! $isMahjong && ! $hasKnockoutBracket,
             'knockoutRounds' => $knockoutRounds,
             'canCompleteTournament' => $turnamen ? $this->tournamentCompletionService->canComplete($turnamen) : false,
+            'hasPendingThirdPlacePlayoff' => $turnamen
+                ? $this->tournamentCompletionService->hasPendingThirdPlacePlayoff($turnamen)
+                : false,
             'mahjongIsFinal' => $turnamen && $isMahjong ? (bool) $turnamen->mahjong_is_final : false,
             'activePlayerCount' => $isMahjong && $turnamen
                 ? $this->mahjongService->getGlobalRankings($turnamen)->count()

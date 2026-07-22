@@ -758,6 +758,77 @@ const BornPadelAdmin = (function () {
             });
         }
 
+        const resetBracketBtn = document.getElementById('btn-reset-bracket');
+
+        if (resetBracketBtn) {
+            resetBracketBtn.addEventListener('click', async () => {
+                const hasScores = resetBracketBtn.dataset.hasScores === '1';
+                let password = null;
+
+                if (hasScores) {
+                    if (!window.Swal) {
+                        showToast('Skor knockout sudah ada. Konfirmasi password membutuhkan dialog yang tersedia.', 'error');
+                        return;
+                    }
+
+                    const result = await window.Swal.fire({
+                        title: 'Reset bracket dengan skor?',
+                        html: 'Skor knockout akan dihapus dan poin kemenangan knockout dibatalkan. Klasemen grup tetap disimpan.<br><br>Masukkan password akun Anda untuk melanjutkan.',
+                        icon: 'warning',
+                        input: 'password',
+                        inputPlaceholder: 'Password akun',
+                        inputAttributes: {
+                            autocapitalize: 'off',
+                            autocomplete: 'current-password',
+                        },
+                        showCancelButton: true,
+                        confirmButtonText: 'Ya, reset bracket',
+                        cancelButtonText: 'Batal',
+                        reverseButtons: true,
+                        confirmButtonColor: '#cda858',
+                        preConfirm: (value) => {
+                            if (!value || !String(value).trim()) {
+                                window.Swal.showValidationMessage('Password wajib diisi.');
+                                return false;
+                            }
+
+                            return String(value).trim();
+                        },
+                    });
+
+                    if (!result.isConfirmed) return;
+                    password = result.value;
+                } else {
+                    const confirmed = await confirmAction({
+                        title: 'Reset bracket knockout?',
+                        text: 'Semua pertandingan knockout (termasuk Final & Juara 3) akan dihapus. Klasemen grup tetap disimpan, lalu Anda bisa membuat bracket lagi.',
+                        confirmText: 'Ya, reset bracket',
+                    });
+                    if (!confirmed) return;
+                }
+
+                const original = resetBracketBtn.innerHTML;
+                setButtonLoading(resetBracketBtn, true);
+
+                try {
+                    const payload = {
+                        id_turnamen: parseInt(resetBracketBtn.dataset.turnamen, 10),
+                    };
+
+                    if (password) {
+                        payload.password = password;
+                    }
+
+                    const data = await apiRequest(resetBracketBtn.dataset.url, 'DELETE', payload);
+                    showToast(data.message);
+                    reloadPage();
+                } catch (e) {
+                    showToast(e.message, 'error');
+                    setButtonLoading(resetBracketBtn, false, original);
+                }
+            });
+        }
+
         const endGroupBtn = document.getElementById('btn-end-group-stage');
 
         if (endGroupBtn && !endGroupBtn.disabled) {
@@ -964,9 +1035,12 @@ const BornPadelAdmin = (function () {
 
         if (completeTournamentBtn) {
             completeTournamentBtn.addEventListener('click', async () => {
+                const pendingThirdPlace = completeTournamentBtn.dataset.pendingThirdPlace === '1';
                 const confirmed = await confirmAction({
                     title: 'Selesaikan turnamen?',
-                    text: 'Poin bonus juara 1, 2, dan 3 akan ditambahkan ke total poin pemain.',
+                    text: pendingThirdPlace
+                        ? 'Juara 3 belum dimainkan. Lanjut tanpa perebutan juara 3? Pertandingan itu akan dibatalkan, lalu poin bonus juara akan ditambahkan.'
+                        : 'Poin bonus juara 1, 2, dan 3 akan ditambahkan ke total poin pemain.',
                     confirmText: 'Ya, selesaikan',
                 });
                 if (!confirmed) return;
