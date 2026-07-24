@@ -26,7 +26,7 @@
 @endsection
 
 @push('scripts')
-@if ($turnamen && ! $turnamen->isMahjong())
+@if ($turnamen && ! $turnamen->isMahjong() && ! $turnamen->isFriendly())
 <script src="{{ asset('public/js/group-stage-history.js') }}"></script>
 @endif
 @if ($turnamen)

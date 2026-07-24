@@ -1031,16 +1031,136 @@ const BornPadelAdmin = (function () {
             });
         });
 
+        const initFriendlyMatchActions = () => {
+            const panel = document.getElementById('friendly-matches-panel');
+            if (!panel) return;
+
+            let groups = [];
+            try {
+                groups = JSON.parse(panel.dataset.groups || '[]');
+            } catch (e) {
+                groups = [];
+            }
+
+            const grup1Select = document.getElementById('friendly-grup1');
+            const grup2Select = document.getElementById('friendly-grup2');
+            const side1Box = document.getElementById('friendly-side1-players');
+            const side2Box = document.getElementById('friendly-side2-players');
+            const saveBtn = document.getElementById('btn-save-friendly-match');
+
+            const fillGroupSelects = () => {
+                if (!grup1Select || !grup2Select) return;
+                const options = groups.map((g) => `<option value="${g.id}">${g.nama}</option>`).join('');
+                grup1Select.innerHTML = options;
+                grup2Select.innerHTML = options;
+                if (groups.length > 1) {
+                    grup2Select.value = String(groups[1].id);
+                }
+            };
+
+            const renderPlayerChecks = (box, groupId, name) => {
+                if (!box) return;
+                const group = groups.find((g) => String(g.id) === String(groupId));
+                if (!group) {
+                    box.innerHTML = '<div class="text-muted small">Pilih grup terlebih dahulu.</div>';
+                    return;
+                }
+
+                box.innerHTML = group.members.map((m) => `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="${name}" value="${m.id}" id="${name}-${m.id}">
+                        <label class="form-check-label" for="${name}-${m.id}">${m.nama}</label>
+                    </div>
+                `).join('');
+            };
+
+            const selectedIds = (box) => Array.from(box?.querySelectorAll('input:checked') || [])
+                .map((el) => parseInt(el.value, 10));
+
+            fillGroupSelects();
+            renderPlayerChecks(side1Box, grup1Select?.value, 'side1');
+            renderPlayerChecks(side2Box, grup2Select?.value, 'side2');
+
+            grup1Select?.addEventListener('change', () => {
+                renderPlayerChecks(side1Box, grup1Select.value, 'side1');
+            });
+            grup2Select?.addEventListener('change', () => {
+                renderPlayerChecks(side2Box, grup2Select.value, 'side2');
+            });
+
+            saveBtn?.addEventListener('click', async () => {
+                const side1 = selectedIds(side1Box);
+                const side2 = selectedIds(side2Box);
+
+                if (String(grup1Select.value) === String(grup2Select.value)) {
+                    showAlert('Pilih dua grup yang berbeda.', 'warning');
+                    return;
+                }
+
+                if (side1.length !== 2 || side2.length !== 2) {
+                    showAlert('Pilih tepat 2 pemain di setiap sisi.', 'warning');
+                    return;
+                }
+
+                const original = saveBtn.innerHTML;
+                setButtonLoading(saveBtn, true);
+
+                try {
+                    await apiRequest(panel.dataset.createUrl, 'POST', {
+                        tournament_id: parseInt(panel.dataset.turnamen, 10),
+                        id_grup1: parseInt(grup1Select.value, 10),
+                        id_grup2: parseInt(grup2Select.value, 10),
+                        side1_pemain_ids: side1,
+                        side2_pemain_ids: side2,
+                    });
+                    showAlert('Pertandingan Friendly berhasil ditambahkan.', 'success');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                    setButtonLoading(saveBtn, false, original);
+                }
+            });
+
+            document.querySelectorAll('.btn-delete-friendly-match').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const confirmed = await confirmAction({
+                        title: 'Hapus pertandingan ini?',
+                        confirmText: 'Ya, hapus',
+                    });
+                    if (!confirmed) return;
+
+                    const original = btn.innerHTML;
+                    setButtonLoading(btn, true);
+
+                    try {
+                        await apiRequest(btn.dataset.url, 'DELETE', {
+                            tournament_id: parseInt(btn.dataset.turnamen, 10),
+                        });
+                        showAlert('Pertandingan dihapus.', 'success');
+                        reloadPage();
+                    } catch (e) {
+                        showAlert(e.message, 'error');
+                        setButtonLoading(btn, false, original);
+                    }
+                });
+            });
+        };
+
+        initFriendlyMatchActions();
+
         const completeTournamentBtn = document.getElementById('btn-complete-tournament');
 
         if (completeTournamentBtn) {
             completeTournamentBtn.addEventListener('click', async () => {
+                const isFriendly = document.getElementById('friendly-matches-panel') !== null;
                 const pendingThirdPlace = completeTournamentBtn.dataset.pendingThirdPlace === '1';
                 const confirmed = await confirmAction({
                     title: 'Selesaikan turnamen?',
-                    text: pendingThirdPlace
-                        ? 'Juara 3 belum dimainkan. Lanjut tanpa perebutan juara 3? Pertandingan itu akan dibatalkan, lalu poin bonus juara akan ditambahkan.'
-                        : 'Poin bonus juara 1, 2, dan 3 akan ditambahkan ke total poin pemain.',
+                    text: isFriendly
+                        ? 'Klasemen grup Friendly akan dikunci. Total poin pemain tidak berubah.'
+                        : (pendingThirdPlace
+                            ? 'Juara 3 belum dimainkan. Lanjut tanpa perebutan juara 3? Pertandingan itu akan dibatalkan, lalu poin bonus juara akan ditambahkan.'
+                            : 'Poin bonus juara 1, 2, dan 3 akan ditambahkan ke total poin pemain.'),
                     confirmText: 'Ya, selesaikan',
                 });
                 if (!confirmed) return;

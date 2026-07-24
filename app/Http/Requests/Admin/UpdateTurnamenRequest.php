@@ -19,7 +19,7 @@ class UpdateTurnamenRequest extends FormRequest
             'harga' => ['required', 'numeric', 'min:0'],
             'maks_peserta' => ['nullable', 'integer', 'min:1'],
             'syarat' => ['nullable', 'string'],
-            'jenis' => ['required', 'in:single,double,mahjong'],
+            'jenis' => ['required', 'in:single,double,mahjong,friendly'],
             'status' => ['required', 'in:draft,open,ongoing,completed'],
         ];
     }

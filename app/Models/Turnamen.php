@@ -99,6 +99,16 @@ class Turnamen extends Model
         return $this->jenis === 'mahjong';
     }
 
+    public function isFriendly(): bool
+    {
+        return $this->jenis === 'friendly';
+    }
+
+    public function usesKnockoutBracket(): bool
+    {
+        return $this->isSingle() || $this->isDouble();
+    }
+
     public function getJenisLabelAttribute(): string
     {
         if ($this->jenis === 'double') {
@@ -107,6 +117,10 @@ class Turnamen extends Model
 
         if ($this->jenis === 'mahjong') {
             return 'Mahjong';
+        }
+
+        if ($this->jenis === 'friendly') {
+            return 'Friendly';
         }
 
         return 'Single';

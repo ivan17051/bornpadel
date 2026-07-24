@@ -4,12 +4,13 @@
         $unitLabelTitle = ucfirst($unitLabel);
         $sideLabel = $turnamen->isDouble() ? 'Pasangan' : 'Pemain';
         $isMahjong = $isMahjong ?? $turnamen->isMahjong();
+        $isFriendly = $isFriendly ?? $turnamen->isFriendly();
         $groupingUnitCount = $groupingUnitCount ?? $approvedCount;
         $pairingSummary = $pairingSummary ?? null;
         $isDoubleOpen = $turnamen->isDouble() && $turnamen->isRegistrationOpen();
         $bracketUrl = $bracketUrl ?? route('admin.bracket.index', ['id_turnamen' => $turnamen->id]);
-        $isKnockoutPhase = ! $isMahjong && ($hasKnockoutBracket ?? false);
-        $expandGroupsByDefault = $isMahjong || ! $isKnockoutPhase;
+        $isKnockoutPhase = ! $isMahjong && ! $isFriendly && ($hasKnockoutBracket ?? false);
+        $expandGroupsByDefault = $isMahjong || $isFriendly || ! $isKnockoutPhase;
         $expandKnockoutByDefault = $isKnockoutPhase;
         $groupsEditable = ! $isMahjong && ($canEditGroups ?? false);
     @endphp
@@ -54,6 +55,12 @@
                             Grup final aktif. Input poin babak final lalu selesaikan turnamen untuk menentukan juara.
                         @elseif ($isMahjong && $canReshuffle)
                             Grup Mahjong aktif. Input poin per pemain, reshuffle kapan saja, atau lanjut ke babak berikutnya.
+                        @elseif ($isFriendly && ($canAddFriendlyMatch ?? false))
+                            Grup Friendly aktif. Tambahkan pertandingan antar grup dan pilih pasangan (2 pemain) per sisi kapan saja.
+                        @elseif ($isFriendly && $grup->isNotEmpty())
+                            Grup Friendly sudah dibuat. Klasemen dihitung dari hasil tanding antar grup.
+                        @elseif ($canRandomGrup && $isFriendly)
+                            Pendaftaran ditutup. Buat grup Friendly (4 pemain per grup, jumlah approved harus kelipatan 4, minimal 8).
                         @elseif ($canRandomGrup && $isMahjong)
                             Pendaftaran ditutup. Buat grup Mahjong (4 pemain per grup, jumlah approved harus kelipatan 4).
                         @elseif ($groupsEditable)
@@ -62,28 +69,29 @@
                             Pendaftaran ditutup. Klik "Random Grup" untuk mengatur min/max dan membagi {{ $unitLabel }}.
                         @elseif ($hasKnockoutBracket)
                             Fase grup selesai. Bracket knockout sudah dibuat.
-                        @elseif ($canEndGroupStage && ! $isMahjong)
+                        @elseif ($canEndGroupStage && ! $isMahjong && ! $isFriendly)
                             Semua pertandingan fase grup selesai. Klik "End Group Stage" untuk membuat bracket.
                         @elseif ($grup->isNotEmpty())
-                            {{ $isMahjong ? 'Grup Mahjong sudah dibuat.' : 'Matchmaking fase grup sudah dibuat dan susunan grup dikunci.' }}
+                            {{ $isMahjong ? 'Grup Mahjong sudah dibuat.' : ($isFriendly ? 'Grup Friendly sudah dibuat.' : 'Matchmaking fase grup sudah dibuat dan susunan grup dikunci.') }}
                         @else
                             Turnamen tidak siap untuk matchmaking.
                         @endif
                     </p>
                 </div>
                 <div class="col-md-4">
-                    @if ($canRandomGrup && $isMahjong)
+                    @if ($canRandomGrup && ($isMahjong || $isFriendly))
                         <div class="card bg-light border-0 mb-3">
                             <div class="card-body py-3">
-                                <h6 class="text-muted text-uppercase small mb-2">Mahjong</h6>
+                                <h6 class="text-muted text-uppercase small mb-2">{{ $isFriendly ? 'Friendly' : 'Mahjong' }}</h6>
                                 <div id="group-split-preview"
                                      class="small text-muted"
                                      data-approved="{{ $approvedCount }}"
-                                     data-mahjong="1">
+                                     data-mahjong="{{ $isMahjong ? '1' : '0' }}"
+                                     data-friendly="{{ $isFriendly ? '1' : '0' }}">
                                     @if ($groupSplitPreview)
-                                        {{ $approvedCount }} pemain → {{ $groupSplitPreview['group_count'] }} grup (4 + 4 + …)
+                                        {{ $approvedCount }} pemain → {{ $groupSplitPreview['group_count'] }} grup ({{ $groupSplitPreview['label'] }})
                                     @else
-                                        Jumlah pemain approved harus minimal 4 dan kelipatan 4.
+                                        Jumlah pemain approved harus minimal {{ $isFriendly ? '8' : '4' }} dan kelipatan 4.
                                     @endif
                                 </div>
                             </div>
@@ -123,7 +131,7 @@
                             <i class="bi bi-lock me-1"></i> Tutup Pendaftaran
                         </button>
                         @endif
-                        @if ($canRandomGrup && ! $isMahjong)
+                        @if ($canRandomGrup && ! $isMahjong && ! $isFriendly)
                             <button type="button"
                                     id="btn-open-random-grup-modal"
                                     class="btn btn-primary"
@@ -132,13 +140,14 @@
                                 <i class="bi bi-shuffle me-1"></i> Random Grup
                             </button>
                         @endif
-                        @if ($canRandomGrup && $isMahjong)
+                        @if ($canRandomGrup && ($isMahjong || $isFriendly))
                             <button type="button"
                                     class="btn btn-primary btn-matchmaking-grup"
                                     data-url="{{ route('admin.matchmaking.random-grup') }}"
                                     data-turnamen="{{ $turnamen->id }}"
                                     data-mode="random"
-                                    data-mahjong="1">
+                                    data-mahjong="{{ $isMahjong ? '1' : '0' }}"
+                                    data-friendly="{{ $isFriendly ? '1' : '0' }}">
                                 <i class="bi bi-shuffle me-1"></i> Buat Grup
                             </button>
                             <button type="button"
@@ -146,11 +155,12 @@
                                     data-url="{{ route('admin.matchmaking.random-grup') }}"
                                     data-turnamen="{{ $turnamen->id }}"
                                     data-mode="by_rating"
-                                    data-mahjong="1">
+                                    data-mahjong="{{ $isMahjong ? '1' : '0' }}"
+                                    data-friendly="{{ $isFriendly ? '1' : '0' }}">
                                 <i class="bi bi-bar-chart-steps me-1"></i> Grup by Rating
                             </button>
                         @endif
-                        @if ($canGenerateGroupMatches ?? false)
+                        @if (($canGenerateGroupMatches ?? false) && ! $isFriendly)
                             <button type="button"
                                     id="btn-generate-group-matches"
                                     class="btn btn-success"
@@ -177,6 +187,7 @@
                                 <i class="bi bi-arrow-repeat me-1"></i> Reshuffle Groups
                             </button>
                         @endif
+                        @if (! $isFriendly)
                         <button type="button"
                                 id="btn-end-group-stage"
                                 class="btn btn-success {{ $canEndGroupStage ? '' : 'd-none' }}"
@@ -191,6 +202,7 @@
                                 {{ $canEndGroupStage ? '' : 'd-none' }}>
                             <i class="bi bi-flag me-1"></i> {{ $isMahjong ? 'Akhiri Babak' : 'Akhiri Fase Grup' }}
                         </button>
+                        @endif
                         @if ($canCompleteTournament ?? false)
                             <button type="button"
                                     id="btn-complete-tournament"
@@ -311,7 +323,14 @@
                                 aria-controls="group-collapse-{{ $g->id }}">
                             <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
                                 <span><i class="bi bi-diagram-3 me-1"></i>{{ $g->nama }}</span>
-                                <span class="badge text-bg-info ms-auto">{{ $g->members->count() }} {{ $unitLabel }} · {{ $g->pertandingan->count() }} pertandingan</span>
+                                <span class="badge text-bg-info ms-auto">
+                                    {{ $g->members->count() }} {{ $unitLabel }}
+                                    @if ($isFriendly)
+                                        · Poin {{ (int) $g->poin_didapat }}
+                                    @else
+                                        · {{ $g->pertandingan->count() }} pertandingan
+                                    @endif
+                                </span>
                             </span>
                         </button>
                     </h2>
@@ -356,6 +375,7 @@
                                     @endforeach
                                 </ul>
                             </div>
+                            @unless ($isFriendly)
                             <div class="col-md-7">
                                 <h6 class="text-muted text-uppercase small">Jadwal Fase Grup (Round-Robin)</h6>
                                 <div class="table-responsive">
@@ -434,6 +454,7 @@
                                     </table>
                                 </div>
                             </div>
+                            @endunless
                         </div>
                         </div>
                     </div>
@@ -443,7 +464,11 @@
         </div>
     @endif
 
-    @if (! ($isMahjong ?? false) && ! empty($knockoutRounds) && collect($knockoutRounds)->isNotEmpty())
+    @if ($isFriendly && $grup->isNotEmpty())
+        @include('admin.matchmaking.partials.friendly-matches')
+    @endif
+
+    @if (! ($isMahjong ?? false) && ! ($isFriendly ?? false) && ! empty($knockoutRounds) && collect($knockoutRounds)->isNotEmpty())
         <div class="accordion matchmaking-knockout-accordion mb-3" id="matchmaking-knockout-accordion">
             <div class="accordion-item">
                 <h2 class="accordion-header" id="knockout-heading">

@@ -34,6 +34,10 @@ class LeaderboardService
             return collect();
         }
 
+        if ($turnamen->isFriendly()) {
+            return $this->getFriendlyStandings($turnamen->id);
+        }
+
         $grupQuery = $turnamen->isMahjong()
             ? $turnamen->activeGrup()
             : $turnamen->grup();
@@ -94,6 +98,45 @@ class LeaderboardService
                         return $row;
                     }),
                 ];
+            });
+    }
+
+    public function getFriendlyStandings(?int $turnamenId = null): Collection
+    {
+        $turnamen = $turnamenId
+            ? Turnamen::find($turnamenId)
+            : $this->getActiveTournament();
+
+        if (! $turnamen || ! $turnamen->isFriendly()) {
+            return collect();
+        }
+
+        return $turnamen->grup()
+            ->with(['members.pemain'])
+            ->get()
+            ->map(function (Grup $grup) {
+                return [
+                    'id' => $grup->id,
+                    'nama' => $grup->nama,
+                    'poin_didapat' => (int) $grup->poin_didapat,
+                    'set_menang' => (int) $grup->set_menang,
+                    'games_menang' => (int) $grup->games_menang,
+                    'games_diff_label' => GrupMember::formatGameDifference($grup->games_menang),
+                    'stats_reached_at' => optional($grup->stats_reached_at)->toIso8601String(),
+                    'members' => $grup->members->map(function (GrupMember $member) {
+                        return [
+                            'id_pemain' => $member->id_pemain,
+                            'nama' => optional($member->pemain)->nama,
+                        ];
+                    })->values(),
+                ];
+            })
+            ->sort(fn (array $a, array $b) => Grup::compareLeagueRows($a, $b))
+            ->values()
+            ->map(function (array $row, int $index) {
+                $row['rank'] = $index + 1;
+
+                return $row;
             });
     }
 

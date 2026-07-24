@@ -73,13 +73,17 @@
 <div class="mb-3">
     <label for="jenis" class="form-label">Jenis Turnamen <span class="text-danger">*</span></label>
     <select name="jenis" id="jenis" class="form-select @error('jenis') is-invalid @enderror" required>
-        @foreach (['single' => 'Single', 'double' => 'Double', 'mahjong' => 'Mahjong'] as $value => $label)
+        @foreach (['single' => 'Single', 'double' => 'Double', 'mahjong' => 'Mahjong', 'friendly' => 'Friendly'] as $value => $label)
             <option value="{{ $value }}" {{ old('jenis', optional($turnamenModel)->jenis ?? 'single') === $value ? 'selected' : '' }}>
                 {{ $label }}
             </option>
         @endforeach
     </select>
-    <div class="form-text">Double: pendaftaran guest memerlukan data 2 pemain. Mahjong: sistem grup 4 pemain tanpa pertandingan head-to-head.</div>
+    <div class="form-text">
+        Double: pendaftaran guest dapat berpasangan.
+        Mahjong: grup 4 pemain tanpa head-to-head.
+        Friendly: liga antar grup (4 pemain/grup), tanding pasangan dinamis, tanpa total poin pemain.
+    </div>
     @error('jenis')
         <div class="invalid-feedback">{{ $message }}</div>
     @enderror

@@ -34,6 +34,25 @@ class StandingsController extends Controller
             ]);
         }
 
+        if ($turnamen && $turnamen->isFriendly()) {
+            $standings = $leaderboardService->getFriendlyStandings($turnamen->id);
+
+            if ($standings->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Belum ada data klasemen.',
+                    'type' => 'friendly',
+                    'data' => [],
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'type' => 'friendly',
+                'data' => $standings,
+            ]);
+        }
+
         $standings = $leaderboardService->getStandings($turnamenId);
 
         if ($standings->isEmpty()) {

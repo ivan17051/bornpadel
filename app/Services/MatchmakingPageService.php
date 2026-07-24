@@ -10,6 +10,7 @@ class MatchmakingPageService
 {
     protected $matchmakingService;
     protected $mahjongService;
+    protected $friendlyService;
     protected $knockoutBracketService;
     protected $tournamentCompletionService;
     protected $scoringService;
@@ -17,12 +18,14 @@ class MatchmakingPageService
     public function __construct(
         GroupMatchmakingService $matchmakingService,
         MahjongMatchmakingService $mahjongService,
+        FriendlyMatchmakingService $friendlyService,
         KnockoutBracketService $knockoutBracketService,
         TournamentCompletionService $tournamentCompletionService,
         MatchScoringService $scoringService
     ) {
         $this->matchmakingService = $matchmakingService;
         $this->mahjongService = $mahjongService;
+        $this->friendlyService = $friendlyService;
         $this->knockoutBracketService = $knockoutBracketService;
         $this->tournamentCompletionService = $tournamentCompletionService;
         $this->scoringService = $scoringService;
@@ -54,6 +57,8 @@ class MatchmakingPageService
         $grup = collect();
         $groupSplitPreview = null;
         $isMahjong = $turnamen ? $turnamen->isMahjong() : false;
+        $isFriendly = $turnamen ? $turnamen->isFriendly() : false;
+        $friendlyMatches = collect();
 
         if ($turnamen) {
             $grupQuery = $isMahjong ? $turnamen->activeGrup() : $turnamen->grup();
@@ -86,6 +91,17 @@ class MatchmakingPageService
                         'label' => implode(' + ', array_fill(0, $mahjongGroupCount, 4)),
                     ]
                     : null;
+            } elseif ($isFriendly) {
+                $groupSplitPreview = $this->friendlyService->previewGroupSplit($approvedCount);
+                $friendlyMatches = $this->friendlyService->getMatches($turnamen)
+                    ->map(function ($match) {
+                        $match->setAttribute(
+                            'can_edit_score',
+                            $this->scoringService->canEditScore($match)
+                        );
+
+                        return $match;
+                    });
             } else {
                 $groupSplitPreview = $this->matchmakingService->previewGroupSplit(
                     $groupingUnitCount,
@@ -96,13 +112,13 @@ class MatchmakingPageService
         }
 
         $canEndGroupStage = false;
-        if ($turnamen) {
+        if ($turnamen && ! $isFriendly) {
             $canEndGroupStage = $isMahjong
                 ? $this->mahjongService->canAdvanceRound($turnamen)
                 : $this->knockoutBracketService->canEndGroupStage($turnamen);
         }
 
-        $hasKnockoutBracket = $turnamen && ! $isMahjong
+        $hasKnockoutBracket = $turnamen && ! $isMahjong && ! $isFriendly
             ? $this->knockoutBracketService->hasKnockoutBracket($turnamen)
             : false;
 
@@ -128,6 +144,11 @@ class MatchmakingPageService
             'groupingUnitCount' => $groupingUnitCount,
             'pairingSummary' => $pairingSummary,
             'isMahjong' => $isMahjong,
+            'isFriendly' => $isFriendly,
+            'friendlyMatches' => $friendlyMatches,
+            'canAddFriendlyMatch' => $turnamen && $isFriendly
+                ? $this->friendlyService->canAddMatch($turnamen)
+                : false,
             'unitLabel' => $turnamen ? $this->matchmakingService->unitLabel($turnamen) : 'pemain',
             'grup' => $grup,
             'groupSplitPreview' => $groupSplitPreview,

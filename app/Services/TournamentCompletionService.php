@@ -28,6 +28,15 @@ class TournamentCompletionService
             return app(MahjongMatchmakingService::class)->canComplete($turnamen);
         }
 
+        if ($turnamen->isFriendly()) {
+            return $turnamen->status === 'ongoing'
+                && $turnamen->grup()->exists()
+                && $turnamen->pertandingan()
+                    ->where('nama_ronde', 'Friendly')
+                    ->where('status', 'completed')
+                    ->exists();
+        }
+
         $final = $this->getFinalMatch($turnamen);
 
         return $final && $final->status === 'completed';
@@ -35,7 +44,7 @@ class TournamentCompletionService
 
     public function hasPendingThirdPlacePlayoff(Turnamen $turnamen): bool
     {
-        if ($turnamen->isMahjong()) {
+        if ($turnamen->isMahjong() || $turnamen->isFriendly()) {
             return false;
         }
 
@@ -51,6 +60,10 @@ class TournamentCompletionService
     {
         if ($turnamen->isMahjong()) {
             return $this->completeMahjong($turnamen);
+        }
+
+        if ($turnamen->isFriendly()) {
+            return $this->completeFriendly($turnamen);
         }
 
         if (! $this->canComplete($turnamen)) {
@@ -101,6 +114,25 @@ class TournamentCompletionService
         $thirdPlace->update(['status' => 'cancelled']);
 
         return true;
+    }
+
+    protected function completeFriendly(Turnamen $turnamen): array
+    {
+        if (! $this->canComplete($turnamen)) {
+            throw new RuntimeException('Turnamen Friendly belum dapat diselesaikan. Minimal satu pertandingan selesai diperlukan.');
+        }
+
+        return DB::transaction(function () use ($turnamen) {
+            $standings = app(LeaderboardService::class)->getFriendlyStandings($turnamen->id);
+
+            $turnamen->update(['status' => 'completed']);
+
+            return [
+                'turnamen' => $turnamen->fresh(),
+                'placements' => $standings->take(3)->values(),
+                'awards' => [],
+            ];
+        });
     }
 
     protected function getFinalMatch(Turnamen $turnamen): ?Pertandingan

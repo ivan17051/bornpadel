@@ -93,11 +93,15 @@ class PertandinganController extends Controller
         $pertandingan->load(array_merge([
             'pemain1',
             'pemain2',
+            'pemain1Partner',
+            'pemain2Partner',
             'peserta1.pemain1',
             'peserta2.pemain1',
             'pemenang',
             'pesertaPemenang',
             'grup',
+            'grup1',
+            'grup2',
             'skor',
         ], TurnamenPeserta::partnerPemainEagerLoadsFor('peserta1'), TurnamenPeserta::partnerPemainEagerLoadsFor('peserta2'), TurnamenPeserta::partnerPemainEagerLoadsFor('pesertaPemenang')));
 

@@ -100,6 +100,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/matchmaking/reshuffle-groups', [MatchmakingController::class, 'reshuffleGroups'])->name('matchmaking.reshuffle-groups');
         Route::patch('/matchmaking/grup-member/{member}/points', [MatchmakingController::class, 'updateMahjongPoints'])->name('matchmaking.mahjong-points');
         Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament'])->name('matchmaking.complete-tournament');
+        Route::post('/matchmaking/friendly-match', [MatchmakingController::class, 'createFriendlyMatch'])->name('matchmaking.friendly-match.store');
+        Route::delete('/matchmaking/friendly-match/{pertandingan}', [MatchmakingController::class, 'deleteFriendlyMatch'])->name('matchmaking.friendly-match.destroy');
 
         Route::get('/bracket', [AdminBracketController::class, 'index'])->name('bracket.index');
         Route::patch('/bracket/swap', [AdminBracketController::class, 'swap'])->name('bracket.swap');

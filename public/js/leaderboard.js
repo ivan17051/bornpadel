@@ -7,6 +7,7 @@
 
     const refreshUrl = container.dataset.refreshUrl;
     const isMahjong = container.dataset.mahjong === '1';
+    const isFriendly = container.dataset.friendly === '1';
     const showGroupHistory = container.dataset.showGroupHistory === '1';
     const profileBase = '/pemain/';
 
@@ -250,6 +251,53 @@
         bindRefreshButton();
     };
 
+    const renderFriendlyStandings = (rows) => {
+        if (!rows || rows.length === 0) {
+            renderEmpty('Klasemen Friendly');
+            return;
+        }
+
+        const body = rows.map((row) => {
+            const members = (row.members || []).map((m) => m.nama).filter(Boolean).join(', ') || '—';
+            return `
+                <tr class="${row.rank === 1 ? 'table-success' : ''}">
+                    <td class="text-center fw-bold">
+                        ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
+                    </td>
+                    <td class="fw-semibold">${row.nama || '—'}</td>
+                    <td class="small text-muted">${members}</td>
+                    <td class="text-center"><span class="badge text-bg-primary">${row.poin_didapat ?? 0}</span></td>
+                    <td class="text-center d-none d-sm-table-cell">${row.set_menang ?? 0}</td>
+                    <td class="text-center d-none d-md-table-cell">${formatGameDiff(row.games_diff_label ?? row.games_menang)}</td>
+                </tr>`;
+        }).join('');
+
+        container.innerHTML = renderHeader('Klasemen Friendly') + `
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-center" style="width:3rem">#</th>
+                                    <th>Grup</th>
+                                    <th>Anggota</th>
+                                    <th class="text-center">Poin</th>
+                                    <th class="text-center d-none d-sm-table-cell">Set</th>
+                                    <th class="text-center d-none d-md-table-cell">GD</th>
+                                </tr>
+                            </thead>
+                            <tbody>${body}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <p class="text-muted small text-end mt-2 mb-0">
+                <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
+            </p>`;
+        bindRefreshButton();
+    };
+
     const fetchStandings = async () => {
         try {
             const response = await fetch(refreshUrl, {
@@ -263,6 +311,8 @@
 
             if (json.type === 'mahjong' || isMahjong) {
                 renderMahjongStandings(json.data);
+            } else if (json.type === 'friendly' || isFriendly) {
+                renderFriendlyStandings(json.data);
             } else {
                 renderGroupStandings(json.data);
             }

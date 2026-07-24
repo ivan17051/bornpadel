@@ -29,7 +29,7 @@ class TurnamenOperasiController extends Controller
         $activeTab = $request->query('tab', 'pemain');
         $allowedTabs = ['pemain', 'matchmaking', 'klasemen'];
 
-        if ($turnamen && ! $turnamen->isMahjong()) {
+        if ($turnamen && ! $turnamen->isMahjong() && ! $turnamen->isFriendly()) {
             $allowedTabs[] = 'bracket';
         }
 
@@ -52,7 +52,7 @@ class TurnamenOperasiController extends Controller
             }
         }
 
-        if ($turnamen && $activeTab === 'bracket' && ! $turnamen->isMahjong()) {
+        if ($turnamen && $activeTab === 'bracket' && ! $turnamen->isMahjong() && ! $turnamen->isFriendly()) {
             $bracket = $bracketService->getBracketTree($turnamen);
         }
 

@@ -6,7 +6,15 @@
 <div class="row justify-content-center">
     <div class="col-lg-10 col-xl-9">
         <div class="text-center mb-4">
-            <h1 class="h3 fw-bold">{{ optional($turnamen)->isMahjong() ? 'Klasemen Mahjong' : 'Klasemen Grup' }}</h1>
+            <h1 class="h3 fw-bold">
+                @if (optional($turnamen)->isMahjong())
+                    Klasemen Mahjong
+                @elseif (optional($turnamen)->isFriendly())
+                    Klasemen Friendly
+                @else
+                    Klasemen Grup
+                @endif
+            </h1>
             @if ($turnamen)
                 <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
             @endif
@@ -27,6 +35,12 @@
                 :turnamen="$turnamen"
                 :refreshable="true"
             />
+        @elseif ($turnamen && $turnamen->isFriendly())
+            <x-friendly-leaderboard
+                :standings="$standings"
+                :turnamen="$turnamen"
+                :refreshable="true"
+            />
         @else
             <x-group-leaderboard :standings="$standings" :turnamen="$turnamen" :refreshable="true" />
         @endif
@@ -41,7 +55,7 @@
 @endsection
 
 @push('scripts')
-@if ($turnamen && ! $turnamen->isMahjong())
+@if ($turnamen && ! $turnamen->isMahjong() && ! $turnamen->isFriendly())
 <script src="{{ asset('public/js/group-stage-history.js') }}"></script>
 @endif
 <script src="{{ asset('public/js/leaderboard.js') }}"></script>

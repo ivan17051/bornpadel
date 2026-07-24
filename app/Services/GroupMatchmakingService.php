@@ -35,7 +35,7 @@ class GroupMatchmakingService
 
     public function unitLabel(Turnamen $turnamen): string
     {
-        if ($turnamen->isMahjong() || $turnamen->isSingle()) {
+        if ($turnamen->isMahjong() || $turnamen->isSingle() || $turnamen->isFriendly()) {
             return 'pemain';
         }
 
@@ -169,12 +169,20 @@ class GroupMatchmakingService
             return app(MahjongMatchmakingService::class)->canGenerateGroups($turnamen);
         }
 
+        if ($turnamen->isFriendly()) {
+            return app(FriendlyMatchmakingService::class)->canGenerateGroups($turnamen);
+        }
+
         return $turnamen->status === 'ongoing'
             && ! $this->hasGeneratedGroupMatches($turnamen);
     }
 
     public function canEditGroups(Turnamen $turnamen): bool
     {
+        if ($turnamen->isFriendly()) {
+            return app(FriendlyMatchmakingService::class)->canEditGroups($turnamen);
+        }
+
         return ! $turnamen->isMahjong()
             && $turnamen->status === 'ongoing'
             && $turnamen->grup()->exists()
@@ -183,11 +191,19 @@ class GroupMatchmakingService
 
     public function canGenerateGroupMatches(Turnamen $turnamen): bool
     {
+        if ($turnamen->isFriendly() || $turnamen->isMahjong()) {
+            return false;
+        }
+
         return $this->canEditGroups($turnamen);
     }
 
     public function canResetGroupsAndMatches(Turnamen $turnamen): bool
     {
+        if ($turnamen->isFriendly()) {
+            return app(FriendlyMatchmakingService::class)->canReset($turnamen);
+        }
+
         if ($turnamen->isMahjong() || $turnamen->status !== 'ongoing') {
             return false;
         }
@@ -275,6 +291,10 @@ class GroupMatchmakingService
 
         if ($turnamen->isMahjong()) {
             throw new RuntimeException('Gunakan fitur Mahjong untuk membuat grup turnamen ini.');
+        }
+
+        if ($turnamen->isFriendly()) {
+            return app(FriendlyMatchmakingService::class)->generateGroups($turnamen, $mode);
         }
 
         if ($this->hasGeneratedGroupMatches($turnamen)) {
@@ -421,6 +441,12 @@ class GroupMatchmakingService
     {
         if (! $this->canResetGroupsAndMatches($turnamen)) {
             throw new RuntimeException('Reset hanya tersedia sebelum skor pertandingan dicatat.');
+        }
+
+        if ($turnamen->isFriendly()) {
+            app(FriendlyMatchmakingService::class)->resetGroupsAndMatches($turnamen);
+
+            return;
         }
 
         DB::transaction(function () use ($turnamen) {

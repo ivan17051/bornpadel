@@ -41,7 +41,7 @@
                 <i class="bi bi-bar-chart-steps me-1"></i> Klasemen
             </a>
         </li>
-        @if (! $turnamen->isMahjong())
+        @if (! $turnamen->isMahjong() && ! $turnamen->isFriendly())
             <li class="nav-item" role="presentation">
                 <a class="nav-link {{ $activeTab === 'bracket' ? 'active' : '' }}"
                    href="{{ route('admin.turnamen-operasi.index', ['id_turnamen' => $turnamen->id, 'tab' => 'bracket']) }}">
@@ -106,7 +106,7 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" crossorigin="anonymous"></script>
-@if ($turnamen && $activeTab === 'klasemen' && ! $turnamen->isMahjong())
+@if ($turnamen && $activeTab === 'klasemen' && ! $turnamen->isMahjong() && ! $turnamen->isFriendly())
     <script src="{{ asset('public/js/group-stage-history.js') }}"></script>
 @endif
 @if ($turnamen && $activeTab === 'klasemen')

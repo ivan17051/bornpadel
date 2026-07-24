@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\GrupMember;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
+use App\Services\FriendlyMatchmakingService;
 use App\Services\GroupMatchmakingService;
 use App\Services\KnockoutBracketService;
 use App\Services\MahjongMatchmakingService;
 use App\Services\MatchScoringService;
 use App\Services\TournamentAccessService;
 use App\Services\TournamentCompletionService;
+use App\Models\Pertandingan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -21,6 +23,7 @@ class MatchmakingController extends Controller
 {
     protected $matchmakingService;
     protected $mahjongService;
+    protected $friendlyService;
     protected $knockoutBracketService;
     protected $tournamentAccess;
     protected $tournamentCompletionService;
@@ -29,6 +32,7 @@ class MatchmakingController extends Controller
     public function __construct(
         GroupMatchmakingService $matchmakingService,
         MahjongMatchmakingService $mahjongService,
+        FriendlyMatchmakingService $friendlyService,
         KnockoutBracketService $knockoutBracketService,
         TournamentAccessService $tournamentAccess,
         TournamentCompletionService $tournamentCompletionService,
@@ -36,6 +40,7 @@ class MatchmakingController extends Controller
     ) {
         $this->matchmakingService = $matchmakingService;
         $this->mahjongService = $mahjongService;
+        $this->friendlyService = $friendlyService;
         $this->knockoutBracketService = $knockoutBracketService;
         $this->tournamentAccess = $tournamentAccess;
         $this->tournamentCompletionService = $tournamentCompletionService;
@@ -64,6 +69,8 @@ class MatchmakingController extends Controller
         $grup = collect();
         $groupSplitPreview = null;
         $isMahjong = $turnamen ? $turnamen->isMahjong() : false;
+        $isFriendly = $turnamen ? $turnamen->isFriendly() : false;
+        $friendlyMatches = collect();
 
         if ($turnamen) {
             $grupQuery = $isMahjong ? $turnamen->activeGrup() : $turnamen->grup();
@@ -96,6 +103,17 @@ class MatchmakingController extends Controller
                         'label' => implode(' + ', array_fill(0, $mahjongGroupCount, 4)),
                     ]
                     : null;
+            } elseif ($isFriendly) {
+                $groupSplitPreview = $this->friendlyService->previewGroupSplit($approvedCount);
+                $friendlyMatches = $this->friendlyService->getMatches($turnamen)
+                    ->map(function ($match) {
+                        $match->setAttribute(
+                            'can_edit_score',
+                            $this->scoringService->canEditScore($match)
+                        );
+
+                        return $match;
+                    });
             } else {
                 $groupSplitPreview = $this->matchmakingService->previewGroupSplit(
                     $groupingUnitCount,
@@ -106,13 +124,13 @@ class MatchmakingController extends Controller
         }
 
         $canEndGroupStage = false;
-        if ($turnamen) {
+        if ($turnamen && ! $isFriendly) {
             $canEndGroupStage = $isMahjong
                 ? $this->mahjongService->canAdvanceRound($turnamen)
                 : $this->knockoutBracketService->canEndGroupStage($turnamen);
         }
 
-        $hasKnockoutBracket = $turnamen && ! $isMahjong
+        $hasKnockoutBracket = $turnamen && ! $isMahjong && ! $isFriendly
             ? $this->knockoutBracketService->hasKnockoutBracket($turnamen)
             : false;
 
@@ -139,6 +157,11 @@ class MatchmakingController extends Controller
             'groupingUnitCount' => $groupingUnitCount,
             'pairingSummary' => $pairingSummary,
             'isMahjong' => $isMahjong,
+            'isFriendly' => $isFriendly,
+            'friendlyMatches' => $friendlyMatches,
+            'canAddFriendlyMatch' => $turnamen && $isFriendly
+                ? $this->friendlyService->canAddMatch($turnamen)
+                : false,
             'unitLabel' => $turnamen ? $this->matchmakingService->unitLabel($turnamen) : 'pemain',
             'grup' => $grup,
             'groupSplitPreview' => $groupSplitPreview,
@@ -319,9 +342,11 @@ class MatchmakingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => ! empty($result['cancelled_third_place'])
-                ? 'Turnamen berhasil diselesaikan. Perebutan juara 3 dibatalkan. Poin bonus juara telah ditambahkan.'
-                : 'Turnamen berhasil diselesaikan. Poin bonus juara telah ditambahkan.',
+            'message' => $turnamen->isFriendly()
+                ? 'Turnamen Friendly berhasil diselesaikan. Klasemen grup dikunci (tanpa perubahan total poin pemain).'
+                : (! empty($result['cancelled_third_place'])
+                    ? 'Turnamen berhasil diselesaikan. Perebutan juara 3 dibatalkan. Poin bonus juara telah ditambahkan.'
+                    : 'Turnamen berhasil diselesaikan. Poin bonus juara telah ditambahkan.'),
             'data' => $result,
         ]);
     }
@@ -378,6 +403,26 @@ class MatchmakingController extends Controller
                 'message' => sprintf(
                     'Berhasil membuat %d grup Mahjong (4 pemain per grup, %s).',
                     count($result['groups']),
+                    $modeLabel
+                ),
+                'data' => $result,
+            ]);
+        }
+
+        if ($turnamen->isFriendly()) {
+            try {
+                $result = $this->friendlyService->generateGroups($turnamen, $mode);
+            } catch (RuntimeException $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+
+            $modeLabel = $mode === 'by_rating' ? 'berdasarkan rating' : 'secara acak';
+
+            return response()->json([
+                'success' => true,
+                'message' => sprintf(
+                    'Berhasil membuat %d grup Friendly (4 pemain per grup, %s). Tambahkan pertandingan antar grup kapan saja.',
+                    $result['group_count'],
                     $modeLabel
                 ),
                 'data' => $result,
@@ -533,6 +578,61 @@ class MatchmakingController extends Controller
             'success' => true,
             'message' => $message,
             'data' => $result,
+        ]);
+    }
+
+    public function createFriendlyMatch(Request $request)
+    {
+        $request->validate([
+            'id_grup1' => ['required', 'integer', 'exists:grup,id'],
+            'id_grup2' => ['required', 'integer', 'exists:grup,id', 'different:id_grup1'],
+            'side1_pemain_ids' => ['required', 'array', 'size:2'],
+            'side1_pemain_ids.*' => ['required', 'integer', 'exists:m_pemain,id'],
+            'side2_pemain_ids' => ['required', 'array', 'size:2'],
+            'side2_pemain_ids.*' => ['required', 'integer', 'exists:m_pemain,id'],
+        ], [
+            'id_grup2.different' => 'Pilih dua grup yang berbeda.',
+            'side1_pemain_ids.size' => 'Sisi 1 harus berisi tepat 2 pemain.',
+            'side2_pemain_ids.size' => 'Sisi 2 harus berisi tepat 2 pemain.',
+        ]);
+
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $match = $this->friendlyService->createMatch(
+                $turnamen,
+                (int) $request->input('id_grup1'),
+                (int) $request->input('id_grup2'),
+                $request->input('side1_pemain_ids'),
+                $request->input('side2_pemain_ids')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pertandingan Friendly berhasil ditambahkan.',
+            'data' => ['id' => $match->id],
+        ]);
+    }
+
+    public function deleteFriendlyMatch(Request $request, Pertandingan $pertandingan)
+    {
+        try {
+            $turnamen = $this->resolveTournament($request);
+
+            if ((int) $pertandingan->id_turnamen !== (int) $turnamen->id) {
+                throw new RuntimeException('Pertandingan tidak termasuk turnamen ini.');
+            }
+
+            $this->friendlyService->deleteScheduledMatch($pertandingan);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pertandingan Friendly berhasil dihapus.',
         ]);
     }
 

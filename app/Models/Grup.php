@@ -14,10 +14,15 @@ class Grup extends Model
         'babak',
         'ronde',
         'is_aktif',
+        'poin_didapat',
+        'set_menang',
+        'games_menang',
+        'stats_reached_at',
     ];
 
     protected $casts = [
         'is_aktif' => 'boolean',
+        'stats_reached_at' => 'datetime',
     ];
 
     public function turnamen()
@@ -40,6 +45,52 @@ class Grup extends Model
     public function pertandingan()
     {
         return $this->hasMany(Pertandingan::class, 'id_grup');
+    }
+
+    public function friendlyMatchesAsGrup1()
+    {
+        return $this->hasMany(Pertandingan::class, 'id_grup1');
+    }
+
+    public function friendlyMatchesAsGrup2()
+    {
+        return $this->hasMany(Pertandingan::class, 'id_grup2');
+    }
+
+    public function stampStatsReachedAt(): void
+    {
+        if ($this->stats_reached_at) {
+            return;
+        }
+
+        $this->update(['stats_reached_at' => now()]);
+    }
+
+    public static function compareLeagueRows(array $a, array $b): int
+    {
+        foreach (['poin_didapat', 'set_menang', 'games_menang'] as $field) {
+            $cmp = ((int) ($b[$field] ?? 0)) <=> ((int) ($a[$field] ?? 0));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+        }
+
+        $aReached = $a['stats_reached_at'] ?? null;
+        $bReached = $b['stats_reached_at'] ?? null;
+
+        if ($aReached && $bReached) {
+            return strcmp((string) $aReached, (string) $bReached);
+        }
+
+        if ($aReached) {
+            return -1;
+        }
+
+        if ($bReached) {
+            return 1;
+        }
+
+        return ((int) ($a['id'] ?? 0)) <=> ((int) ($b['id'] ?? 0));
     }
 
     public function orderedStandings()

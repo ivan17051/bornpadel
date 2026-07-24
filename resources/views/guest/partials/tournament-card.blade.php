@@ -17,7 +17,7 @@
     $registerUrl = route('guest.register', ['id_turnamen' => $item->id]);
     $actionCount = $item->isRegistrationOpen()
         ? 3
-        : ($item->isMahjong() ? 2 : 3);
+        : (($item->isMahjong() || $item->isFriendly()) ? 2 : 3);
 @endphp
 <div class="col-12 col-md-6">
     <div class="card guest-card h-100">
@@ -86,7 +86,7 @@
                        class="btn btn-outline-success">
                         <i class="bi bi-bar-chart-steps me-1"></i> Klasemen
                     </a>
-                    @if (! $item->isMahjong())
+                    @if (! $item->isMahjong() && ! $item->isFriendly())
                         <a href="{{ route('guest.bracket', ['id_turnamen' => $item->id]) }}"
                            class="btn btn-outline-primary">
                             <i class="bi bi-diagram-2 me-1"></i> Bracket

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Grup;
 use App\Models\GrupMember;
 use App\Models\Pertandingan;
 use App\Models\PertandinganSkor;
@@ -27,7 +28,7 @@ class MatchScoringService
 
     public function canEditGroupScore(Pertandingan $pertandingan): bool
     {
-        if (! $pertandingan->id_grup || $pertandingan->status !== 'completed') {
+        if ($pertandingan->status !== 'completed') {
             return false;
         }
 
@@ -36,6 +37,14 @@ class MatchScoringService
             : Turnamen::find($pertandingan->id_turnamen);
 
         if (! $turnamen || $turnamen->isMahjong() || $turnamen->status === 'completed') {
+            return false;
+        }
+
+        if ($pertandingan->isFriendlyMatch() || $turnamen->isFriendly()) {
+            return true;
+        }
+
+        if (! $pertandingan->id_grup) {
             return false;
         }
 
@@ -68,6 +77,10 @@ class MatchScoringService
         }
 
         if ($pertandingan->status === 'completed') {
+            if ($pertandingan->isFriendlyMatch()) {
+                return $this->updateCompletedFriendlyScore($pertandingan, $sets);
+            }
+
             if ($pertandingan->id_grup) {
                 return $this->updateCompletedGroupScore($pertandingan, $sets);
             }
@@ -93,7 +106,17 @@ class MatchScoringService
                 'status' => 'completed',
             ]);
 
-            if ($pertandingan->id_grup) {
+            $pertandingan = $pertandingan->fresh();
+
+            if ($pertandingan->isFriendlyMatch()) {
+                $this->applyFriendlyGroupStats(
+                    $pertandingan,
+                    $result['winner_sets'],
+                    $result['loser_sets'],
+                    $result['winner_games'],
+                    $result['loser_games']
+                );
+            } elseif ($pertandingan->id_grup) {
                 $this->applyGrupMemberStats(
                     $pertandingan->id_grup,
                     $result['winner_id'],
@@ -119,9 +142,15 @@ class MatchScoringService
                 );
             }
 
-            $this->pointRewardService->awardMatchWin($pertandingan->fresh());
+            // Friendly never awards lifetime total_poin.
+            if (! $pertandingan->isFriendlyMatch()) {
+                $this->pointRewardService->awardMatchWin($pertandingan->fresh());
+            }
 
-            return $pertandingan->fresh(['skor', 'pemain1', 'pemain2', 'peserta1', 'peserta2', 'pemenang', 'pesertaPemenang', 'grup']);
+            return $pertandingan->fresh([
+                'skor', 'pemain1', 'pemain2', 'pemain1Partner', 'pemain2Partner',
+                'peserta1', 'peserta2', 'pemenang', 'pesertaPemenang', 'grup', 'grup1', 'grup2',
+            ]);
         });
     }
 
@@ -132,6 +161,114 @@ class MatchScoringService
         }
 
         return $this->rewriteCompletedMatchScore($pertandingan, $sets, true);
+    }
+
+    protected function updateCompletedFriendlyScore(Pertandingan $pertandingan, array $sets): Pertandingan
+    {
+        if (! $this->canEditGroupScore($pertandingan)) {
+            throw new RuntimeException('Skor Friendly tidak dapat diubah.');
+        }
+
+        if (! $pertandingan->id_pemain1 || ! $pertandingan->id_pemain2) {
+            throw new RuntimeException('Kedua peserta harus sudah ditentukan sebelum mengubah skor.');
+        }
+
+        $pertandingan->loadMissing(['skor']);
+
+        if ($pertandingan->skor->isEmpty()) {
+            throw new RuntimeException('Tidak ada skor lama untuk diperbarui.');
+        }
+
+        $oldSets = $pertandingan->skor
+            ->sortBy('set_ke')
+            ->map(fn (PertandinganSkor $score) => [
+                'skor_pemain1' => (int) $score->skor_pemain1,
+                'skor_pemain2' => (int) $score->skor_pemain2,
+            ])
+            ->values()
+            ->all();
+
+        $oldResult = $this->calculateMatchResult(
+            $oldSets,
+            (int) $pertandingan->id_pemain1,
+            (int) $pertandingan->id_pemain2
+        );
+        $newResult = $this->calculateMatchResult(
+            $sets,
+            (int) $pertandingan->id_pemain1,
+            (int) $pertandingan->id_pemain2
+        );
+
+        return DB::transaction(function () use ($pertandingan, $sets, $oldResult, $newResult) {
+            $this->applyFriendlyGroupStats(
+                $pertandingan,
+                $oldResult['winner_sets'],
+                $oldResult['loser_sets'],
+                $oldResult['winner_games'],
+                $oldResult['loser_games'],
+                true
+            );
+
+            $this->replaceMatchSets($pertandingan, $sets);
+
+            $newWinnerPesertaId = $pertandingan->resolvePesertaIdForPemain($newResult['winner_id']);
+
+            $pertandingan->update([
+                'id_pemenang' => $newResult['winner_id'],
+                'id_peserta_pemenang' => $newWinnerPesertaId,
+                'status' => 'completed',
+            ]);
+
+            $this->applyFriendlyGroupStats(
+                $pertandingan->fresh(),
+                $newResult['winner_sets'],
+                $newResult['loser_sets'],
+                $newResult['winner_games'],
+                $newResult['loser_games']
+            );
+
+            return $pertandingan->fresh([
+                'skor', 'pemain1', 'pemain2', 'pemain1Partner', 'pemain2Partner',
+                'pemenang', 'grup1', 'grup2',
+            ]);
+        });
+    }
+
+    protected function applyFriendlyGroupStats(
+        Pertandingan $pertandingan,
+        int $winnerSets,
+        int $loserSets,
+        int $winnerGames,
+        int $loserGames,
+        bool $reverse = false
+    ): void {
+        $winnerGrupId = $pertandingan->resolveWinnerGrupId();
+        $loserGrupId = $pertandingan->resolveLoserGrupId();
+
+        if (! $winnerGrupId || ! $loserGrupId) {
+            throw new RuntimeException('Grup pemenang/kalah Friendly tidak dapat ditentukan.');
+        }
+
+        $winnerGrup = Grup::find($winnerGrupId);
+        $loserGrup = Grup::find($loserGrupId);
+
+        if (! $winnerGrup || ! $loserGrup) {
+            throw new RuntimeException('Data grup Friendly tidak ditemukan.');
+        }
+
+        $sign = $reverse ? -1 : 1;
+
+        $winnerGrup->increment('poin_didapat', 2 * $sign);
+        $winnerGrup->increment('set_menang', $winnerSets * $sign);
+        $winnerGrup->increment('games_menang', ($winnerGames - $loserGames) * $sign);
+
+        $loserGrup->increment('set_menang', $loserSets * $sign);
+        $loserGrup->increment('games_menang', ($loserGames - $winnerGames) * $sign);
+
+        if (! $reverse) {
+            $winnerGrup->fresh()->stampStatsReachedAt();
+            $loserGrup->fresh()->stampStatsReachedAt();
+        }
     }
 
     protected function updateCompletedKnockoutScore(Pertandingan $pertandingan, array $sets): Pertandingan
