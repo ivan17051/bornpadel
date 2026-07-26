@@ -217,6 +217,228 @@ const BornPadelAdmin = (function () {
         updateBulkControls();
     };
 
+    const apiRequestFormData = async (url, formData) => {
+        const response = await fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken(),
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: formData,
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            const firstValidationError = data.errors
+                ? Object.values(data.errors).flat().find(Boolean)
+                : null;
+            throw new Error(firstValidationError || data.message || 'Terjadi kesalahan.');
+        }
+
+        return data;
+    };
+
+    const syncPhoneInputsIn = (root) => {
+        (root || document).querySelectorAll('[data-phone-input]').forEach((group) => {
+            const country = group.querySelector('[data-phone-country]');
+            const local = group.querySelector('[data-phone-local]');
+            const hidden = group.querySelector('[data-phone-hidden]');
+            if (!country || !local || !hidden) return;
+
+            let digits = String(local.value || '').replace(/\D+/g, '');
+            if (digits.startsWith('0')) {
+                digits = digits.replace(/^0+/, '');
+            }
+            const code = country.value || '+62';
+            hidden.value = digits ? `${code}${digits}` : '';
+        });
+    };
+
+    const initAvailablePemainActions = () => {
+        const card = document.getElementById('available-pemain-card');
+        if (!card) return;
+
+        const turnamenId = String(card.dataset.turnamenId || '');
+        const storageKey = `bornpadel.available-pemain.selected.${turnamenId}`;
+        const bulkBtns = Array.from(document.querySelectorAll('.btn-bulk-register'));
+        const selectAll = document.getElementById('select-all-available');
+        const selectedCountBadge = document.getElementById('available-selected-count');
+        const checkboxes = () => Array.from(document.querySelectorAll('.available-pemain-checkbox'));
+
+        const readSelection = () => {
+            try {
+                const raw = sessionStorage.getItem(storageKey);
+                const parsed = raw ? JSON.parse(raw) : [];
+                return new Set(
+                    (Array.isArray(parsed) ? parsed : [])
+                        .map((id) => parseInt(id, 10))
+                        .filter((id) => Number.isInteger(id) && id > 0)
+                );
+            } catch (e) {
+                return new Set();
+            }
+        };
+
+        const writeSelection = (selected) => {
+            sessionStorage.setItem(storageKey, JSON.stringify(Array.from(selected)));
+        };
+
+        let selectedIds = readSelection();
+
+        const updateBulkControls = () => {
+            const count = selectedIds.size;
+            const visible = checkboxes();
+            const visibleChecked = visible.filter((cb) => cb.checked);
+
+            bulkBtns.forEach((btn) => {
+                btn.disabled = count === 0;
+                btn.title = count === 0
+                    ? 'Pilih pemain pada tabel terlebih dahulu'
+                    : `Daftarkan ${count} pemain terpilih`;
+            });
+
+            if (selectedCountBadge) {
+                if (count > 0) {
+                    selectedCountBadge.textContent = `${count} dipilih`;
+                    selectedCountBadge.classList.remove('d-none');
+                } else {
+                    selectedCountBadge.classList.add('d-none');
+                }
+            }
+
+            if (selectAll) {
+                selectAll.checked = visible.length > 0 && visibleChecked.length === visible.length;
+                selectAll.indeterminate = visibleChecked.length > 0 && visibleChecked.length < visible.length;
+            }
+        };
+
+        const syncCheckbox = (cb) => {
+            const id = parseInt(cb.value, 10);
+            if (!Number.isInteger(id)) return;
+
+            if (cb.checked) {
+                selectedIds.add(id);
+            } else {
+                selectedIds.delete(id);
+            }
+        };
+
+        const restoreVisibleChecks = () => {
+            checkboxes().forEach((cb) => {
+                const id = parseInt(cb.value, 10);
+                cb.checked = selectedIds.has(id);
+            });
+            updateBulkControls();
+        };
+
+        checkboxes().forEach((cb) => {
+            cb.addEventListener('change', () => {
+                syncCheckbox(cb);
+                writeSelection(selectedIds);
+                updateBulkControls();
+            });
+        });
+
+        if (selectAll) {
+            selectAll.addEventListener('change', () => {
+                checkboxes().forEach((cb) => {
+                    cb.checked = selectAll.checked;
+                    syncCheckbox(cb);
+                });
+                writeSelection(selectedIds);
+                updateBulkControls();
+            });
+        }
+
+        const clearSelection = () => {
+            selectedIds = new Set();
+            writeSelection(selectedIds);
+            checkboxes().forEach((cb) => {
+                cb.checked = false;
+            });
+
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            }
+
+            updateBulkControls();
+        };
+
+        const runBulkRegister = async () => {
+            const ids = Array.from(selectedIds);
+
+            if (!ids.length) return;
+
+            const confirmed = await confirmAction({
+                title: `Daftarkan ${ids.length} pemain terpilih?`,
+                text: 'Pemain akan didaftarkan dengan status Approved. Termasuk pilihan dari hasil pencarian lain.',
+                confirmText: 'Ya, daftarkan',
+                icon: 'question',
+                confirmButtonColor: '#198754',
+            });
+
+            if (!confirmed) return;
+
+            bulkBtns.forEach((btn) => setButtonLoading(btn, true));
+
+            try {
+                const result = await apiRequest(card.dataset.bulkRegisterUrl, 'POST', {
+                    id_turnamen: parseInt(card.dataset.turnamenId, 10),
+                    pemain_ids: ids,
+                    status: 'approved',
+                });
+                clearSelection();
+                showAlert(result.message || `${ids.length} pemain berhasil didaftarkan.`, 'success');
+                reloadPage();
+            } catch (e) {
+                showAlert(e.message, 'error');
+                bulkBtns.forEach((btn) => setButtonLoading(btn, false));
+            }
+        };
+
+        bulkBtns.forEach((btn) => {
+            btn.addEventListener('click', () => runBulkRegister());
+        });
+
+        restoreVisibleChecks();
+
+        const form = document.getElementById('tambahPemainForm');
+        const modalEl = document.getElementById('tambahPemainModal');
+        const saveBtn = document.getElementById('btn-save-new-pemain');
+
+        if (!form || !modalEl || !saveBtn) return;
+
+        if (modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            syncPhoneInputsIn(form);
+
+            const original = saveBtn.innerHTML;
+            setButtonLoading(saveBtn, true, original);
+
+            try {
+                const formData = new FormData(form);
+                const result = await apiRequestFormData(card.dataset.storeNewUrl, formData);
+                showAlert(result.message || 'Pemain baru berhasil didaftarkan.', 'success');
+
+                const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                modal.hide();
+                form.reset();
+                reloadPage();
+            } catch (e) {
+                showAlert(e.message, 'error');
+                setButtonLoading(saveBtn, false, original);
+            }
+        });
+    };
+
     const initPartnerModal = () => {
         const modalEl = document.getElementById('setPartnerModal');
         const form = document.getElementById('setPartnerForm');
@@ -1042,11 +1264,19 @@ const BornPadelAdmin = (function () {
                 groups = [];
             }
 
+            const modalEl = document.getElementById('friendlyMatchModal');
+            const titleEl = document.getElementById('friendlyMatchModalLabel');
+            const helpEl = document.getElementById('friendly-match-help');
             const grup1Select = document.getElementById('friendly-grup1');
             const grup2Select = document.getElementById('friendly-grup2');
             const side1Box = document.getElementById('friendly-side1-players');
             const side2Box = document.getElementById('friendly-side2-players');
             const saveBtn = document.getElementById('btn-save-friendly-match');
+
+            let mode = 'create';
+            let assignMatchId = null;
+            let prefillSide1 = [];
+            let prefillSide2 = [];
 
             const fillGroupSelects = () => {
                 if (!grup1Select || !grup2Select) return;
@@ -1058,7 +1288,7 @@ const BornPadelAdmin = (function () {
                 }
             };
 
-            const renderPlayerChecks = (box, groupId, name) => {
+            const renderPlayerChecks = (box, groupId, name, selectedIds = []) => {
                 if (!box) return;
                 const group = groups.find((g) => String(g.id) === String(groupId));
                 if (!group) {
@@ -1066,9 +1296,12 @@ const BornPadelAdmin = (function () {
                     return;
                 }
 
+                const selected = new Set((selectedIds || []).map((id) => String(id)));
+
                 box.innerHTML = group.members.map((m) => `
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="${name}" value="${m.id}" id="${name}-${m.id}">
+                        <input class="form-check-input" type="checkbox" name="${name}" value="${m.id}" id="${name}-${m.id}"
+                            ${selected.has(String(m.id)) ? 'checked' : ''}>
                         <label class="form-check-label" for="${name}-${m.id}">${m.nama}</label>
                     </div>
                 `).join('');
@@ -1077,15 +1310,92 @@ const BornPadelAdmin = (function () {
             const selectedIds = (box) => Array.from(box?.querySelectorAll('input:checked') || [])
                 .map((el) => parseInt(el.value, 10));
 
+            const setModeCreate = () => {
+                mode = 'create';
+                assignMatchId = null;
+                prefillSide1 = [];
+                prefillSide2 = [];
+                if (titleEl) titleEl.textContent = 'Tambah Pertandingan Friendly';
+                if (helpEl) {
+                    helpEl.textContent = 'Pilih 2 grup yang bertanding, lalu pilih 2 pemain dari masing-masing grup. Pemain boleh bermain berulang; anggota grup boleh tidak ikut tanding.';
+                }
+                if (grup1Select) grup1Select.disabled = false;
+                if (grup2Select) grup2Select.disabled = false;
+                fillGroupSelects();
+                renderPlayerChecks(side1Box, grup1Select?.value, 'side1');
+                renderPlayerChecks(side2Box, grup2Select?.value, 'side2');
+                if (saveBtn) {
+                    saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Simpan Tanding';
+                }
+            };
+
+            const setModeAssign = ({ matchId, grup1, grup2, side1, side2 }) => {
+                mode = 'assign';
+                assignMatchId = matchId;
+                prefillSide1 = side1 || [];
+                prefillSide2 = side2 || [];
+                if (titleEl) titleEl.textContent = 'Isi Pasangan Friendly';
+                if (helpEl) {
+                    helpEl.textContent = 'Pilih 2 pemain dari masing-masing grup untuk slot ini. Pasangan bisa diubah selama skor belum diisi.';
+                }
+                fillGroupSelects();
+                if (grup1Select) {
+                    grup1Select.value = String(grup1);
+                    grup1Select.disabled = true;
+                }
+                if (grup2Select) {
+                    grup2Select.value = String(grup2);
+                    grup2Select.disabled = true;
+                }
+                renderPlayerChecks(side1Box, grup1, 'side1', prefillSide1);
+                renderPlayerChecks(side2Box, grup2, 'side2', prefillSide2);
+                if (saveBtn) {
+                    saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Simpan Pasangan';
+                }
+            };
+
             fillGroupSelects();
             renderPlayerChecks(side1Box, grup1Select?.value, 'side1');
             renderPlayerChecks(side2Box, grup2Select?.value, 'side2');
 
             grup1Select?.addEventListener('change', () => {
+                if (mode === 'assign') return;
                 renderPlayerChecks(side1Box, grup1Select.value, 'side1');
             });
             grup2Select?.addEventListener('change', () => {
+                if (mode === 'assign') return;
                 renderPlayerChecks(side2Box, grup2Select.value, 'side2');
+            });
+
+            modalEl?.addEventListener('show.bs.modal', (event) => {
+                const trigger = event.relatedTarget;
+                if (!trigger) {
+                    setModeCreate();
+                    return;
+                }
+
+                const triggerMode = trigger.dataset.mode || 'create';
+                if (triggerMode === 'assign') {
+                    let side1 = [];
+                    let side2 = [];
+                    try {
+                        side1 = JSON.parse(trigger.dataset.side1 || '[]');
+                        side2 = JSON.parse(trigger.dataset.side2 || '[]');
+                    } catch (e) {
+                        side1 = [];
+                        side2 = [];
+                    }
+
+                    setModeAssign({
+                        matchId: parseInt(trigger.dataset.matchId, 10),
+                        grup1: parseInt(trigger.dataset.grup1, 10),
+                        grup2: parseInt(trigger.dataset.grup2, 10),
+                        side1,
+                        side2,
+                    });
+                } else {
+                    setModeCreate();
+                }
             });
 
             saveBtn?.addEventListener('click', async () => {
@@ -1106,14 +1416,24 @@ const BornPadelAdmin = (function () {
                 setButtonLoading(saveBtn, true);
 
                 try {
-                    await apiRequest(panel.dataset.createUrl, 'POST', {
-                        tournament_id: parseInt(panel.dataset.turnamen, 10),
-                        id_grup1: parseInt(grup1Select.value, 10),
-                        id_grup2: parseInt(grup2Select.value, 10),
-                        side1_pemain_ids: side1,
-                        side2_pemain_ids: side2,
-                    });
-                    showAlert('Pertandingan Friendly berhasil ditambahkan.', 'success');
+                    if (mode === 'assign' && assignMatchId) {
+                        const url = (panel.dataset.assignUrlTemplate || '').replace('__ID__', String(assignMatchId));
+                        await apiRequest(url, 'POST', {
+                            tournament_id: parseInt(panel.dataset.turnamen, 10),
+                            side1_pemain_ids: side1,
+                            side2_pemain_ids: side2,
+                        });
+                        showAlert('Pasangan berhasil disimpan.', 'success');
+                    } else {
+                        await apiRequest(panel.dataset.createUrl, 'POST', {
+                            tournament_id: parseInt(panel.dataset.turnamen, 10),
+                            id_grup1: parseInt(grup1Select.value, 10),
+                            id_grup2: parseInt(grup2Select.value, 10),
+                            side1_pemain_ids: side1,
+                            side2_pemain_ids: side2,
+                        });
+                        showAlert('Pertandingan Friendly berhasil ditambahkan.', 'success');
+                    }
                     reloadPage();
                 } catch (e) {
                     showAlert(e.message, 'error');
@@ -1654,6 +1974,7 @@ const BornPadelAdmin = (function () {
 
     return {
         initPemainActions,
+        initAvailablePemainActions,
         initMatchmakingActions,
         initScoreModal,
         initPasswordModal,

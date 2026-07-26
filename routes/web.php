@@ -68,6 +68,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::get('/pemain', [PemainController::class, 'index'])->name('pemain.index');
         Route::get('/pemain/directory', [PemainController::class, 'directory'])->name('pemain.directory');
+        Route::get('/pemain/available', [PemainController::class, 'available'])->name('pemain.available');
+        Route::post('/pemain/bulk-register', [PemainController::class, 'bulkRegister'])->name('pemain.bulk-register');
+        Route::post('/pemain/store-new', [PemainController::class, 'storeNew'])->name('pemain.store-new');
         Route::get('/pemain/create', [PemainController::class, 'create'])->name('pemain.create');
         Route::post('/pemain/lookup', [PemainController::class, 'lookup'])->name('pemain.lookup');
         Route::post('/pemain', [PemainController::class, 'store'])->name('pemain.store');
@@ -101,6 +104,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/matchmaking/grup-member/{member}/points', [MatchmakingController::class, 'updateMahjongPoints'])->name('matchmaking.mahjong-points');
         Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament'])->name('matchmaking.complete-tournament');
         Route::post('/matchmaking/friendly-match', [MatchmakingController::class, 'createFriendlyMatch'])->name('matchmaking.friendly-match.store');
+        Route::post('/matchmaking/friendly-match/{pertandingan}/pairs', [MatchmakingController::class, 'assignFriendlyPairs'])->name('matchmaking.friendly-match.pairs');
         Route::delete('/matchmaking/friendly-match/{pertandingan}', [MatchmakingController::class, 'deleteFriendlyMatch'])->name('matchmaking.friendly-match.destroy');
 
         Route::get('/bracket', [AdminBracketController::class, 'index'])->name('bracket.index');

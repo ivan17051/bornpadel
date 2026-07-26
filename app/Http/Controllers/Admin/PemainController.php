@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\BulkRegisterPesertaRequest;
 use App\Http\Requests\Admin\LookupPartnerPemainRequest;
 use App\Http\Requests\Admin\LookupPemainRequest;
+use App\Http\Requests\Admin\StoreNewPemainToTurnamenRequest;
 use App\Http\Requests\Admin\StorePartnerPemainRequest;
 use App\Http\Requests\Admin\StorePemainRequest;
 use App\Http\Requests\Admin\UpdatePemainRequest;
@@ -106,6 +108,119 @@ class PemainController extends Controller
         }
 
         return view('admin.pemain.directory', compact('pemain', 'totalPemain', 'unregisteredCount'));
+    }
+
+    public function available(Request $request)
+    {
+        $turnamenList = $this->matchmakingService->listForFilter();
+        $turnamen = $this->matchmakingService->resolveTournament(
+            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null,
+            false
+        );
+
+        $pemain = null;
+        $availableCount = 0;
+
+        if ($turnamen) {
+            $this->tournamentAccess->assertTurnamenId((int) $turnamen->id);
+
+            $query = $this->registrationService->availablePemainQuery($turnamen)->latest();
+
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $query->where(function ($builder) use ($search) {
+                    $builder->where('nama', 'like', "%{$search}%")
+                        ->orWhere('no_hp', 'like', "%{$search}%");
+                });
+            }
+
+            if ($request->filled('gender')) {
+                $query->where('gender', $request->gender);
+            }
+
+            $availableCount = (clone $query)->count();
+            $pemain = $query->paginate(20)->withQueryString();
+        }
+
+        return view('admin.pemain.available', compact(
+            'turnamen',
+            'turnamenList',
+            'pemain',
+            'availableCount'
+        ));
+    }
+
+    public function bulkRegister(BulkRegisterPesertaRequest $request)
+    {
+        $turnamen = Turnamen::findOrFail($request->id_turnamen);
+        $this->tournamentAccess->assertTurnamenId((int) $turnamen->id);
+        $status = $request->input('status', 'approved');
+
+        try {
+            $result = $this->registrationService->bulkRegisterExisting(
+                $turnamen,
+                $request->pemain_ids,
+                $status,
+                $this->capacityService
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $registeredCount = $result['registered']->count();
+
+        return response()->json([
+            'success' => true,
+            'message' => $registeredCount > 0
+                ? sprintf('%d pemain berhasil didaftarkan.', $registeredCount)
+                : 'Semua pemain yang dipilih sudah terdaftar sebelumnya.',
+            'data' => [
+                'registered_count' => $registeredCount,
+                'skipped_count' => $result['skipped_count'],
+                'skipped' => $result['skipped'],
+            ],
+        ]);
+    }
+
+    public function storeNew(StoreNewPemainToTurnamenRequest $request)
+    {
+        $data = $request->validated();
+        $turnamen = Turnamen::findOrFail($data['id_turnamen']);
+        $this->tournamentAccess->assertTurnamenId((int) $turnamen->id);
+
+        try {
+            $pemain = $this->registrationService->createNewAndRegister(
+                $turnamen,
+                [
+                    'no_hp' => $data['no_hp'],
+                    'nama' => $data['nama'],
+                    'tgl_lahir' => $data['tgl_lahir'] ?? null,
+                    'gender' => $data['gender'],
+                    'rating' => $data['rating'] ?? null,
+                ],
+                $data['status'],
+                $request->file('foto'),
+                $request->file('bukti_bayar'),
+                $this->capacityService
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pemain baru berhasil ditambahkan dan didaftarkan.',
+            'data' => [
+                'pemain_id' => $pemain->id,
+                'nama' => $pemain->nama,
+            ],
+        ]);
     }
 
     public function create(Request $request)

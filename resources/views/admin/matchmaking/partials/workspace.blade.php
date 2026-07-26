@@ -56,11 +56,11 @@
                         @elseif ($isMahjong && $canReshuffle)
                             Grup Mahjong aktif. Input poin per pemain, reshuffle kapan saja, atau lanjut ke babak berikutnya.
                         @elseif ($isFriendly && ($canAddFriendlyMatch ?? false))
-                            Grup Friendly aktif. Tambahkan pertandingan antar grup dan pilih pasangan (2 pemain) per sisi kapan saja.
+                            Grup Friendly aktif. Slot pertandingan antar grup sudah dibuat — isi pasangan (2 pemain) per sisi, atau tambah tanding ekstra.
                         @elseif ($isFriendly && $grup->isNotEmpty())
                             Grup Friendly sudah dibuat. Klasemen dihitung dari hasil tanding antar grup.
                         @elseif ($canRandomGrup && $isFriendly)
-                            Pendaftaran ditutup. Buat grup Friendly (4 pemain per grup, jumlah approved harus kelipatan 4, minimal 8).
+                            Pendaftaran ditutup. Buat grup Friendly (4 pemain per grup). Slot pertandingan antar grup dibuat otomatis.
                         @elseif ($canRandomGrup && $isMahjong)
                             Pendaftaran ditutup. Buat grup Mahjong (4 pemain per grup, jumlah approved harus kelipatan 4).
                         @elseif ($groupsEditable)

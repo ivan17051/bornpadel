@@ -121,7 +121,19 @@ class Pertandingan extends Model
 
     public function isReadyForScoring(): bool
     {
+        if ($this->isFriendlyMatch()) {
+            return $this->id_pemain1
+                && $this->id_pemain2
+                && $this->id_pemain1_partner
+                && $this->id_pemain2_partner;
+        }
+
         return $this->id_pemain1 && $this->id_pemain2;
+    }
+
+    public function hasFriendlyPairsAssigned(): bool
+    {
+        return $this->isFriendlyMatch() && $this->isReadyForScoring();
     }
 
     public function getSide1LabelAttribute(): string

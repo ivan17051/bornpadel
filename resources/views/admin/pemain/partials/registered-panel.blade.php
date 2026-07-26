@@ -113,9 +113,11 @@
                         <i class="bi bi-check-all me-1"></i> Setujui Terpilih
                     </button>
                 @endif
-                <a href="{{ route('admin.pemain.create', request()->only('id_turnamen')) }}" class="btn btn-primary btn-sm">
-                    <i class="bi bi-plus-lg me-1"></i> Tambah Pemain
-                </a>
+                @if ($turnamen)
+                    <a href="{{ route('admin.pemain.available', request()->only('id_turnamen')) }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-person-plus me-1"></i> Tambah Pemain
+                    </a>
+                @endif
             </div>
         </div>
     </div>

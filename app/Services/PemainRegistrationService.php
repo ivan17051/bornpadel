@@ -189,6 +189,127 @@ class PemainRegistrationService
     }
 
     /**
+     * Pemain master who are not yet registered on this tournament.
+     */
+    public function availablePemainQuery(Turnamen $turnamen)
+    {
+        return Pemain::query()
+            ->whereNotIn('id', function ($query) use ($turnamen) {
+                $query->select('id_pemain1')
+                    ->from('turnamen_peserta')
+                    ->where('id_turnamen', $turnamen->id);
+            });
+    }
+
+    /**
+     * Register existing pemain into a tournament (single rows; doubles pairing is separate).
+     *
+     * @param  array<int, int>  $pemainIds
+     * @return array{registered: \Illuminate\Support\Collection<int, TurnamenPeserta>, skipped: array<int, int>, skipped_count: int}
+     */
+    public function bulkRegisterExisting(
+        Turnamen $turnamen,
+        array $pemainIds,
+        string $status = 'approved',
+        ?TournamentCapacityService $capacityService = null
+    ): array {
+        $pemainIds = array_values(array_unique(array_map('intval', $pemainIds)));
+
+        if ($pemainIds === []) {
+            throw new RuntimeException('Pilih minimal satu pemain.');
+        }
+
+        $players = Pemain::query()->whereIn('id', $pemainIds)->get()->keyBy('id');
+        $missing = array_diff($pemainIds, $players->keys()->all());
+
+        if ($missing !== []) {
+            throw new RuntimeException('Beberapa pemain tidak ditemukan.');
+        }
+
+        $toRegister = [];
+        $skipped = [];
+
+        foreach ($pemainIds as $pemainId) {
+            $pemain = $players->get($pemainId);
+
+            if ($this->isRegisteredForTournament($pemain, $turnamen)) {
+                $skipped[] = $pemainId;
+                continue;
+            }
+
+            $toRegister[] = $pemain;
+        }
+
+        if ($toRegister === []) {
+            return [
+                'registered' => collect(),
+                'skipped' => $skipped,
+                'skipped_count' => count($skipped),
+            ];
+        }
+
+        $capacityService = $capacityService ?? app(TournamentCapacityService::class);
+
+        if ($status === 'approved') {
+            $capacityService->assertCanApprove($turnamen, count($toRegister));
+        }
+
+        $registered = collect();
+
+        foreach ($toRegister as $pemain) {
+            $registered->push(TurnamenPeserta::create([
+                'id_turnamen' => $turnamen->id,
+                'id_pemain1' => $pemain->id,
+                'status' => $status,
+                'bukti_bayar' => null,
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+            ]));
+        }
+
+        return [
+            'registered' => $registered,
+            'skipped' => $skipped,
+            'skipped_count' => count($skipped),
+        ];
+    }
+
+    /**
+     * Create a brand-new pemain profile and register them to the tournament.
+     */
+    public function createNewAndRegister(
+        Turnamen $turnamen,
+        array $data,
+        string $status = 'approved',
+        ?UploadedFile $foto = null,
+        ?UploadedFile $buktiBayar = null,
+        ?TournamentCapacityService $capacityService = null
+    ): Pemain {
+        if ($this->findPemainByPhone($data['no_hp'])) {
+            throw new RuntimeException(
+                'Nomor HP sudah ada di database. Pilih pemain dari tabel untuk mendaftarkan profil existing.'
+            );
+        }
+
+        $capacityService = $capacityService ?? app(TournamentCapacityService::class);
+
+        if ($status === 'approved') {
+            $capacityService->assertCanApprove($turnamen, 1);
+        }
+
+        $pemain = $this->upsertPemain($data, $foto, true);
+
+        TurnamenPeserta::create([
+            'id_turnamen' => $turnamen->id,
+            'id_pemain1' => $pemain->id,
+            'status' => $status,
+            'bukti_bayar' => $this->storeBuktiBayar($buktiBayar),
+            'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+        ]);
+
+        return $pemain->fresh();
+    }
+
+    /**
      * @return array{type: string, items: Collection}
      */
     public function getPublicParticipantList(Turnamen $turnamen): array

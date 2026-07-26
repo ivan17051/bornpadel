@@ -421,8 +421,9 @@ class MatchmakingController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => sprintf(
-                    'Berhasil membuat %d grup Friendly (4 pemain per grup, %s). Tambahkan pertandingan antar grup kapan saja.',
+                    'Berhasil membuat %d grup Friendly dan %d slot pertandingan antar grup (%s). Isi pasangan 2v2 pada setiap slot.',
                     $result['group_count'],
+                    $result['match_slots'],
                     $modeLabel
                 ),
                 'data' => $result,
@@ -612,6 +613,41 @@ class MatchmakingController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Pertandingan Friendly berhasil ditambahkan.',
+            'data' => ['id' => $match->id],
+        ]);
+    }
+
+    public function assignFriendlyPairs(Request $request, Pertandingan $pertandingan)
+    {
+        $request->validate([
+            'side1_pemain_ids' => ['required', 'array', 'size:2'],
+            'side1_pemain_ids.*' => ['required', 'integer', 'exists:m_pemain,id'],
+            'side2_pemain_ids' => ['required', 'array', 'size:2'],
+            'side2_pemain_ids.*' => ['required', 'integer', 'exists:m_pemain,id'],
+        ], [
+            'side1_pemain_ids.size' => 'Sisi 1 harus berisi tepat 2 pemain.',
+            'side2_pemain_ids.size' => 'Sisi 2 harus berisi tepat 2 pemain.',
+        ]);
+
+        try {
+            $turnamen = $this->resolveTournament($request);
+
+            if ((int) $pertandingan->id_turnamen !== (int) $turnamen->id) {
+                throw new RuntimeException('Pertandingan tidak termasuk turnamen ini.');
+            }
+
+            $match = $this->friendlyService->assignPairs(
+                $pertandingan,
+                $request->input('side1_pemain_ids'),
+                $request->input('side2_pemain_ids')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pasangan pertandingan Friendly berhasil disimpan.',
             'data' => ['id' => $match->id],
         ]);
     }
