@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Grup;
 use App\Models\GrupMember;
+use App\Models\Pertandingan;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
 use App\Services\FriendlyMatchmakingService;
@@ -13,7 +15,6 @@ use App\Services\MahjongMatchmakingService;
 use App\Services\MatchScoringService;
 use App\Services\TournamentAccessService;
 use App\Services\TournamentCompletionService;
-use App\Models\Pertandingan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -71,6 +72,9 @@ class MatchmakingController extends Controller
         $isMahjong = $turnamen ? $turnamen->isMahjong() : false;
         $isFriendly = $turnamen ? $turnamen->isFriendly() : false;
         $friendlyMatches = collect();
+        $friendlyUnassigned = collect();
+        $canCreateFriendlySkeleton = false;
+        $canRandomizeFriendlyUnassigned = false;
 
         if ($turnamen) {
             $grupQuery = $isMahjong ? $turnamen->activeGrup() : $turnamen->grup();
@@ -114,6 +118,9 @@ class MatchmakingController extends Controller
 
                         return $match;
                     });
+                $friendlyUnassigned = $this->friendlyService->getUnassignedApprovedEntries($turnamen);
+                $canCreateFriendlySkeleton = $this->friendlyService->canCreateSkeletonGroups($turnamen);
+                $canRandomizeFriendlyUnassigned = $this->friendlyService->canRandomizeUnassigned($turnamen);
             } else {
                 $groupSplitPreview = $this->matchmakingService->previewGroupSplit(
                     $groupingUnitCount,
@@ -159,6 +166,9 @@ class MatchmakingController extends Controller
             'isMahjong' => $isMahjong,
             'isFriendly' => $isFriendly,
             'friendlyMatches' => $friendlyMatches,
+            'friendlyUnassigned' => $friendlyUnassigned,
+            'canCreateFriendlySkeleton' => $canCreateFriendlySkeleton,
+            'canRandomizeFriendlyUnassigned' => $canRandomizeFriendlyUnassigned,
             'canAddFriendlyMatch' => $turnamen && $isFriendly
                 ? $this->friendlyService->canAddMatch($turnamen)
                 : false,
@@ -411,6 +421,21 @@ class MatchmakingController extends Controller
 
         if ($turnamen->isFriendly()) {
             try {
+                if ($turnamen->grup()->exists()) {
+                    $result = $this->friendlyService->randomizeUnassigned($turnamen, $mode);
+                    $modeLabel = $mode === 'by_rating' ? 'berdasarkan rating' : 'secara acak';
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => sprintf(
+                            'Berhasil mengacak %d pemain sisa ke grup (%s).',
+                            $result['assigned_count'],
+                            $modeLabel
+                        ),
+                        'data' => $result,
+                    ]);
+                }
+
                 $result = $this->friendlyService->generateGroups($turnamen, $mode);
             } catch (RuntimeException $e) {
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -421,7 +446,7 @@ class MatchmakingController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => sprintf(
-                    'Berhasil membuat %d grup Friendly dan %d slot pertandingan antar grup (%s). Isi pasangan 2v2 pada setiap slot.',
+                    'Berhasil membuat %d grup Group Match dan %d slot pertandingan antar grup (%s). Isi pasangan 2v2 pada setiap slot.',
                     $result['group_count'],
                     $result['match_slots'],
                     $modeLabel
@@ -669,6 +694,108 @@ class MatchmakingController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Pertandingan Friendly berhasil dihapus.',
+        ]);
+    }
+
+    public function createFriendlySkeletonGroups(Request $request)
+    {
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $result = $this->friendlyService->createSkeletonGroups($turnamen);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => sprintf(
+                'Berhasil membuat %d kerangka grup Group Match. Susun pemain manual, lalu acak sisa bila perlu.',
+                $result['group_count']
+            ),
+            'data' => $result,
+        ]);
+    }
+
+    public function assignFriendlyMember(Request $request)
+    {
+        $request->validate([
+            'id_grup' => ['required', 'integer', 'exists:grup,id'],
+            'id_peserta' => ['required'],
+        ]);
+
+        $pesertaIds = $request->input('id_peserta');
+        if (! is_array($pesertaIds)) {
+            $pesertaIds = [(int) $pesertaIds];
+        }
+
+        $request->merge(['id_peserta' => array_values(array_map('intval', $pesertaIds))]);
+        $request->validate([
+            'id_peserta' => ['required', 'array', 'min:1'],
+            'id_peserta.*' => ['integer', 'exists:turnamen_peserta,id'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $members = $this->friendlyService->assignMembersToGroup(
+                $turnamen,
+                (int) $request->input('id_grup'),
+                $pesertaIds
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        $count = count($members);
+
+        return response()->json([
+            'success' => true,
+            'message' => $count === 1
+                ? 'Pemain berhasil dimasukkan ke grup.'
+                : "{$count} pemain berhasil dimasukkan ke grup.",
+            'data' => [
+                'ids' => collect($members)->pluck('id')->all(),
+                'count' => $count,
+            ],
+        ]);
+    }
+
+    public function unassignFriendlyMember(Request $request, GrupMember $member)
+    {
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $this->friendlyService->unassignMember($turnamen, $member);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pemain dilepas dari grup.',
+        ]);
+    }
+
+    public function renameGrup(Request $request, Grup $grup)
+    {
+        $request->validate([
+            'nama' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveTournament($request);
+
+            if (! $turnamen->isFriendly()) {
+                throw new RuntimeException('Rename grup saat ini hanya untuk Group Match.');
+            }
+
+            $grup = $this->friendlyService->renameGroup($turnamen, $grup, $request->input('nama'));
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Nama grup berhasil diperbarui.',
+            'data' => ['id' => $grup->id, 'nama' => $grup->nama],
         ]);
     }
 

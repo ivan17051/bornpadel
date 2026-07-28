@@ -22,6 +22,28 @@ class FriendlyMatchmakingService
             && ! $turnamen->grup()->exists();
     }
 
+    public function canCreateSkeletonGroups(Turnamen $turnamen): bool
+    {
+        return $this->canGenerateGroups($turnamen)
+            && $this->previewGroupSplit($this->getApprovedEntries($turnamen)->count()) !== null;
+    }
+
+    public function canRandomizeUnassigned(Turnamen $turnamen): bool
+    {
+        return $this->canEditGroups($turnamen)
+            && $this->getUnassignedApprovedEntries($turnamen)->isNotEmpty();
+    }
+
+    public function canRenameGroup(Turnamen $turnamen): bool
+    {
+        return $this->canEditGroups($turnamen);
+    }
+
+    public function canAssignMember(Turnamen $turnamen): bool
+    {
+        return $this->canEditGroups($turnamen);
+    }
+
     public function canEditGroups(Turnamen $turnamen): bool
     {
         return $turnamen->isFriendly()
@@ -133,7 +155,7 @@ class FriendlyMatchmakingService
     public function generateGroups(Turnamen $turnamen, string $mode = 'random'): array
     {
         if (! $this->canGenerateGroups($turnamen)) {
-            throw new RuntimeException('Grup Friendly belum dapat dibuat. Pastikan turnamen ongoing dan belum punya grup.');
+            throw new RuntimeException('Grup Group Match belum dapat dibuat. Pastikan turnamen ongoing dan belum punya grup.');
         }
 
         $entries = $this->getApprovedEntries($turnamen);
@@ -141,7 +163,7 @@ class FriendlyMatchmakingService
 
         if (! $preview) {
             throw new RuntimeException(
-                'Friendly membutuhkan minimal 8 pemain approved dan kelipatan 4 (grup berisi 4 pemain).'
+                'Group Match membutuhkan minimal 8 pemain approved dan kelipatan 4 (grup berisi 4 pemain).'
             );
         }
 
@@ -160,7 +182,7 @@ class FriendlyMatchmakingService
                     'is_aktif' => true,
                     'poin_didapat' => 0,
                     'set_menang' => 0,
-                    'game_menang' => 0,
+                    'games_menang' => 0,
                 ]);
 
                 foreach ($chunk as $peserta) {
@@ -170,7 +192,7 @@ class FriendlyMatchmakingService
                         'id_turnamen_peserta' => $peserta->id,
                         'poin_didapat' => 0,
                         'set_menang' => 0,
-                        'game_menang' => 0,
+                        'games_menang' => 0,
                         'poin_akumulasi' => 0,
                     ]);
                 }
@@ -220,6 +242,324 @@ class FriendlyMatchmakingService
         }
 
         return $slots;
+    }
+
+    public function getUnassignedApprovedEntries(Turnamen $turnamen): Collection
+    {
+        $assignedPesertaIds = GrupMember::query()
+            ->whereHas('grup', function ($query) use ($turnamen) {
+                $query->where('id_turnamen', $turnamen->id);
+            })
+            ->whereNotNull('id_turnamen_peserta')
+            ->pluck('id_turnamen_peserta')
+            ->all();
+
+        return $this->getApprovedEntries($turnamen)
+            ->reject(fn (TurnamenPeserta $peserta) => in_array($peserta->id, $assignedPesertaIds, true))
+            ->values();
+    }
+
+    /**
+     * Create empty groups (Grup A, B, ...) without assigning players.
+     *
+     * @return array{groups: Collection, group_count: int}
+     */
+    public function createSkeletonGroups(Turnamen $turnamen): array
+    {
+        if (! $this->canCreateSkeletonGroups($turnamen)) {
+            throw new RuntimeException('Kerangka grup Group Match belum dapat dibuat.');
+        }
+
+        $entries = $this->getApprovedEntries($turnamen);
+        $preview = $this->previewGroupSplit($entries->count());
+
+        if (! $preview) {
+            throw new RuntimeException(
+                'Group Match membutuhkan minimal 8 pemain approved dan kelipatan 4 (grup berisi 4 pemain).'
+            );
+        }
+
+        return DB::transaction(function () use ($turnamen, $preview) {
+            $groups = collect();
+
+            for ($index = 0; $index < $preview['group_count']; $index++) {
+                $groups->push($this->createEmptyGroup($turnamen, $index));
+            }
+
+            return [
+                'groups' => $groups,
+                'group_count' => $preview['group_count'],
+            ];
+        });
+    }
+
+    /**
+     * Fill only unassigned players into groups that still have open seats.
+     *
+     * @return array{assigned_count: int, match_slots: int, mode: string}
+     */
+    public function randomizeUnassigned(Turnamen $turnamen, string $mode = 'random'): array
+    {
+        if (! $this->canRandomizeUnassigned($turnamen)) {
+            throw new RuntimeException('Tidak ada pemain yang perlu diacak ke grup.');
+        }
+
+        $unassigned = $this->orderEntries($this->getUnassignedApprovedEntries($turnamen), $mode);
+
+        return DB::transaction(function () use ($turnamen, $unassigned, $mode) {
+            $groups = $turnamen->grup()->withCount('members')->orderBy('id')->get();
+            $remainingSeats = $groups->sum(fn (Grup $grup) => max(0, self::PLAYERS_PER_GROUP - (int) $grup->members_count));
+
+            if ($unassigned->count() > $remainingSeats) {
+                throw new RuntimeException(
+                    'Kursi grup tidak cukup untuk semua pemain belum digrup. Tambah kerangka grup atau kurangi pemain.'
+                );
+            }
+
+            $queue = $unassigned->values();
+            $assignedCount = 0;
+
+            foreach ($groups as $grup) {
+                $currentCount = (int) $grup->members()->count();
+                $open = self::PLAYERS_PER_GROUP - $currentCount;
+
+                for ($i = 0; $i < $open && $queue->isNotEmpty(); $i++) {
+                    $peserta = $queue->shift();
+                    $this->createMember($grup, $peserta);
+                    $assignedCount++;
+                }
+            }
+
+            if ($queue->isNotEmpty()) {
+                throw new RuntimeException('Masih ada pemain yang tidak mendapat kursi grup.');
+            }
+
+            $slots = $this->ensureInterGroupSlots($turnamen);
+
+            return [
+                'assigned_count' => $assignedCount,
+                'match_slots' => $slots->count(),
+                'mode' => $mode,
+            ];
+        });
+    }
+
+    public function assignMemberToGroup(Turnamen $turnamen, int $grupId, int $pesertaId): GrupMember
+    {
+        $members = $this->assignMembersToGroup($turnamen, $grupId, [$pesertaId]);
+
+        return $members[0];
+    }
+
+    /**
+     * @param  array<int, int>  $pesertaIds
+     * @return array<int, GrupMember>
+     */
+    public function assignMembersToGroup(Turnamen $turnamen, int $grupId, array $pesertaIds): array
+    {
+        if (! $this->canAssignMember($turnamen)) {
+            throw new RuntimeException('Anggota grup tidak dapat diubah saat ini.');
+        }
+
+        $pesertaIds = array_values(array_unique(array_map('intval', $pesertaIds)));
+
+        if ($pesertaIds === []) {
+            throw new RuntimeException('Pilih minimal satu pemain.');
+        }
+
+        $grup = Grup::where('id_turnamen', $turnamen->id)->where('id', $grupId)->first();
+
+        if (! $grup) {
+            throw new RuntimeException('Grup tidak ditemukan pada turnamen ini.');
+        }
+
+        $currentCount = $grup->members()->count();
+        $slotsRemaining = self::PLAYERS_PER_GROUP - $currentCount;
+
+        if ($slotsRemaining <= 0) {
+            throw new RuntimeException("{$grup->nama} sudah penuh (maksimal 4 pemain).");
+        }
+
+        if (count($pesertaIds) > $slotsRemaining) {
+            throw new RuntimeException("{$grup->nama} hanya punya sisa {$slotsRemaining} slot.");
+        }
+
+        $pesertaList = TurnamenPeserta::query()
+            ->forTurnamen($turnamen->id)
+            ->approved()
+            ->whereIn('id', $pesertaIds)
+            ->get()
+            ->keyBy('id');
+
+        if ($pesertaList->count() !== count($pesertaIds)) {
+            throw new RuntimeException('Ada peserta yang tidak ditemukan atau belum approved.');
+        }
+
+        foreach ($pesertaIds as $pesertaId) {
+            if ($this->isPesertaAssigned($turnamen, $pesertaId)) {
+                $nama = optional($pesertaList->get($pesertaId)->pemain1)->nama ?? 'Pemain';
+                throw new RuntimeException("{$nama} sudah berada di salah satu grup.");
+            }
+        }
+
+        return DB::transaction(function () use ($turnamen, $grup, $pesertaIds, $pesertaList) {
+            $created = [];
+
+            foreach ($pesertaIds as $pesertaId) {
+                $created[] = $this->createMember($grup, $pesertaList->get($pesertaId))
+                    ->load(['pemain', 'turnamenPeserta']);
+            }
+
+            $this->ensureInterGroupSlots($turnamen);
+
+            return $created;
+        });
+    }
+
+    public function unassignMember(Turnamen $turnamen, GrupMember $member): void
+    {
+        if (! $this->canAssignMember($turnamen)) {
+            throw new RuntimeException('Anggota grup tidak dapat diubah saat ini.');
+        }
+
+        $member->loadMissing('grup');
+
+        if (! $member->grup || (int) $member->grup->id_turnamen !== (int) $turnamen->id) {
+            throw new RuntimeException('Anggota tidak termasuk turnamen ini.');
+        }
+
+        if ($this->hasAssignedFriendlyMatches($turnamen)) {
+            throw new RuntimeException('Anggota tidak dapat dilepas setelah pasangan pertandingan diisi.');
+        }
+
+        DB::transaction(function () use ($turnamen, $member) {
+            $member->delete();
+
+            // Drop empty fixtures so they can be regenerated after groups are complete again.
+            Pertandingan::where('id_turnamen', $turnamen->id)
+                ->where('nama_ronde', 'Friendly')
+                ->whereNull('id_pemain1')
+                ->delete();
+        });
+    }
+
+    public function renameGroup(Turnamen $turnamen, Grup $grup, string $nama): Grup
+    {
+        if (! $this->canRenameGroup($turnamen)) {
+            throw new RuntimeException('Nama grup tidak dapat diubah saat ini.');
+        }
+
+        if ((int) $grup->id_turnamen !== (int) $turnamen->id) {
+            throw new RuntimeException('Grup tidak termasuk turnamen ini.');
+        }
+
+        $nama = trim($nama);
+
+        if ($nama === '') {
+            throw new RuntimeException('Nama grup wajib diisi.');
+        }
+
+        if (mb_strlen($nama) > 255) {
+            throw new RuntimeException('Nama grup maksimal 255 karakter.');
+        }
+
+        $duplicate = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('nama', $nama)
+            ->where('id', '!=', $grup->id)
+            ->exists();
+
+        if ($duplicate) {
+            throw new RuntimeException('Nama grup sudah digunakan pada turnamen ini.');
+        }
+
+        $grup->update(['nama' => $nama]);
+
+        return $grup->fresh();
+    }
+
+    public function areGroupsComplete(Turnamen $turnamen): bool
+    {
+        $entries = $this->getApprovedEntries($turnamen);
+        $preview = $this->previewGroupSplit($entries->count());
+
+        if (! $preview) {
+            return false;
+        }
+
+        $groups = $turnamen->grup()->withCount('members')->get();
+
+        if ($groups->count() !== $preview['group_count']) {
+            return false;
+        }
+
+        if ($this->getUnassignedApprovedEntries($turnamen)->isNotEmpty()) {
+            return false;
+        }
+
+        return $groups->every(fn (Grup $grup) => (int) $grup->members_count === self::PLAYERS_PER_GROUP);
+    }
+
+    public function hasFriendlyMatchSlots(Turnamen $turnamen): bool
+    {
+        return $turnamen->pertandingan()
+            ->where('nama_ronde', 'Friendly')
+            ->exists();
+    }
+
+    /**
+     * @return Collection<int, Pertandingan>
+     */
+    public function ensureInterGroupSlots(Turnamen $turnamen): Collection
+    {
+        if ($this->hasFriendlyMatchSlots($turnamen)) {
+            return $this->getMatches($turnamen);
+        }
+
+        if (! $this->areGroupsComplete($turnamen)) {
+            return collect();
+        }
+
+        $groups = $turnamen->grup()->orderBy('id')->get();
+
+        return $this->createInterGroupSlots($turnamen, $groups);
+    }
+
+    protected function createEmptyGroup(Turnamen $turnamen, int $index): Grup
+    {
+        return Grup::create([
+            'id_turnamen' => $turnamen->id,
+            'nama' => 'Grup ' . chr(65 + $index),
+            'babak' => 1,
+            'ronde' => 1,
+            'is_aktif' => true,
+            'poin_didapat' => 0,
+            'set_menang' => 0,
+            'games_menang' => 0,
+        ]);
+    }
+
+    protected function createMember(Grup $grup, TurnamenPeserta $peserta): GrupMember
+    {
+        return GrupMember::create([
+            'id_grup' => $grup->id,
+            'id_pemain' => $peserta->id_pemain1,
+            'id_turnamen_peserta' => $peserta->id,
+            'poin_didapat' => 0,
+            'set_menang' => 0,
+            'games_menang' => 0,
+            'poin_akumulasi' => 0,
+        ]);
+    }
+
+    protected function isPesertaAssigned(Turnamen $turnamen, int $pesertaId): bool
+    {
+        return GrupMember::query()
+            ->where('id_turnamen_peserta', $pesertaId)
+            ->whereHas('grup', function ($query) use ($turnamen) {
+                $query->where('id_turnamen', $turnamen->id);
+            })
+            ->exists();
     }
 
     /**

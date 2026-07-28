@@ -56,11 +56,13 @@
                         @elseif ($isMahjong && $canReshuffle)
                             Grup Mahjong aktif. Input poin per pemain, reshuffle kapan saja, atau lanjut ke babak berikutnya.
                         @elseif ($isFriendly && ($canAddFriendlyMatch ?? false))
-                            Grup Friendly aktif. Slot pertandingan antar grup sudah dibuat — isi pasangan (2 pemain) per sisi, atau tambah tanding ekstra.
+                            Grup Group Match aktif. Slot pertandingan antar grup sudah dibuat — isi pasangan (2 pemain) per sisi, atau tambah tanding ekstra.
+                        @elseif ($isFriendly && $grup->isNotEmpty() && ($friendlyUnassigned ?? collect())->isNotEmpty())
+                            Susun pemain ke grup secara manual, atau acak hanya pemain yang belum digrup.
                         @elseif ($isFriendly && $grup->isNotEmpty())
-                            Grup Friendly sudah dibuat. Klasemen dihitung dari hasil tanding antar grup.
+                            Grup Group Match sudah dibuat. Klasemen dihitung dari hasil tanding antar grup.
                         @elseif ($canRandomGrup && $isFriendly)
-                            Pendaftaran ditutup. Buat grup Friendly (4 pemain per grup). Slot pertandingan antar grup dibuat otomatis.
+                            Pendaftaran ditutup. Buat kerangka grup dulu (susun manual), atau isi semua sekaligus secara acak/rating. Slot pertandingan dibuat otomatis saat semua grup penuh.
                         @elseif ($canRandomGrup && $isMahjong)
                             Pendaftaran ditutup. Buat grup Mahjong (4 pemain per grup, jumlah approved harus kelipatan 4).
                         @elseif ($groupsEditable)
@@ -72,7 +74,7 @@
                         @elseif ($canEndGroupStage && ! $isMahjong && ! $isFriendly)
                             Semua pertandingan fase grup selesai. Klik "End Group Stage" untuk membuat bracket.
                         @elseif ($grup->isNotEmpty())
-                            {{ $isMahjong ? 'Grup Mahjong sudah dibuat.' : ($isFriendly ? 'Grup Friendly sudah dibuat.' : 'Matchmaking fase grup sudah dibuat dan susunan grup dikunci.') }}
+                            {{ $isMahjong ? 'Grup Mahjong sudah dibuat.' : ($isFriendly ? 'Grup Group Match sudah dibuat.' : 'Matchmaking fase grup sudah dibuat dan susunan grup dikunci.') }}
                         @else
                             Turnamen tidak siap untuk matchmaking.
                         @endif
@@ -82,7 +84,7 @@
                     @if ($canRandomGrup && ($isMahjong || $isFriendly))
                         <div class="card bg-light border-0 mb-3">
                             <div class="card-body py-3">
-                                <h6 class="text-muted text-uppercase small mb-2">{{ $isFriendly ? 'Friendly' : 'Mahjong' }}</h6>
+                                <h6 class="text-muted text-uppercase small mb-2">{{ $isFriendly ? 'Group Match' : 'Mahjong' }}</h6>
                                 <div id="group-split-preview"
                                      class="small text-muted"
                                      data-approved="{{ $approvedCount }}"
@@ -141,24 +143,53 @@
                             </button>
                         @endif
                         @if ($canRandomGrup && ($isMahjong || $isFriendly))
-                            <button type="button"
-                                    class="btn btn-primary btn-matchmaking-grup"
-                                    data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                    data-turnamen="{{ $turnamen->id }}"
-                                    data-mode="random"
-                                    data-mahjong="{{ $isMahjong ? '1' : '0' }}"
-                                    data-friendly="{{ $isFriendly ? '1' : '0' }}">
-                                <i class="bi bi-shuffle me-1"></i> Buat Grup
-                            </button>
-                            <button type="button"
-                                    class="btn btn-secondary btn-matchmaking-grup"
-                                    data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                    data-turnamen="{{ $turnamen->id }}"
-                                    data-mode="by_rating"
-                                    data-mahjong="{{ $isMahjong ? '1' : '0' }}"
-                                    data-friendly="{{ $isFriendly ? '1' : '0' }}">
-                                <i class="bi bi-bar-chart-steps me-1"></i> Grup by Rating
-                            </button>
+                            @if ($isFriendly && ($canCreateFriendlySkeleton ?? false))
+                                <button type="button"
+                                        class="btn btn-outline-primary btn-friendly-skeleton"
+                                        data-url="{{ route('admin.matchmaking.friendly.skeleton') }}"
+                                        data-turnamen="{{ $turnamen->id }}">
+                                    <i class="bi bi-grid-3x3-gap me-1"></i> Buat Kerangka Grup
+                                </button>
+                            @endif
+                            @if ($isMahjong || ($isFriendly && $grup->isEmpty()))
+                                <button type="button"
+                                        class="btn btn-primary btn-matchmaking-grup"
+                                        data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-mode="random"
+                                        data-mahjong="{{ $isMahjong ? '1' : '0' }}"
+                                        data-friendly="{{ $isFriendly ? '1' : '0' }}">
+                                    <i class="bi bi-shuffle me-1"></i> {{ $isFriendly ? 'Isi Semua Acak' : 'Buat Grup' }}
+                                </button>
+                                <button type="button"
+                                        class="btn btn-secondary btn-matchmaking-grup"
+                                        data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-mode="by_rating"
+                                        data-mahjong="{{ $isMahjong ? '1' : '0' }}"
+                                        data-friendly="{{ $isFriendly ? '1' : '0' }}">
+                                    <i class="bi bi-bar-chart-steps me-1"></i> {{ $isFriendly ? 'Isi Semua by Rating' : 'Grup by Rating' }}
+                                </button>
+                            @elseif ($isFriendly && ($canRandomizeFriendlyUnassigned ?? false))
+                                <button type="button"
+                                        class="btn btn-primary btn-matchmaking-grup"
+                                        data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-mode="random"
+                                        data-mahjong="0"
+                                        data-friendly="1">
+                                    <i class="bi bi-shuffle me-1"></i> Acak Sisa
+                                </button>
+                                <button type="button"
+                                        class="btn btn-secondary btn-matchmaking-grup"
+                                        data-url="{{ route('admin.matchmaking.random-grup') }}"
+                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-mode="by_rating"
+                                        data-mahjong="0"
+                                        data-friendly="1">
+                                    <i class="bi bi-bar-chart-steps me-1"></i> Acak Sisa by Rating
+                                </button>
+                            @endif
                         @endif
                         @if (($canGenerateGroupMatches ?? false) && ! $isFriendly)
                             <button type="button"
@@ -235,12 +266,31 @@
     </div>
 
     @if ($grup->isNotEmpty())
+        @php
+            $friendlyUnassignedOptions = ($isFriendly ? ($friendlyUnassigned ?? collect()) : collect())->map(function ($peserta) {
+                $pemain = $peserta->pemain1;
+                $nama = optional($pemain)->nama ?? 'Pemain';
+                $rating = number_format((float) optional($pemain)->rating, 1);
+
+                return [
+                    'id' => $peserta->id,
+                    'text' => "{$nama} (Rating {$rating})",
+                ];
+            })->values();
+        @endphp
         <div class="accordion matchmaking-groups-accordion mb-3" id="matchmaking-groups-accordion"
              @if ($groupsEditable)
                  data-group-swap="1"
                  data-swap-url="{{ route('admin.matchmaking.swap-group-members') }}"
                  data-turnamen="{{ $turnamen->id }}"
                  data-unit-label="{{ $unitLabel }}"
+                 @if ($isFriendly)
+                     data-friendly-edit="1"
+                     data-assign-url="{{ route('admin.matchmaking.friendly.assign') }}"
+                     data-unassigned='@json($friendlyUnassignedOptions)'
+                     data-rename-url-template="{{ route('admin.matchmaking.grup.rename', ['grup' => '__ID__']) }}"
+                     data-unassign-url-template="{{ route('admin.matchmaking.friendly.unassign', ['member' => '__ID__']) }}"
+                 @endif
              @endif>
         @if ($isMahjong)
             @foreach ($grup as $g)
@@ -313,24 +363,62 @@
             @endforeach
         @else
             @foreach ($grup as $g)
-                <div class="accordion-item">
+                @php
+                    $friendlySlotsRemaining = $isFriendly
+                        ? max(0, 4 - $g->members->count())
+                        : 0;
+                    $canAssignFriendlyMembers = $isFriendly
+                        && ($groupsEditable ?? false)
+                        && $friendlySlotsRemaining > 0
+                        && ($friendlyUnassigned ?? collect())->isNotEmpty();
+                @endphp
+                <div class="accordion-item"
+                     @if ($isFriendly && ($groupsEditable ?? false))
+                         data-friendly-grup="1"
+                         data-grup-id="{{ $g->id }}"
+                         data-grup-name="{{ $g->nama }}"
+                         data-member-count="{{ $g->members->count() }}"
+                         data-slots-remaining="{{ $friendlySlotsRemaining }}"
+                     @endif>
                     <h2 class="accordion-header" id="group-heading-{{ $g->id }}">
-                        <button class="accordion-button {{ $expandGroupsByDefault ? '' : 'collapsed' }}"
+                        <button class="accordion-button {{ $expandGroupsByDefault ? '' : 'collapsed' }} {{ $canAssignFriendlyMembers ? 'friendly-grup-assign-trigger' : '' }}"
                                 type="button"
                                 data-bs-toggle="collapse"
                                 data-bs-target="#group-collapse-{{ $g->id }}"
                                 aria-expanded="{{ $expandGroupsByDefault ? 'true' : 'false' }}"
-                                aria-controls="group-collapse-{{ $g->id }}">
+                                aria-controls="group-collapse-{{ $g->id }}"
+                                @if ($canAssignFriendlyMembers)
+                                    title="Klik untuk menambah pemain ke grup"
+                                @endif>
                             <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
-                                <span><i class="bi bi-diagram-3 me-1"></i>{{ $g->nama }}</span>
+                                <span class="d-inline-flex align-items-center gap-1">
+                                    <i class="bi bi-diagram-3 me-1"></i>
+                                    <span class="group-name-label">{{ $g->nama }}</span>
+                                    @if ($isFriendly && $groupsEditable)
+                                        <button type="button"
+                                                class="btn btn-link btn-sm p-0 text-primary btn-rename-grup"
+                                                data-grup-id="{{ $g->id }}"
+                                                data-grup-name="{{ $g->nama }}"
+                                                title="Ubah nama grup"
+                                                onclick="event.stopPropagation();">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    @endif
+                                </span>
                                 <span class="badge text-bg-info ms-auto">
                                     {{ $g->members->count() }} {{ $unitLabel }}
                                     @if ($isFriendly)
                                         · Poin {{ (int) $g->poin_didapat }}
+                                        · {{ $g->members->count() }}/4
                                     @else
                                         · {{ $g->pertandingan->count() }} pertandingan
                                     @endif
                                 </span>
+                                @if ($canAssignFriendlyMembers)
+                                    <span class="badge text-bg-primary">
+                                        <i class="bi bi-person-plus me-1"></i>Tambah pemain
+                                    </span>
+                                @endif
                             </span>
                         </button>
                     </h2>
@@ -339,15 +427,17 @@
                          aria-labelledby="group-heading-{{ $g->id }}">
                         <div class="accordion-body">
                         <div class="row">
-                            <div class="col-md-5 mb-3 mb-md-0">
+                            <div class="{{ $isFriendly ? 'col-12' : 'col-md-5 mb-3 mb-md-0' }}">
                                 <h6 class="text-muted text-uppercase small">
                                     Anggota Grup
-                                    @if ($groupsEditable)
+                                    @if ($groupsEditable && $isFriendly)
+                                        <span class="fw-normal text-lowercase">— klik grup untuk menambah, atau lepas anggota</span>
+                                    @elseif ($groupsEditable)
                                         <span class="fw-normal text-lowercase">— klik untuk tukar</span>
                                     @endif
                                 </h6>
                                 <ul class="list-group list-group-flush">
-                                    @foreach ($g->members as $member)
+                                    @forelse ($g->members as $member)
                                         @php
                                             $ratingLabel = $turnamen->isDouble()
                                                 ? number_format(optional($member->turnamenPeserta)->average_rating ?? 0, 1)
@@ -370,9 +460,32 @@
                                                 @endif
                                                 {{ $member->display_name }}
                                             </span>
-                                            <small class="text-muted">Rating {{ $ratingLabel }}</small>
+                                            <span class="d-inline-flex align-items-center gap-2">
+                                                <small class="text-muted">Rating {{ $ratingLabel }}</small>
+                                                @if ($isFriendly && $groupsEditable)
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-danger btn-friendly-unassign"
+                                                            data-member-id="{{ $member->id }}"
+                                                            title="Lepas dari grup"
+                                                            onclick="event.stopPropagation();">
+                                                        <i class="bi bi-x-lg"></i>
+                                                    </button>
+                                                @endif
+                                            </span>
                                         </li>
-                                    @endforeach
+                                    @empty
+                                        @if ($canAssignFriendlyMembers)
+                                            <li class="list-group-item px-0 text-muted">
+                                                Belum ada anggota.
+                                                <button type="button"
+                                                        class="btn btn-link btn-sm p-0 align-baseline friendly-grup-assign-open">
+                                                    Tambah pemain
+                                                </button>
+                                            </li>
+                                        @else
+                                            <li class="list-group-item px-0 text-muted">Belum ada anggota.</li>
+                                        @endif
+                                    @endforelse
                                 </ul>
                             </div>
                             @unless ($isFriendly)
@@ -466,6 +579,33 @@
 
     @if ($isFriendly && $grup->isNotEmpty())
         @include('admin.matchmaking.partials.friendly-matches')
+    @endif
+
+    @if ($isFriendly && ($groupsEditable ?? false) && $grup->isNotEmpty())
+        <div class="modal fade" id="friendlyAssignModal" tabindex="-1" aria-labelledby="friendlyAssignModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="friendlyAssignModalLabel">Tambah Pemain ke Grup</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3" id="friendly-assign-help">
+                            Pilih satu atau beberapa pemain yang belum digrup.
+                        </p>
+                        <label for="friendly-assign-peserta" class="form-label">Pemain</label>
+                        <select id="friendly-assign-peserta" class="form-select" multiple></select>
+                        <div class="form-text" id="friendly-assign-slots-hint"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-primary" id="btn-save-friendly-assign">
+                            <i class="bi bi-check-lg me-1"></i> Simpan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     @endif
 
     @if (! ($isMahjong ?? false) && ! ($isFriendly ?? false) && ! empty($knockoutRounds) && collect($knockoutRounds)->isNotEmpty())

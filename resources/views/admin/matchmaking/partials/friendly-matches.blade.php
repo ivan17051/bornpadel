@@ -24,7 +24,7 @@
      data-groups='@json($groupsPayload)'>
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="card-title mb-0">
-            <i class="bi bi-lightning-charge me-1"></i> Pertandingan Friendly
+            <i class="bi bi-lightning-charge me-1"></i> Pertandingan Group Match
         </h5>
         @if ($canAddFriendlyMatch)
             <button type="button" class="btn btn-sm btn-primary ms-auto" id="btn-open-friendly-match-modal"
@@ -149,7 +149,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="friendlyMatchModalLabel">Tambah Pertandingan Friendly</h5>
+                <h5 class="modal-title" id="friendlyMatchModalLabel">Tambah Pertandingan Group Match</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
             </div>
             <div class="modal-body">

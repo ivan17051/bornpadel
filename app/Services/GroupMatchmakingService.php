@@ -170,7 +170,10 @@ class GroupMatchmakingService
         }
 
         if ($turnamen->isFriendly()) {
-            return app(FriendlyMatchmakingService::class)->canGenerateGroups($turnamen);
+            $friendly = app(FriendlyMatchmakingService::class);
+
+            return $friendly->canGenerateGroups($turnamen)
+                || $friendly->canRandomizeUnassigned($turnamen);
         }
 
         return $turnamen->status === 'ongoing'

@@ -106,6 +106,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/matchmaking/friendly-match', [MatchmakingController::class, 'createFriendlyMatch'])->name('matchmaking.friendly-match.store');
         Route::post('/matchmaking/friendly-match/{pertandingan}/pairs', [MatchmakingController::class, 'assignFriendlyPairs'])->name('matchmaking.friendly-match.pairs');
         Route::delete('/matchmaking/friendly-match/{pertandingan}', [MatchmakingController::class, 'deleteFriendlyMatch'])->name('matchmaking.friendly-match.destroy');
+        Route::post('/matchmaking/friendly/skeleton-groups', [MatchmakingController::class, 'createFriendlySkeletonGroups'])->name('matchmaking.friendly.skeleton');
+        Route::post('/matchmaking/friendly/assign-member', [MatchmakingController::class, 'assignFriendlyMember'])->name('matchmaking.friendly.assign');
+        Route::delete('/matchmaking/friendly/member/{member}', [MatchmakingController::class, 'unassignFriendlyMember'])->name('matchmaking.friendly.unassign');
+        Route::patch('/matchmaking/grup/{grup}', [MatchmakingController::class, 'renameGrup'])->name('matchmaking.grup.rename');
 
         Route::get('/bracket', [AdminBracketController::class, 'index'])->name('bracket.index');
         Route::patch('/bracket/swap', [AdminBracketController::class, 'swap'])->name('bracket.swap');

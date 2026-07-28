@@ -253,7 +253,7 @@
 
     const renderFriendlyStandings = (rows) => {
         if (!rows || rows.length === 0) {
-            renderEmpty('Klasemen Friendly');
+            renderEmpty('Klasemen Group Match');
             return;
         }
 
@@ -272,7 +272,7 @@
                 </tr>`;
         }).join('');
 
-        container.innerHTML = renderHeader('Klasemen Friendly') + `
+        container.innerHTML = renderHeader('Klasemen Group Match') + `
             <div class="card border-0 shadow-sm">
                 <div class="card-body p-0">
                     <div class="table-responsive">

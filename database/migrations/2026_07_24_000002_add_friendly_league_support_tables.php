@@ -17,11 +17,12 @@ class AddFriendlyLeagueSupportTables extends Migration
                 if (! Schema::hasColumn('grup', 'set_menang')) {
                     $table->integer('set_menang')->default(0)->after('poin_didapat');
                 }
-                if (! Schema::hasColumn('grup', 'games_menang')) {
+                if (! Schema::hasColumn('grup', 'game_menang') && ! Schema::hasColumn('grup', 'games_menang')) {
                     $table->integer('games_menang')->default(0)->after('set_menang');
                 }
                 if (! Schema::hasColumn('grup', 'stats_reached_at')) {
-                    $table->timestamp('stats_reached_at')->nullable()->after('games_menang');
+                    $after = Schema::hasColumn('grup', 'games_menang') ? 'games_menang' : (Schema::hasColumn('grup', 'game_menang') ? 'game_menang' : 'set_menang');
+                    $table->timestamp('stats_reached_at')->nullable()->after($after);
                 }
             });
         }
@@ -42,7 +43,12 @@ class AddFriendlyLeagueSupportTables extends Migration
                 }
             });
 
-            DB::statement("ALTER TABLE pertandingan MODIFY nama_ronde ENUM('Fase Grup', 'Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final', 'Perebutan Juara 3', 'Friendly') NOT NULL");
+            $column = DB::select("SHOW COLUMNS FROM pertandingan LIKE 'nama_ronde'");
+            $type = strtolower((string) optional($column[0] ?? null)->Type);
+
+            if (! str_contains($type, "'friendly'")) {
+                DB::statement("ALTER TABLE pertandingan MODIFY nama_ronde ENUM('Fase Grup', 'Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final', 'Perebutan Juara 3', 'Friendly') NOT NULL");
+            }
         }
     }
 
@@ -63,7 +69,7 @@ class AddFriendlyLeagueSupportTables extends Migration
 
         if (Schema::hasTable('grup')) {
             Schema::table('grup', function (Blueprint $table) {
-                foreach (['poin_didapat', 'set_menang', 'games_menang', 'stats_reached_at'] as $column) {
+                foreach (['poin_didapat', 'set_menang', 'games_menang', 'game_menang', 'stats_reached_at'] as $column) {
                     if (Schema::hasColumn('grup', $column)) {
                         $table->dropColumn($column);
                     }

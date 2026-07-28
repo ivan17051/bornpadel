@@ -12,6 +12,13 @@ class AddCancelledStatusToPertandinganTable extends Migration
             return;
         }
 
+        $column = DB::select("SHOW COLUMNS FROM pertandingan LIKE 'status'");
+        $type = strtolower((string) optional($column[0] ?? null)->Type);
+
+        if (str_contains($type, "'cancelled'")) {
+            return;
+        }
+
         DB::statement(
             "ALTER TABLE pertandingan MODIFY status ENUM('scheduled', 'ongoing', 'completed', 'cancelled') NOT NULL DEFAULT 'scheduled'"
         );

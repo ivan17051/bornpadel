@@ -120,7 +120,7 @@ class Turnamen extends Model
         }
 
         if ($this->jenis === 'friendly') {
-            return 'Friendly';
+            return 'Group Match';
         }
 
         return 'Single';

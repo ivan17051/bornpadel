@@ -1315,7 +1315,7 @@ const BornPadelAdmin = (function () {
                 assignMatchId = null;
                 prefillSide1 = [];
                 prefillSide2 = [];
-                if (titleEl) titleEl.textContent = 'Tambah Pertandingan Friendly';
+                if (titleEl) titleEl.textContent = 'Tambah Pertandingan Group Match';
                 if (helpEl) {
                     helpEl.textContent = 'Pilih 2 grup yang bertanding, lalu pilih 2 pemain dari masing-masing grup. Pemain boleh bermain berulang; anggota grup boleh tidak ikut tanding.';
                 }
@@ -1334,7 +1334,7 @@ const BornPadelAdmin = (function () {
                 assignMatchId = matchId;
                 prefillSide1 = side1 || [];
                 prefillSide2 = side2 || [];
-                if (titleEl) titleEl.textContent = 'Isi Pasangan Friendly';
+                if (titleEl) titleEl.textContent = 'Isi Pasangan Group Match';
                 if (helpEl) {
                     helpEl.textContent = 'Pilih 2 pemain dari masing-masing grup untuk slot ini. Pasangan bisa diubah selama skor belum diisi.';
                 }
@@ -1432,7 +1432,7 @@ const BornPadelAdmin = (function () {
                             side1_pemain_ids: side1,
                             side2_pemain_ids: side2,
                         });
-                        showAlert('Pertandingan Friendly berhasil ditambahkan.', 'success');
+                        showAlert('Pertandingan Group Match berhasil ditambahkan.', 'success');
                     }
                     reloadPage();
                 } catch (e) {
@@ -1477,7 +1477,7 @@ const BornPadelAdmin = (function () {
                 const confirmed = await confirmAction({
                     title: 'Selesaikan turnamen?',
                     text: isFriendly
-                        ? 'Klasemen grup Friendly akan dikunci. Total poin pemain tidak berubah.'
+                        ? 'Klasemen Group Match akan dikunci. Total poin pemain tidak berubah.'
                         : (pendingThirdPlace
                             ? 'Juara 3 belum dimainkan. Lanjut tanpa perebutan juara 3? Pertandingan itu akan dibatalkan, lalu poin bonus juara akan ditambahkan.'
                             : 'Poin bonus juara 1, 2, dan 3 akan ditambahkan ke total poin pemain.'),
@@ -1510,12 +1510,18 @@ const BornPadelAdmin = (function () {
             btn.addEventListener('click', async () => {
                 const mode = btn.dataset.mode || 'random';
                 const isMahjong = btn.dataset.mahjong === '1';
+                const isFriendly = btn.dataset.friendly === '1';
                 const total = parseInt(previewEl?.dataset.approved || '0', 10);
 
                 let previewText;
-                if (isMahjong) {
-                    if (total < 4 || total % 4 !== 0) {
-                        showAlert('Jumlah pemain approved harus minimal 4 dan kelipatan 4.', 'error');
+                if (isMahjong || isFriendly) {
+                    if (total < (isFriendly ? 8 : 4) || total % 4 !== 0) {
+                        showAlert(
+                            isFriendly
+                                ? 'Jumlah pemain approved harus minimal 8 dan kelipatan 4.'
+                                : 'Jumlah pemain approved harus minimal 4 dan kelipatan 4.',
+                            'error'
+                        );
                         return;
                     }
                     previewText = `${total} pemain → ${total / 4} grup (4 pemain per grup)`;
@@ -1537,18 +1543,26 @@ const BornPadelAdmin = (function () {
 
                 const confirmed = await confirmAction(mode === 'by_rating'
                     ? {
-                        title: isMahjong ? 'Buat grup berdasarkan rating?' : 'Kelompokkan pemain berdasarkan rating?',
+                        title: isFriendly
+                            ? 'Isi grup Group Match berdasarkan rating?'
+                            : (isMahjong ? 'Buat grup berdasarkan rating?' : 'Kelompokkan pemain berdasarkan rating?'),
                         text: isMahjong
                             ? `${previewText}. Tidak ada pertandingan head-to-head.`
-                            : `${previewText}. Grup dapat diubah kembali sebelum matchmaking dibuat.`,
-                        confirmText: isMahjong ? 'Ya, buat grup' : 'Ya, buat grup rating',
+                            : (isFriendly
+                                ? `${previewText}. Hanya pemain belum digrup yang diacak (jika kerangka sudah ada).`
+                                : `${previewText}. Grup dapat diubah kembali sebelum matchmaking dibuat.`),
+                        confirmText: isFriendly || isMahjong ? 'Ya, lanjutkan' : 'Ya, buat grup rating',
                     }
                     : {
-                        title: isMahjong ? 'Buat grup Mahjong?' : 'Acak pemain ke grup?',
+                        title: isFriendly
+                            ? 'Acak pemain Group Match ke grup?'
+                            : (isMahjong ? 'Buat grup Mahjong?' : 'Acak pemain ke grup?'),
                         text: isMahjong
                             ? `${previewText}. Tidak ada pertandingan head-to-head.`
-                            : `${previewText}. Grup dapat diubah kembali sebelum matchmaking dibuat.`,
-                        confirmText: isMahjong ? 'Ya, buat grup' : 'Ya, random grup',
+                            : (isFriendly
+                                ? `${previewText}. Hanya pemain belum digrup yang diacak (jika kerangka sudah ada).`
+                                : `${previewText}. Grup dapat diubah kembali sebelum matchmaking dibuat.`),
+                        confirmText: isFriendly || isMahjong ? 'Ya, lanjutkan' : 'Ya, random grup',
                     });
                 if (!confirmed) return;
 
@@ -1561,7 +1575,7 @@ const BornPadelAdmin = (function () {
                         mode,
                     };
 
-                    if (!isMahjong) {
+                    if (!isMahjong && !isFriendly) {
                         Object.assign(payload, getGroupSettings());
                     }
 
@@ -1574,6 +1588,265 @@ const BornPadelAdmin = (function () {
                 }
             });
         });
+
+        document.querySelectorAll('.btn-friendly-skeleton').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const confirmed = await confirmAction({
+                    title: 'Buat kerangka grup kosong?',
+                    text: 'Grup A, B, C, … akan dibuat tanpa anggota. Anda bisa menyusun manual lalu acak sisa.',
+                    confirmText: 'Ya, buat kerangka',
+                });
+                if (!confirmed) return;
+
+                const original = btn.innerHTML;
+                setButtonLoading(btn, true);
+
+                try {
+                    const data = await apiRequest(btn.dataset.url, 'POST', {
+                        id_turnamen: parseInt(btn.dataset.turnamen, 10),
+                    });
+                    showToast(data.message);
+                    reloadPage();
+                } catch (e) {
+                    showToast(e.message, 'error');
+                    setButtonLoading(btn, false, original);
+                }
+            });
+        });
+
+        const initFriendlyAssignModal = () => {
+            if (!groupSwapContainer || groupSwapContainer.dataset.friendlyEdit !== '1') {
+                return;
+            }
+
+            const modalEl = document.getElementById('friendlyAssignModal');
+            const selectEl = document.getElementById('friendly-assign-peserta');
+            const saveBtn = document.getElementById('btn-save-friendly-assign');
+            const helpEl = document.getElementById('friendly-assign-help');
+            const slotsHintEl = document.getElementById('friendly-assign-slots-hint');
+            const titleEl = document.getElementById('friendlyAssignModalLabel');
+
+            if (!modalEl || !selectEl || !saveBtn) {
+                return;
+            }
+
+            if (typeof jQuery === 'undefined' || !jQuery.fn.select2) {
+                return;
+            }
+
+            const $ = jQuery;
+
+            if (modalEl.parentElement !== document.body) {
+                document.body.appendChild(modalEl);
+            }
+
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            const $select = $(selectEl);
+            let activeGrup = null;
+
+            let unassignedOptions = [];
+            try {
+                unassignedOptions = JSON.parse(groupSwapContainer.dataset.unassigned || '[]');
+            } catch (e) {
+                unassignedOptions = [];
+            }
+
+            const destroySelect2 = () => {
+                if ($select.hasClass('select2-hidden-accessible')) {
+                    $select.select2('destroy');
+                }
+            };
+
+            const openAssignModal = (item) => {
+                const slotsRemaining = parseInt(item.dataset.slotsRemaining || '0', 10);
+                if (slotsRemaining <= 0) {
+                    showAlert('Grup ini sudah penuh.', 'warning');
+                    return;
+                }
+
+                if (!unassignedOptions.length) {
+                    showAlert('Tidak ada pemain yang belum digrup.', 'info');
+                    return;
+                }
+
+                activeGrup = {
+                    id: parseInt(item.dataset.grupId, 10),
+                    name: item.dataset.grupName || 'Grup',
+                    slotsRemaining,
+                };
+
+                if (titleEl) {
+                    titleEl.textContent = `Tambah Pemain — ${activeGrup.name}`;
+                }
+                if (helpEl) {
+                    helpEl.textContent = `Pilih hingga ${slotsRemaining} pemain yang belum digrup untuk ${activeGrup.name}.`;
+                }
+                if (slotsHintEl) {
+                    slotsHintEl.textContent = `Sisa slot: ${slotsRemaining} dari 4.`;
+                }
+
+                destroySelect2();
+                selectEl.innerHTML = '';
+                unassignedOptions.forEach((opt) => {
+                    const option = document.createElement('option');
+                    option.value = String(opt.id);
+                    option.textContent = opt.text;
+                    selectEl.appendChild(option);
+                });
+
+                $select.select2({
+                    theme: 'bootstrap-5',
+                    dropdownParent: $(modalEl),
+                    placeholder: 'Cari dan pilih pemain...',
+                    allowClear: true,
+                    width: '100%',
+                    closeOnSelect: false,
+                    maximumSelectionLength: slotsRemaining,
+                });
+
+                $select.val(null).trigger('change');
+                modal.show();
+            };
+
+            groupSwapContainer.querySelectorAll('.accordion-item[data-friendly-grup="1"]').forEach((item) => {
+                const trigger = item.querySelector('.friendly-grup-assign-trigger');
+                if (trigger) {
+                    trigger.addEventListener('click', (event) => {
+                        if (event.target.closest('.btn-rename-grup')) {
+                            return;
+                        }
+
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        openAssignModal(item);
+                    }, true);
+                }
+
+                item.querySelectorAll('.friendly-grup-assign-open').forEach((btn) => {
+                    btn.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openAssignModal(item);
+                    });
+                });
+            });
+
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                destroySelect2();
+                activeGrup = null;
+            });
+
+            saveBtn.addEventListener('click', async () => {
+                if (!activeGrup) {
+                    return;
+                }
+
+                const selected = ($select.val() || []).map((id) => parseInt(id, 10)).filter(Boolean);
+
+                if (!selected.length) {
+                    showAlert('Pilih minimal satu pemain.', 'warning');
+                    return;
+                }
+
+                if (selected.length > activeGrup.slotsRemaining) {
+                    showAlert(`Maksimal ${activeGrup.slotsRemaining} pemain untuk grup ini.`, 'warning');
+                    return;
+                }
+
+                const original = saveBtn.innerHTML;
+                setButtonLoading(saveBtn, true);
+
+                try {
+                    const data = await apiRequest(groupSwapContainer.dataset.assignUrl, 'POST', {
+                        id_turnamen: parseInt(groupSwapContainer.dataset.turnamen, 10),
+                        id_grup: activeGrup.id,
+                        id_peserta: selected,
+                    });
+                    modal.hide();
+                    showAlert(data.message || 'Pemain dimasukkan ke grup.', 'success');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                    setButtonLoading(saveBtn, false, original);
+                }
+            });
+        };
+
+        initFriendlyAssignModal();
+
+        if (groupSwapContainer && groupSwapContainer.dataset.friendlyEdit === '1') {
+            groupSwapContainer.querySelectorAll('.btn-rename-grup').forEach((btn) => {
+                btn.addEventListener('click', async (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const currentName = btn.dataset.grupName || '';
+                    let nextName = currentName;
+
+                    if (window.Swal) {
+                        const result = await window.Swal.fire({
+                            title: 'Ubah nama grup',
+                            input: 'text',
+                            inputValue: currentName,
+                            showCancelButton: true,
+                            confirmButtonText: 'Simpan',
+                            cancelButtonText: 'Batal',
+                            inputValidator: (value) => {
+                                if (!String(value || '').trim()) {
+                                    return 'Nama grup wajib diisi';
+                                }
+                                return null;
+                            },
+                        });
+                        if (!result.isConfirmed) return;
+                        nextName = String(result.value || '').trim();
+                    } else {
+                        nextName = String(window.prompt('Nama grup baru', currentName) || '').trim();
+                        if (!nextName) return;
+                    }
+
+                    const url = (groupSwapContainer.dataset.renameUrlTemplate || '')
+                        .replace('__ID__', String(btn.dataset.grupId));
+
+                    try {
+                        await apiRequest(url, 'PATCH', {
+                            id_turnamen: parseInt(groupSwapContainer.dataset.turnamen, 10),
+                            nama: nextName,
+                        });
+                        showAlert('Nama grup diperbarui.', 'success');
+                        reloadPage();
+                    } catch (e) {
+                        showAlert(e.message, 'error');
+                    }
+                });
+            });
+
+            groupSwapContainer.querySelectorAll('.btn-friendly-unassign').forEach((btn) => {
+                btn.addEventListener('click', async (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const confirmed = await confirmAction({
+                        title: 'Lepas pemain dari grup?',
+                        confirmText: 'Ya, lepas',
+                    });
+                    if (!confirmed) return;
+
+                    const url = (groupSwapContainer.dataset.unassignUrlTemplate || '')
+                        .replace('__ID__', String(btn.dataset.memberId));
+
+                    try {
+                        await apiRequest(url, 'DELETE', {
+                            id_turnamen: parseInt(groupSwapContainer.dataset.turnamen, 10),
+                        });
+                        showAlert('Pemain dilepas dari grup.', 'success');
+                        reloadPage();
+                    } catch (e) {
+                        showAlert(e.message, 'error');
+                    }
+                });
+            });
+        }
     };
 
     const initScoreModal = () => {

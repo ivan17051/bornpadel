@@ -9,7 +9,7 @@
     @if ($turnamen)
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0">
-                <i class="bi bi-bar-chart-steps me-2"></i>Klasemen Grup Friendly
+                <i class="bi bi-bar-chart-steps me-2"></i>Klasemen Group Match
                 <small class="text-muted fw-normal">— {{ $turnamen->nama }}</small>
             </h5>
             @if ($refreshable)

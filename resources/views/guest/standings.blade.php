@@ -10,7 +10,7 @@
                 @if (optional($turnamen)->isMahjong())
                     Klasemen Mahjong
                 @elseif (optional($turnamen)->isFriendly())
-                    Klasemen Friendly
+                    Klasemen Group Match
                 @else
                     Klasemen Grup
                 @endif

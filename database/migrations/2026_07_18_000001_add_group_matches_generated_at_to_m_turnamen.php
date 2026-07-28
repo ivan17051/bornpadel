@@ -9,14 +9,17 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('m_turnamen', function (Blueprint $table) {
-            $table->timestamp('group_matches_generated_at')
-                ->nullable()
-                ->after('registration_paired_at');
-        });
+        if (! Schema::hasColumn('m_turnamen', 'group_matches_generated_at')) {
+            Schema::table('m_turnamen', function (Blueprint $table) {
+                $table->timestamp('group_matches_generated_at')
+                    ->nullable()
+                    ->after('registration_paired_at');
+            });
+        }
 
         DB::table('m_turnamen')
             ->whereIn('jenis', ['single', 'double'])
+            ->whereNull('group_matches_generated_at')
             ->whereExists(function ($query) {
                 $query->selectRaw('1')
                     ->from('pertandingan')
@@ -29,8 +32,10 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('m_turnamen', function (Blueprint $table) {
-            $table->dropColumn('group_matches_generated_at');
-        });
+        if (Schema::hasColumn('m_turnamen', 'group_matches_generated_at')) {
+            Schema::table('m_turnamen', function (Blueprint $table) {
+                $table->dropColumn('group_matches_generated_at');
+            });
+        }
     }
 };

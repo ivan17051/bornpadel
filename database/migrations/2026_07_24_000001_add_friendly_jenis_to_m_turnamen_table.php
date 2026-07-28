@@ -8,6 +8,17 @@ class AddFriendlyJenisToMTurnamenTable extends Migration
 {
     public function up()
     {
+        if (! Schema::hasTable('m_turnamen')) {
+            return;
+        }
+
+        $column = DB::select("SHOW COLUMNS FROM m_turnamen LIKE 'jenis'");
+        $type = strtolower((string) optional($column[0] ?? null)->Type);
+
+        if (str_contains($type, "'friendly'")) {
+            return;
+        }
+
         DB::statement("ALTER TABLE m_turnamen MODIFY jenis ENUM('single', 'double', 'mahjong', 'friendly') NOT NULL DEFAULT 'single'");
     }
 
