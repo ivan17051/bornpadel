@@ -219,26 +219,50 @@ class FriendlyMatchmakingService
      */
     public function createInterGroupSlots(Turnamen $turnamen, Collection $groups): Collection
     {
-        $list = $groups->values();
-        $slots = collect();
+        $list = $groups->sortBy([
+            ['nama', 'asc'],
+            ['id', 'asc'],
+        ])->values();
+        $orderedIds = $list->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $roundMap = $this->buildParallelRoundMap($orderedIds);
+
+        $pairs = [];
 
         for ($i = 0; $i < $list->count(); $i++) {
             for ($j = $i + 1; $j < $list->count(); $j++) {
-                $slots->push(Pertandingan::create([
-                    'id_turnamen' => $turnamen->id,
-                    'id_grup' => null,
-                    'id_grup1' => $list[$i]->id,
-                    'id_grup2' => $list[$j]->id,
-                    'nama_ronde' => 'Friendly',
-                    'id_pemain1' => null,
-                    'id_pemain2' => null,
-                    'id_pemain1_partner' => null,
-                    'id_pemain2_partner' => null,
-                    'id_peserta1' => null,
-                    'id_peserta2' => null,
-                    'status' => 'scheduled',
-                ]));
+                $id1 = (int) $list[$i]->id;
+                $id2 = (int) $list[$j]->id;
+                $key = min($id1, $id2) . '-' . max($id1, $id2);
+                $pairs[] = [
+                    'grup1' => $list[$i],
+                    'grup2' => $list[$j],
+                    'round' => $roundMap[$key] ?? 999,
+                ];
             }
+        }
+
+        usort($pairs, function (array $a, array $b) {
+            return [$a['round'], $a['grup1']->id, $a['grup2']->id]
+                <=> [$b['round'], $b['grup1']->id, $b['grup2']->id];
+        });
+
+        $slots = collect();
+
+        foreach ($pairs as $pair) {
+            $slots->push(Pertandingan::create([
+                'id_turnamen' => $turnamen->id,
+                'id_grup' => null,
+                'id_grup1' => $pair['grup1']->id,
+                'id_grup2' => $pair['grup2']->id,
+                'nama_ronde' => 'Friendly',
+                'id_pemain1' => null,
+                'id_pemain2' => null,
+                'id_pemain1_partner' => null,
+                'id_pemain2_partner' => null,
+                'id_peserta1' => null,
+                'id_peserta2' => null,
+                'status' => 'scheduled',
+            ]));
         }
 
         return $slots;
@@ -671,7 +695,7 @@ class FriendlyMatchmakingService
 
     public function getMatches(Turnamen $turnamen): Collection
     {
-        return Pertandingan::query()
+        $matches = Pertandingan::query()
             ->where('id_turnamen', $turnamen->id)
             ->where('nama_ronde', 'Friendly')
             ->with([
@@ -684,10 +708,190 @@ class FriendlyMatchmakingService
                 'skor',
                 'pemenang',
             ])
-            ->orderBy('id_grup1')
-            ->orderBy('id_grup2')
-            ->orderBy('id')
             ->get();
+
+        return $this->sortMatchesByParallelRounds($matches, $turnamen);
+    }
+
+    /**
+     * Sort matches into sessions where each session's fixtures use distinct groups
+     * (so they can be played at the same time). Uses circle method for pairing order.
+     *
+     * @param  Collection<int, Pertandingan>  $matches
+     * @return Collection<int, Pertandingan>
+     */
+    public function sortMatchesByParallelRounds(Collection $matches, ?Turnamen $turnamen = null): Collection
+    {
+        if ($matches->isEmpty()) {
+            return $matches;
+        }
+
+        $orderedGroupIds = $this->resolveOrderedGroupIdsForSchedule($matches, $turnamen);
+        $roundMap = $this->buildParallelRoundMap($orderedGroupIds);
+
+        $annotated = $matches->map(function (Pertandingan $match) use ($roundMap) {
+            $a = (int) $match->id_grup1;
+            $b = (int) $match->id_grup2;
+            $key = min($a, $b) . '-' . max($a, $b);
+            $round = $roundMap[$key] ?? null;
+            $match->setAttribute('parallel_round', $round);
+
+            return $match;
+        });
+
+        $known = $annotated->filter(fn (Pertandingan $match) => $match->parallel_round !== null)
+            ->sortBy([
+                ['parallel_round', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->values();
+
+        $unknown = $annotated->filter(fn (Pertandingan $match) => $match->parallel_round === null)
+            ->sortBy('id')
+            ->values();
+
+        if ($unknown->isNotEmpty()) {
+            $nextRound = (int) ($known->max('parallel_round') ?: 0) + 1;
+            $packed = $this->packMatchesIntoParallelRounds($unknown, $nextRound);
+            $known = $known->concat($packed)->values();
+        }
+
+        return $known->values();
+    }
+
+    /**
+     * @param  Collection<int, Pertandingan>  $matches
+     * @return array<int, int>
+     */
+    protected function resolveOrderedGroupIdsForSchedule(Collection $matches, ?Turnamen $turnamen): array
+    {
+        if ($turnamen) {
+            $ids = $turnamen->grup()->orderBy('nama')->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+            if ($ids !== []) {
+                return $ids;
+            }
+        }
+
+        return $matches
+            ->flatMap(fn (Pertandingan $match) => [(int) $match->id_grup1, (int) $match->id_grup2])
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Map "minGrupId-maxGrupId" => session number (1-based).
+     *
+     * @param  array<int, int>  $orderedGroupIds
+     * @return array<string, int>
+     */
+    protected function buildParallelRoundMap(array $orderedGroupIds): array
+    {
+        $count = count($orderedGroupIds);
+
+        if ($count < 2) {
+            return [];
+        }
+
+        $teams = $count % 2 === 0
+            ? $this->seatForConsecutiveOpening($orderedGroupIds)
+            : array_merge($orderedGroupIds, [null]);
+
+        $n = count($teams);
+        $map = [];
+        $round = 1;
+
+        for ($r = 0; $r < $n - 1; $r++) {
+            for ($i = 0; $i < intdiv($n, 2); $i++) {
+                $a = $teams[$i];
+                $b = $teams[$n - 1 - $i];
+
+                if ($a === null || $b === null) {
+                    continue;
+                }
+
+                $key = min((int) $a, (int) $b) . '-' . max((int) $a, (int) $b);
+
+                if (! isset($map[$key])) {
+                    $map[$key] = $round;
+                }
+            }
+
+            $fixed = $teams[0];
+            $rest = array_slice($teams, 1);
+            array_unshift($rest, array_pop($rest));
+            $teams = array_merge([$fixed], $rest);
+            $round++;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Seat teams so the first circle round is consecutive pairs: A-B, C-D, E-F, ...
+     *
+     * @param  array<int, int>  $orderedGroupIds
+     * @return array<int, int>
+     */
+    protected function seatForConsecutiveOpening(array $orderedGroupIds): array
+    {
+        $left = [];
+        $right = [];
+        $n = count($orderedGroupIds);
+
+        for ($i = 0; $i < $n; $i += 2) {
+            $left[] = $orderedGroupIds[$i];
+        }
+
+        for ($i = $n - 1; $i > 0; $i -= 2) {
+            $right[] = $orderedGroupIds[$i];
+        }
+
+        return array_merge($left, $right);
+    }
+
+    /**
+     * Greedy pack leftover/extra matches into sessions without shared groups.
+     *
+     * @param  Collection<int, Pertandingan>  $matches
+     * @return Collection<int, Pertandingan>
+     */
+    protected function packMatchesIntoParallelRounds(Collection $matches, int $startRound): Collection
+    {
+        $rounds = [];
+        $roundBusy = [];
+
+        foreach ($matches as $match) {
+            $a = (int) $match->id_grup1;
+            $b = (int) $match->id_grup2;
+            $assignedRound = null;
+
+            foreach ($rounds as $roundNumber) {
+                $busy = $roundBusy[$roundNumber] ?? [];
+
+                if (! in_array($a, $busy, true) && ! in_array($b, $busy, true)) {
+                    $assignedRound = $roundNumber;
+                    break;
+                }
+            }
+
+            if ($assignedRound === null) {
+                $assignedRound = ($rounds === [] ? $startRound : max($rounds) + 1);
+                $rounds[] = $assignedRound;
+                $roundBusy[$assignedRound] = [];
+            }
+
+            $roundBusy[$assignedRound][] = $a;
+            $roundBusy[$assignedRound][] = $b;
+            $match->setAttribute('parallel_round', $assignedRound);
+        }
+
+        return $matches->sortBy([
+            ['parallel_round', 'asc'],
+            ['id', 'asc'],
+        ])->values();
     }
 
     protected function orderEntries(Collection $entries, string $mode): Collection

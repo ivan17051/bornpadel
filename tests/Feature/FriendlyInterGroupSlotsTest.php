@@ -45,6 +45,35 @@ class FriendlyInterGroupSlotsTest extends TestCase
         $this->assertSame(3, $result['match_slots']);
     }
 
+    public function test_six_groups_are_sorted_into_parallel_sessions(): void
+    {
+        $turnamen = $this->prepareFriendlyTournament(24);
+        $service = app(FriendlyMatchmakingService::class);
+        $service->generateGroups($turnamen, 'random');
+
+        $matches = $service->getMatches($turnamen->fresh());
+        $this->assertSame(15, $matches->count());
+
+        $sessionOne = $matches->where('parallel_round', 1)->values();
+        $this->assertSame(3, $sessionOne->count());
+
+        $labels = $sessionOne->map(function ($match) {
+            return optional($match->grup1)->nama . ' vs ' . optional($match->grup2)->nama;
+        })->all();
+
+        $this->assertEqualsCanonicalizing([
+            'Grup A vs Grup B',
+            'Grup C vs Grup D',
+            'Grup E vs Grup F',
+        ], $labels);
+
+        // Within one session, no group appears twice.
+        foreach ($matches->groupBy('parallel_round') as $roundMatches) {
+            $groupIds = $roundMatches->flatMap(fn ($m) => [(int) $m->id_grup1, (int) $m->id_grup2])->all();
+            $this->assertSame(count($groupIds), count(array_unique($groupIds)));
+        }
+    }
+
     public function test_groups_remain_editable_until_a_match_has_scores(): void
     {
         $turnamen = $this->prepareFriendlyTournament(8);

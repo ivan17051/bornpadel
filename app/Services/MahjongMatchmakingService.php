@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Grup;
 use App\Models\GrupMember;
+use App\Models\MahjongPoinEntry;
 use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
@@ -54,6 +55,34 @@ class MahjongMatchmakingService
             && $turnamen->mahjong_is_final
             && $turnamen->activeGrup()->count() === 1
             && $turnamen->activeGrup()->first()->members()->count() === self::PLAYERS_PER_GROUP;
+    }
+
+    public function canReset(Turnamen $turnamen): bool
+    {
+        return $turnamen->isMahjong()
+            && $turnamen->status === 'ongoing'
+            && $turnamen->grup()->exists();
+    }
+
+    public function resetGroupsAndMatches(Turnamen $turnamen): void
+    {
+        if (! $this->canReset($turnamen)) {
+            throw new RuntimeException('Reset grup Mahjong hanya tersedia saat turnamen masih ongoing dan sudah ada grup.');
+        }
+
+        DB::transaction(function () use ($turnamen) {
+            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+
+            if (! $this->canReset($locked)) {
+                throw new RuntimeException('Reset grup Mahjong hanya tersedia saat turnamen masih ongoing dan sudah ada grup.');
+            }
+
+            $locked->grup()->delete();
+            DB::table('turnamen_pemenang')->where('id_turnamen', $locked->id)->delete();
+            $locked->update([
+                'mahjong_is_final' => false,
+            ]);
+        });
     }
 
     public function generateGroups(Turnamen $turnamen, string $mode = 'random'): array
@@ -142,9 +171,57 @@ class MahjongMatchmakingService
 
     public function updateMemberPoints(GrupMember $member, int $poinDidapat): GrupMember
     {
+        // Legacy overwrite kept for rare callers; UI uses addMemberPointEntry.
+        $this->assertActiveMahjongMember($member);
         $member->update(['poin_didapat' => $poinDidapat]);
 
-        return $member->fresh();
+        return $member->fresh(['poinEntries', 'grup.turnamen']);
+    }
+
+    public function addMemberPointEntry(GrupMember $member, int $poin): GrupMember
+    {
+        $this->assertActiveMahjongMember($member);
+
+        MahjongPoinEntry::create([
+            'id_grup_member' => $member->id,
+            'poin' => $poin,
+        ]);
+
+        return $this->syncPoinDidapatFromEntries($member);
+    }
+
+    public function deleteMemberPointEntry(GrupMember $member, MahjongPoinEntry $entry): GrupMember
+    {
+        $this->assertActiveMahjongMember($member);
+
+        if ((int) $entry->id_grup_member !== (int) $member->id) {
+            throw new RuntimeException('Entri poin tidak cocok dengan anggota grup.');
+        }
+
+        $entry->delete();
+
+        return $this->syncPoinDidapatFromEntries($member);
+    }
+
+    public function syncPoinDidapatFromEntries(GrupMember $member): GrupMember
+    {
+        $sum = (int) $member->poinEntries()->sum('poin');
+        $member->update(['poin_didapat' => $sum]);
+
+        return $member->fresh(['poinEntries', 'grup.turnamen']);
+    }
+
+    protected function assertActiveMahjongMember(GrupMember $member): void
+    {
+        $member->loadMissing('grup.turnamen');
+
+        if (! $member->grup || ! $member->grup->turnamen || ! $member->grup->turnamen->isMahjong()) {
+            throw new RuntimeException('Pembaruan poin hanya untuk turnamen Mahjong.');
+        }
+
+        if (! $member->grup->is_aktif) {
+            throw new RuntimeException('Grup tidak aktif.');
+        }
     }
 
     public function getApprovedEntries(Turnamen $turnamen): Collection

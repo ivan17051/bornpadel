@@ -205,7 +205,9 @@
                                     id="btn-reset-groups"
                                     class="btn btn-outline-danger"
                                     data-url="{{ route('admin.matchmaking.reset-groups') }}"
-                                    data-turnamen="{{ $turnamen->id }}">
+                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-mahjong="{{ $isMahjong ? '1' : '0' }}"
+                                    data-friendly="{{ $isFriendly ? '1' : '0' }}">
                                 <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Grup & Matchmaking
                             </button>
                         @endif
@@ -323,34 +325,63 @@
                                     <tr>
                                         <th>Pemain</th>
                                         <th class="text-center" style="width:7rem">Akumulasi</th>
-                                        <th class="text-center" style="width:9rem">Poin Babak</th>
+                                        <th class="text-center" style="width:11rem">Poin Babak</th>
                                         <th class="text-center" style="width:7rem">Total</th>
-                                        <th class="text-end" style="width:6rem"></th>
+                                        <th style="min-width:14rem">Tambah Poin</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($g->members as $member)
-                                        <tr>
+                                        @php
+                                            $memberEntries = $member->relationLoaded('poinEntries')
+                                                ? $member->poinEntries
+                                                : $member->poinEntries()->get();
+                                        @endphp
+                                        <tr class="mahjong-member-row" data-member-id="{{ $member->id }}">
                                             <td class="fw-semibold">{{ $member->display_name }}</td>
-                                            <td class="text-center text-muted">{{ (int) $member->poin_akumulasi }}</td>
+                                            <td class="text-center text-muted mahjong-akumulasi" data-member-id="{{ $member->id }}">
+                                                {{ (int) $member->poin_akumulasi }}
+                                            </td>
                                             <td class="text-center">
-                                                <input type="number"
-                                                       class="form-control form-control-sm text-center mahjong-poin-input"
-                                                       value="{{ (int) $member->poin_didapat }}"
-                                                       data-member-id="{{ $member->id }}"
-                                                       data-url="{{ route('admin.matchmaking.mahjong-points', $member) }}">
+                                                <span class="badge text-bg-info mahjong-poin-babak" data-member-id="{{ $member->id }}">
+                                                    {{ (int) $member->poin_didapat }}
+                                                </span>
+                                                <div class="mahjong-poin-entries mt-1 d-flex flex-wrap justify-content-center gap-1"
+                                                     data-member-id="{{ $member->id }}">
+                                                    @foreach ($memberEntries as $entry)
+                                                        <span class="badge text-bg-light text-dark border mahjong-poin-entry"
+                                                              data-entry-id="{{ $entry->id }}">
+                                                            {{ (int) $entry->poin > 0 ? '+' : '' }}{{ (int) $entry->poin }}
+                                                            <button type="button"
+                                                                    class="btn btn-link btn-sm p-0 ms-1 text-danger btn-delete-mahjong-poin"
+                                                                    data-member-id="{{ $member->id }}"
+                                                                    data-entry-id="{{ $entry->id }}"
+                                                                    data-url="{{ route('admin.matchmaking.mahjong-point-entries.destroy', ['member' => $member->id, 'entry' => $entry->id]) }}"
+                                                                    title="Hapus entri">
+                                                                <i class="bi bi-x"></i>
+                                                            </button>
+                                                        </span>
+                                                    @endforeach
+                                                </div>
                                             </td>
                                             <td class="text-center">
                                                 <span class="badge text-bg-primary mahjong-total-poin" data-member-id="{{ $member->id }}">
                                                     {{ $member->total_poin }}
                                                 </span>
                                             </td>
-                                            <td class="text-end">
-                                                <button type="button"
-                                                        class="btn btn-sm btn-outline-primary btn-save-mahjong-poin"
-                                                        data-member-id="{{ $member->id }}">
-                                                    Simpan
-                                                </button>
+                                            <td>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number"
+                                                           class="form-control text-center mahjong-poin-input"
+                                                           placeholder="0"
+                                                           data-member-id="{{ $member->id }}"
+                                                           data-url="{{ route('admin.matchmaking.mahjong-point-entries.store', $member) }}">
+                                                    <button type="button"
+                                                            class="btn btn-outline-primary btn-add-mahjong-poin"
+                                                            data-member-id="{{ $member->id }}">
+                                                        <i class="bi bi-plus-lg me-1"></i>Tambah
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -380,47 +411,51 @@
                          data-member-count="{{ $g->members->count() }}"
                          data-slots-remaining="{{ $friendlySlotsRemaining }}"
                      @endif>
-                    <h2 class="accordion-header" id="group-heading-{{ $g->id }}">
-                        <button class="accordion-button {{ $expandGroupsByDefault ? '' : 'collapsed' }} {{ $canAssignFriendlyMembers ? 'friendly-grup-assign-trigger' : '' }}"
+                    <h2 class="accordion-header d-flex align-items-stretch" id="group-heading-{{ $g->id }}">
+                        <button class="accordion-button {{ $expandGroupsByDefault ? '' : 'collapsed' }}"
                                 type="button"
                                 data-bs-toggle="collapse"
                                 data-bs-target="#group-collapse-{{ $g->id }}"
                                 aria-expanded="{{ $expandGroupsByDefault ? 'true' : 'false' }}"
-                                aria-controls="group-collapse-{{ $g->id }}"
-                                @if ($canAssignFriendlyMembers)
-                                    title="Klik untuk menambah pemain ke grup"
-                                @endif>
+                                aria-controls="group-collapse-{{ $g->id }}">
                             <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
                                 <span class="d-inline-flex align-items-center gap-1">
                                     <i class="bi bi-diagram-3 me-1"></i>
                                     <span class="group-name-label">{{ $g->nama }}</span>
-                                    @if ($isFriendly && $groupsEditable)
-                                        <button type="button"
-                                                class="btn btn-link btn-sm p-0 text-primary btn-rename-grup"
-                                                data-grup-id="{{ $g->id }}"
-                                                data-grup-name="{{ $g->nama }}"
-                                                title="Ubah nama grup"
-                                                onclick="event.stopPropagation();">
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-                                    @endif
                                 </span>
-                                <span class="badge text-bg-info ms-auto">
-                                    {{ $g->members->count() }} {{ $unitLabel }}
-                                    @if ($isFriendly)
-                                        · Poin {{ (int) $g->poin_didapat }}
-                                        · {{ $g->members->count() }}/4
-                                    @else
+                                @if ($isFriendly)
+                                    <span class="badge text-bg-info ms-auto">
+                                        {{ $g->members->count() }}/4 pemain
+                                    </span>
+                                    <span class="badge text-bg-secondary">
+                                        Poin {{ (int) $g->poin_didapat }}
+                                    </span>
+                                @else
+                                    <span class="badge text-bg-info ms-auto">
+                                        {{ $g->members->count() }} {{ $unitLabel }}
                                         · {{ $g->pertandingan->count() }} pertandingan
-                                    @endif
-                                </span>
-                                @if ($canAssignFriendlyMembers)
-                                    <span class="badge text-bg-primary">
-                                        <i class="bi bi-person-plus me-1"></i>Tambah pemain
                                     </span>
                                 @endif
                             </span>
                         </button>
+                        @if ($isFriendly && ($groupsEditable ?? false))
+                            <div class="friendly-grup-header-actions d-flex align-items-center gap-1 px-2">
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-secondary btn-rename-grup"
+                                        data-grup-id="{{ $g->id }}"
+                                        data-grup-name="{{ $g->nama }}"
+                                        title="Ubah nama grup">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                @if ($canAssignFriendlyMembers)
+                                    <button type="button"
+                                            class="btn btn-sm btn-primary friendly-grup-assign-open"
+                                            title="Tambah pemain ke grup">
+                                        <i class="bi bi-person-plus me-1"></i>Tambah pemain
+                                    </button>
+                                @endif
+                            </div>
+                        @endif
                     </h2>
                     <div id="group-collapse-{{ $g->id }}"
                          class="accordion-collapse collapse {{ $expandGroupsByDefault ? 'show' : '' }}"
@@ -431,7 +466,6 @@
                                 <h6 class="text-muted text-uppercase small">
                                     Anggota Grup
                                     @if ($groupsEditable && $isFriendly)
-                                        <span class="fw-normal text-lowercase">— klik grup untuk menambah, atau lepas anggota</span>
                                     @elseif ($groupsEditable)
                                         <span class="fw-normal text-lowercase">— klik untuk tukar</span>
                                     @endif
@@ -724,6 +758,22 @@
         font-weight: 600;
         padding-top: 0.85rem;
         padding-bottom: 0.85rem;
+    }
+    .matchmaking-groups-accordion .accordion-header.d-flex .accordion-button {
+        flex: 1 1 auto;
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+    .matchmaking-groups-accordion .friendly-grup-header-actions {
+        flex: 0 0 auto;
+        background-color: var(--bs-accordion-btn-bg, #fff);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    }
+    .matchmaking-groups-accordion .accordion-header:has(.accordion-button:not(.collapsed)) .friendly-grup-header-actions {
+        background-color: #f8f9fa;
+    }
+    .matchmaking-groups-accordion .accordion-item:first-of-type .friendly-grup-header-actions {
+        border-top-right-radius: var(--bs-accordion-border-radius, 0.375rem);
     }
     .matchmaking-groups-accordion .accordion-button:not(.collapsed),
     .matchmaking-knockout-accordion .accordion-button:not(.collapsed) {

@@ -70,6 +70,7 @@ class MatchmakingPageService
                 ->with(array_merge([
                     'members.turnamenPeserta.pemain1',
                     'members.pemain',
+                    'members.poinEntries',
                     'pertandingan.peserta1.pemain1',
                     'pertandingan.peserta2.pemain1',
                     'pertandingan.pemain1',

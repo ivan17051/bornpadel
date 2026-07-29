@@ -52,14 +52,26 @@
                         </tr>
                     </thead>
                     <tbody>
+                        @php $previousRound = null; @endphp
                         @foreach ($friendlyMatches as $match)
                             @php
+                                $round = (int) ($match->parallel_round ?? 0);
                                 $scoreLabel = $match->skor->isEmpty()
                                     ? '—'
                                     : $match->skor->map(fn ($s) => $s->skor_pemain1 . '-' . $s->skor_pemain2)->implode(', ');
                                 $pairsAssigned = $match->hasFriendlyPairsAssigned();
                                 $canAssign = $friendlyService->canAssignPairs($match);
                             @endphp
+                            @if ($round > 0 && $round !== $previousRound)
+                                <tr class="table-light">
+                                    <td colspan="5" class="small fw-semibold text-secondary py-2">
+                                        <i class="bi bi-clock-history me-1"></i>
+                                        Sesi {{ $round }}
+                                        <span class="fw-normal text-muted"></span>
+                                    </td>
+                                </tr>
+                                @php $previousRound = $round; @endphp
+                            @endif
                             <tr>
                                 <td>
                                     <div class="fw-semibold">{{ optional($match->grup1)->nama }} vs {{ optional($match->grup2)->nama }}</div>

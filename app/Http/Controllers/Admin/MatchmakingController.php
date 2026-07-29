@@ -308,37 +308,85 @@ class MatchmakingController extends Controller
     public function updateMahjongPoints(Request $request, GrupMember $member)
     {
         $request->validate([
-            'poin_didapat' => ['required', 'integer'],
+            'poin' => ['required_without:poin_didapat', 'integer'],
+            'poin_didapat' => ['required_without:poin', 'integer'],
         ]);
 
-        $member->load('grup.turnamen');
-
-        if (! $member->grup || ! $member->grup->turnamen || ! $member->grup->turnamen->isMahjong()) {
+        try {
+            $poin = $request->has('poin')
+                ? (int) $request->input('poin')
+                : (int) $request->input('poin_didapat');
+            $updated = $this->mahjongService->addMemberPointEntry($member, $poin);
+        } catch (RuntimeException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Pembaruan poin hanya untuk turnamen Mahjong.',
+                'message' => $e->getMessage(),
             ], 422);
         }
-
-        if (! $member->grup->is_aktif) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Grup tidak aktif.',
-            ], 422);
-        }
-
-        $updated = $this->mahjongService->updateMemberPoints($member, (int) $request->input('poin_didapat'));
 
         return response()->json([
             'success' => true,
-            'message' => 'Poin berhasil diperbarui.',
-            'data' => [
-                'id' => $updated->id,
-                'poin_didapat' => (int) $updated->poin_didapat,
-                'poin_akumulasi' => (int) $updated->poin_akumulasi,
-                'total_poin' => $updated->total_poin,
-            ],
+            'message' => 'Poin berhasil ditambahkan.',
+            'data' => $this->mahjongMemberPointsPayload($updated),
         ]);
+    }
+
+    public function storeMahjongPointEntry(Request $request, GrupMember $member)
+    {
+        $request->validate([
+            'poin' => ['required', 'integer'],
+        ]);
+
+        try {
+            $updated = $this->mahjongService->addMemberPointEntry($member, (int) $request->input('poin'));
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin berhasil ditambahkan.',
+            'data' => $this->mahjongMemberPointsPayload($updated),
+        ]);
+    }
+
+    public function destroyMahjongPointEntry(GrupMember $member, \App\Models\MahjongPoinEntry $entry)
+    {
+        try {
+            $updated = $this->mahjongService->deleteMemberPointEntry($member, $entry);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Entri poin dihapus.',
+            'data' => $this->mahjongMemberPointsPayload($updated),
+        ]);
+    }
+
+    protected function mahjongMemberPointsPayload(GrupMember $member): array
+    {
+        $member->loadMissing('poinEntries');
+
+        return [
+            'id' => $member->id,
+            'poin_didapat' => (int) $member->poin_didapat,
+            'poin_akumulasi' => (int) $member->poin_akumulasi,
+            'total_poin' => $member->total_poin,
+            'entries' => $member->poinEntries->map(function ($entry) {
+                return [
+                    'id' => $entry->id,
+                    'poin' => (int) $entry->poin,
+                ];
+            })->values(),
+        ];
     }
 
     public function completeTournament(Request $request)

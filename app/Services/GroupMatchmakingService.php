@@ -207,7 +207,11 @@ class GroupMatchmakingService
             return app(FriendlyMatchmakingService::class)->canReset($turnamen);
         }
 
-        if ($turnamen->isMahjong() || $turnamen->status !== 'ongoing') {
+        if ($turnamen->isMahjong()) {
+            return app(MahjongMatchmakingService::class)->canReset($turnamen);
+        }
+
+        if ($turnamen->status !== 'ongoing') {
             return false;
         }
 
@@ -448,6 +452,12 @@ class GroupMatchmakingService
 
         if ($turnamen->isFriendly()) {
             app(FriendlyMatchmakingService::class)->resetGroupsAndMatches($turnamen);
+
+            return;
+        }
+
+        if ($turnamen->isMahjong()) {
+            app(MahjongMatchmakingService::class)->resetGroupsAndMatches($turnamen);
 
             return;
         }

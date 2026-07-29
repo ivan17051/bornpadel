@@ -44,6 +44,11 @@ class GrupMember extends Model
         return $this->belongsTo(TurnamenPeserta::class, 'id_turnamen_peserta');
     }
 
+    public function poinEntries()
+    {
+        return $this->hasMany(MahjongPoinEntry::class, 'id_grup_member')->orderBy('id');
+    }
+
     public function getDisplayNameAttribute(): string
     {
         if ($this->turnamenPeserta) {

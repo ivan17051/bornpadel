@@ -957,9 +957,12 @@ const BornPadelAdmin = (function () {
 
         if (resetGroupsBtn) {
             resetGroupsBtn.addEventListener('click', async () => {
+                const isMahjong = resetGroupsBtn.dataset.mahjong === '1';
                 const confirmed = await confirmAction({
                     title: 'Reset grup dan matchmaking?',
-                    text: 'Semua grup dan pertandingan terjadwal akan dihapus. Pendaftaran dan pasangan tetap disimpan.',
+                    text: isMahjong
+                        ? 'Semua grup, babak, ronde, dan seluruh riwayat poin Mahjong akan dihapus. Pendaftaran pemain tetap disimpan.'
+                        : 'Semua grup dan pertandingan terjadwal akan dihapus. Pendaftaran dan pasangan tetap disimpan.',
                     confirmText: 'Ya, reset data',
                 });
                 if (!confirmed) return;
@@ -1161,6 +1164,10 @@ const BornPadelAdmin = (function () {
                     setButtonLoading(confirmBtn, true);
 
                     try {
+                        if (isMahjong) {
+                            await flushPendingMahjongPoints();
+                        }
+
                         const payload = {
                             tournament_id: parseInt(endGroupBtn.dataset.turnamen, 10),
                             id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
@@ -1193,7 +1200,7 @@ const BornPadelAdmin = (function () {
             reshuffleBtn.addEventListener('click', async () => {
                 const confirmed = await confirmAction({
                     title: 'Acak ulang grup?',
-                    text: 'Pemain akan dibagi ulang ke grup baru (4 per grup). Poin akumulasi dipertahankan.',
+                    text: 'Pemain akan dibagi ulang ke grup baru (4 per grup). Total poin babak saat ini dijumlahkan ke akumulasi.',
                     confirmText: 'Ya, reshuffle',
                 });
                 if (!confirmed) return;
@@ -1202,7 +1209,7 @@ const BornPadelAdmin = (function () {
                 setButtonLoading(reshuffleBtn, true);
 
                 try {
-                    await saveAllMahjongPoints();
+                    await flushPendingMahjongPoints();
                     const data = await apiRequest(reshuffleBtn.dataset.url, 'POST', {
                         id_turnamen: parseInt(reshuffleBtn.dataset.turnamen, 10),
                         mode: 'random',
@@ -1216,35 +1223,98 @@ const BornPadelAdmin = (function () {
             });
         }
 
-        async function saveAllMahjongPoints() {
-            const inputs = document.querySelectorAll('.mahjong-poin-input');
+        function formatMahjongEntryLabel(poin) {
+            const value = parseInt(poin, 10) || 0;
+            return (value > 0 ? '+' : '') + value;
+        }
 
-            for (const input of inputs) {
-                await apiRequest(input.dataset.url, 'PATCH', {
-                    poin_didapat: parseInt(input.value || '0', 10),
-                });
+        function renderMahjongMemberPoints(memberId, data) {
+            if (!data) return;
+
+            const babakBadge = document.querySelector(`.mahjong-poin-babak[data-member-id="${memberId}"]`);
+            const totalBadge = document.querySelector(`.mahjong-total-poin[data-member-id="${memberId}"]`);
+            const entriesWrap = document.querySelector(`.mahjong-poin-entries[data-member-id="${memberId}"]`);
+            const input = document.querySelector(`.mahjong-poin-input[data-member-id="${memberId}"]`);
+
+            if (babakBadge) {
+                babakBadge.textContent = data.poin_didapat;
+            }
+            if (totalBadge) {
+                totalBadge.textContent = data.total_poin;
+            }
+            if (entriesWrap) {
+                const entries = Array.isArray(data.entries) ? data.entries : [];
+                entriesWrap.innerHTML = entries.map((entry) => {
+                    const deleteUrl = (input?.dataset.url || '')
+                        .replace(/\/point-entries\/?$/, `/point-entries/${entry.id}`);
+                    return `
+                        <span class="badge text-bg-light text-dark border mahjong-poin-entry" data-entry-id="${entry.id}">
+                            ${formatMahjongEntryLabel(entry.poin)}
+                            <button type="button"
+                                    class="btn btn-link btn-sm p-0 ms-1 text-danger btn-delete-mahjong-poin"
+                                    data-member-id="${memberId}"
+                                    data-entry-id="${entry.id}"
+                                    data-url="${deleteUrl}"
+                                    title="Hapus entri">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </span>
+                    `;
+                }).join('');
             }
         }
 
-        document.querySelectorAll('.btn-save-mahjong-poin').forEach((btn) => {
+        async function appendMahjongPoint(memberId) {
+            const input = document.querySelector(`.mahjong-poin-input[data-member-id="${memberId}"]`);
+            if (!input || !input.dataset.url) {
+                return null;
+            }
+
+            if (input.value === '' || input.value === null) {
+                return null;
+            }
+
+            const poin = parseInt(input.value, 10);
+            if (Number.isNaN(poin)) {
+                throw new Error('Poin harus berupa angka.');
+            }
+
+            const data = await apiRequest(input.dataset.url, 'POST', { poin });
+            input.value = '';
+            renderMahjongMemberPoints(memberId, data.data);
+            return data;
+        }
+
+        async function flushPendingMahjongPoints() {
+            const inputs = document.querySelectorAll('.mahjong-poin-input');
+
+            for (const input of inputs) {
+                if (input.value === '' || input.value === null) {
+                    continue;
+                }
+
+                await appendMahjongPoint(input.dataset.memberId);
+            }
+        }
+
+        document.querySelectorAll('.btn-add-mahjong-poin').forEach((btn) => {
             btn.addEventListener('click', async () => {
                 const memberId = btn.dataset.memberId;
                 const input = document.querySelector(`.mahjong-poin-input[data-member-id="${memberId}"]`);
 
-                if (!input) return;
+                if (!input || input.value === '' || input.value === null) {
+                    showToast('Isi poin hand terlebih dahulu.', 'error');
+                    return;
+                }
 
                 const original = btn.innerHTML;
                 setButtonLoading(btn, true);
 
                 try {
-                    const data = await apiRequest(input.dataset.url, 'PATCH', {
-                        poin_didapat: parseInt(input.value || '0', 10),
-                    });
-                    const totalBadge = document.querySelector(`.mahjong-total-poin[data-member-id="${memberId}"]`);
-                    if (totalBadge && data.data) {
-                        totalBadge.textContent = data.data.total_poin;
+                    const data = await appendMahjongPoint(memberId);
+                    if (data) {
+                        showToast(data.message);
                     }
-                    showToast(data.message);
                 } catch (e) {
                     showToast(e.message, 'error');
                 } finally {
@@ -1253,6 +1323,42 @@ const BornPadelAdmin = (function () {
             });
         });
 
+        document.querySelectorAll('.mahjong-poin-input').forEach((input) => {
+            input.addEventListener('keydown', async (event) => {
+                if (event.key !== 'Enter') {
+                    return;
+                }
+
+                event.preventDefault();
+                const memberId = input.dataset.memberId;
+                const btn = document.querySelector(`.btn-add-mahjong-poin[data-member-id="${memberId}"]`);
+                if (btn) {
+                    btn.click();
+                }
+            });
+        });
+
+        document.addEventListener('click', async (event) => {
+            const btn = event.target.closest('.btn-delete-mahjong-poin');
+            if (!btn) {
+                return;
+            }
+
+            event.preventDefault();
+            const memberId = btn.dataset.memberId;
+            const url = btn.dataset.url;
+            if (!url) {
+                return;
+            }
+
+            try {
+                const data = await apiRequest(url, 'DELETE');
+                renderMahjongMemberPoints(memberId, data.data);
+                showToast(data.message);
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
+        });
         const initFriendlyMatchActions = () => {
             const panel = document.getElementById('friendly-matches-panel');
             if (!panel) return;
@@ -1709,19 +1815,6 @@ const BornPadelAdmin = (function () {
             };
 
             groupSwapContainer.querySelectorAll('.accordion-item[data-friendly-grup="1"]').forEach((item) => {
-                const trigger = item.querySelector('.friendly-grup-assign-trigger');
-                if (trigger) {
-                    trigger.addEventListener('click', (event) => {
-                        if (event.target.closest('.btn-rename-grup')) {
-                            return;
-                        }
-
-                        event.preventDefault();
-                        event.stopImmediatePropagation();
-                        openAssignModal(item);
-                    }, true);
-                }
-
                 item.querySelectorAll('.friendly-grup-assign-open').forEach((btn) => {
                     btn.addEventListener('click', (event) => {
                         event.preventDefault();
