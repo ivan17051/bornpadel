@@ -61,7 +61,7 @@ class MatchmakingController extends Controller
         $pairingSummary = $turnamen
             ? $this->matchmakingService->getDoublePairingSummary($turnamen)
             : null;
-        $groupingUnitCount = $turnamen && $turnamen->isDouble()
+        $groupingUnitCount = $turnamen && $turnamen->playsAsPairs()
             ? ($turnamen->isRegistrationOpen()
                 ? (int) ($pairingSummary['pairs_preview'] ?? 0)
                 : $this->matchmakingService->countApprovedPairs($turnamen))
@@ -425,6 +425,8 @@ class MatchmakingController extends Controller
                 'Pendaftaran ditutup. %d pasangan dibuat secara acak dari pemain approved.',
                 $result['pairing']['pairs_created']
             );
+        } elseif ($turnamen->requiresPairRegistration()) {
+            $message = 'Pendaftaran ditutup. Semua pasangan lengkap siap untuk pembagian grup.';
         }
 
         return response()->json([

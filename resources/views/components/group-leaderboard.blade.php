@@ -1,7 +1,7 @@
 @props(['standings', 'turnamen' => null, 'refreshable' => false, 'showGroupHistory' => true])
 
 @php
-    $isDouble = optional($turnamen)->isDouble();
+    $isDouble = optional($turnamen)->playsAsPairs();
     $showHistory = $showGroupHistory && $turnamen && ! $turnamen->isMahjong();
     $historyUrl = $showHistory ? route('api.guest.standings.group-history') : null;
 @endphp
@@ -54,7 +54,7 @@
                                     <thead class="table-light">
                                         <tr>
                                             <th class="text-center" style="width:3rem">#</th>
-                                            <th>{{ optional($turnamen)->isDouble() ? 'Pasangan' : 'Pemain' }}</th>
+                                            <th>{{ optional($turnamen)->playsAsPairs() ? 'Pasangan' : 'Pemain' }}</th>
                                             @if (!empty($grup['is_mahjong']))
                                                 <th class="text-center">Akumulasi</th>
                                                 <th class="text-center">Babak</th>

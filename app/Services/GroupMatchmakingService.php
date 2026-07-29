@@ -35,11 +35,11 @@ class GroupMatchmakingService
 
     public function unitLabel(Turnamen $turnamen): string
     {
-        if ($turnamen->isMahjong() || $turnamen->isSingle() || $turnamen->isFriendly()) {
-            return 'pemain';
+        if ($turnamen->playsAsPairs()) {
+            return 'pasangan';
         }
 
-        return 'pasangan';
+        return 'pemain';
     }
 
     public function previewGroupSplit(int $totalPlayers, int $minPerGroup, int $maxPerGroup): ?array
@@ -118,7 +118,7 @@ class GroupMatchmakingService
             return false;
         }
 
-        if ($turnamen->isDouble()) {
+        if ($turnamen->playsAsPairs()) {
             $summary = $this->pairingService->getSummary($turnamen);
 
             return ! $summary['odd_player_warning'];
@@ -140,13 +140,24 @@ class GroupMatchmakingService
             $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
             $result = null;
 
-            if ($locked->isDouble()) {
+            if ($locked->randomizesPartners()) {
                 $result = $this->pairingService->pairApprovedPlayers($locked);
                 $locked->update([
                     'status' => 'ongoing',
                     'registration_paired_at' => now(),
                     'group_matches_generated_at' => null,
                 ]);
+            } elseif ($locked->requiresPairRegistration()) {
+                $this->pairingService->assertCanCloseWithoutRandomPairing($locked);
+                $locked->update([
+                    'status' => 'ongoing',
+                    'registration_paired_at' => now(),
+                    'group_matches_generated_at' => null,
+                ]);
+                $result = [
+                    'pairs_created' => 0,
+                    'pairs' => [],
+                ];
             } else {
                 $locked->update([
                     'status' => 'ongoing',
@@ -238,8 +249,11 @@ class GroupMatchmakingService
             ->approved()
             ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1']);
 
-        if ($turnamen->isDouble()) {
-            $query->completePairs();
+        if ($turnamen->playsAsPairs()) {
+            $query->completePairs()
+                ->whereHas('pasanganAsPeserta1.peserta2', function ($partner) {
+                    $partner->approved();
+                });
         }
 
         return $query->orderBy('id')->get();
@@ -247,7 +261,7 @@ class GroupMatchmakingService
 
     public function countApprovedPlayers(Turnamen $turnamen): int
     {
-        if ($turnamen->isDouble() && $turnamen->isRegistrationOpen()) {
+        if ($turnamen->playsAsPairs() && $turnamen->isRegistrationOpen()) {
             return $this->pairingService->countApprovedIndividuals($turnamen);
         }
 
@@ -256,12 +270,17 @@ class GroupMatchmakingService
 
     public function countApprovedPairs(Turnamen $turnamen): int
     {
-        if (! $turnamen->isDouble()) {
+        if (! $turnamen->playsAsPairs()) {
             return $this->getApprovedEntries($turnamen)->count();
         }
 
         if ($turnamen->isRegistrationOpen()) {
-            return intdiv($this->pairingService->countApprovedSolos($turnamen), 2);
+            if ($turnamen->randomizesPartners()) {
+                return intdiv($this->pairingService->countApprovedSolos($turnamen), 2)
+                    + $this->pairingService->countApprovedCompletePairs($turnamen);
+            }
+
+            return $this->pairingService->countApprovedCompletePairs($turnamen);
         }
 
         return $this->getApprovedEntries($turnamen)->count();
@@ -269,7 +288,7 @@ class GroupMatchmakingService
 
     public function getDoublePairingSummary(Turnamen $turnamen): ?array
     {
-        if (! $turnamen->isDouble()) {
+        if (! $turnamen->playsAsPairs()) {
             return null;
         }
 

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\GrupMember;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenPasangan;
 use App\Models\TurnamenPeserta;
 use App\Services\GroupMatchmakingService;
 use App\Services\MatchScoringService;
@@ -70,7 +71,7 @@ class GroupMatchScoreEditTest extends TestCase
     public function test_completed_group_score_cannot_be_edited_after_knockout_exists(): void
     {
         $turnamen = $this->createOngoingSingleTournament();
-        $this->createApprovedEntries($turnamen, 4);
+        $this->createApprovedEntries($turnamen, 8);
         $service = app(GroupMatchmakingService::class);
         $scoring = app(MatchScoringService::class);
 
@@ -111,7 +112,7 @@ class GroupMatchScoreEditTest extends TestCase
 
     protected function createApprovedEntries(Turnamen $turnamen, int $count)
     {
-        return collect(range(1, $count))->map(function ($index) use ($turnamen) {
+        $entries = collect(range(1, $count))->map(function ($index) use ($turnamen) {
             $pemain = Pemain::create([
                 'nama' => "Score Edit Player {$index} " . uniqid(),
                 'gender' => $index % 2 ? 'male' : 'female',
@@ -127,5 +128,19 @@ class GroupMatchScoreEditTest extends TestCase
                 'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]);
         });
+
+        foreach ($entries->chunk(2) as $pair) {
+            $pair = $pair->values();
+            TurnamenPasangan::create([
+                'id_turnamen' => $turnamen->id,
+                'id_peserta_1' => $pair[0]->id,
+                'id_peserta_2' => $pair[1]->id,
+                'paired_at' => now(),
+            ]);
+        }
+
+        $turnamen->update(['registration_paired_at' => now()]);
+
+        return $entries;
     }
 }

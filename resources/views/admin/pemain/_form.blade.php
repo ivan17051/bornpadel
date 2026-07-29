@@ -16,8 +16,10 @@
     <div class="alert alert-light border mb-4">
         <i class="bi bi-search me-2"></i>
         Pilih turnamen dan masukkan nomor HP pemain.
-        @if ($lookupTurnamen && $lookupTurnamen->isDouble())
-            <span class="d-block mt-1 small">Turnamen double: daftarkan satu pemain per kali. Pasangan dibuat otomatis saat pendaftaran ditutup.</span>
+        @if ($lookupTurnamen && $lookupTurnamen->randomizesPartners())
+            <span class="d-block mt-1 small">Turnamen single: daftarkan satu pemain. Pasangan diacak otomatis saat pendaftaran ditutup.</span>
+        @elseif ($lookupTurnamen && $lookupTurnamen->requiresPairRegistration())
+            <span class="d-block mt-1 small">Turnamen double: daftarkan pemain individu dulu, lalu atur pasangan sebelum menutup pendaftaran.</span>
         @endif
     </div>
 
@@ -80,10 +82,15 @@
     <input type="hidden" name="id_turnamen" value="{{ old('id_turnamen', $selectedTurnamen->id) }}">
     <input type="hidden" name="status" value="{{ old('status', request('status', 'approved')) }}">
 
-    @if ($selectedTurnamen && $selectedTurnamen->isDouble())
+    @if ($selectedTurnamen && $selectedTurnamen->randomizesPartners())
         <div class="alert alert-light border mb-3">
             <i class="bi bi-shuffle me-2"></i>
             Pemain ini akan dipasangkan secara acak dengan peserta lain setelah pendaftaran ditutup.
+        </div>
+    @elseif ($selectedTurnamen && $selectedTurnamen->requiresPairRegistration())
+        <div class="alert alert-light border mb-3">
+            <i class="bi bi-people me-2"></i>
+            Turnamen double: setelah menyimpan, atur pasangan lewat aksi Atur Pasangan sebelum menutup pendaftaran.
         </div>
     @endif
 

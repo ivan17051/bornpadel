@@ -19,7 +19,7 @@ class GroupMatchmakingLifecycleTest extends TestCase
     public function test_groups_are_editable_until_matches_are_generated_and_can_then_be_reset(): void
     {
         $turnamen = $this->createTournament('single');
-        $this->createApprovedEntries($turnamen, 6);
+        $this->createApprovedPairedEntries($turnamen, 12);
         $service = app(GroupMatchmakingService::class);
 
         $result = $service->generateRandomGroups($turnamen, 3, 3);
@@ -58,7 +58,7 @@ class GroupMatchmakingLifecycleTest extends TestCase
     public function test_reset_is_rejected_after_a_match_is_completed(): void
     {
         $turnamen = $this->createTournament('single');
-        $this->createApprovedEntries($turnamen, 6);
+        $this->createApprovedPairedEntries($turnamen, 12);
         $service = app(GroupMatchmakingService::class);
         $service->generateRandomGroups($turnamen, 3, 3);
         $service->generateGroupMatches($turnamen->fresh());
@@ -73,17 +73,7 @@ class GroupMatchmakingLifecycleTest extends TestCase
     public function test_reset_preserves_double_pairs_and_registrations(): void
     {
         $turnamen = $this->createTournament('double');
-        $entries = $this->createApprovedEntries($turnamen, 6);
-
-        foreach ($entries->chunk(2) as $pair) {
-            $pair = $pair->values();
-            TurnamenPasangan::create([
-                'id_turnamen' => $turnamen->id,
-                'id_peserta_1' => $pair[0]->id,
-                'id_peserta_2' => $pair[1]->id,
-                'paired_at' => now(),
-            ]);
-        }
+        $this->createApprovedPairedEntries($turnamen, 6);
 
         $turnamen->update(['registration_paired_at' => now()]);
         $service = app(GroupMatchmakingService::class);
@@ -100,8 +90,8 @@ class GroupMatchmakingLifecycleTest extends TestCase
     {
         $assigned = $this->createTournament('single');
         $other = $this->createTournament('single');
-        $this->createApprovedEntries($assigned, 6);
-        $this->createApprovedEntries($other, 6);
+        $this->createApprovedPairedEntries($assigned, 12);
+        $this->createApprovedPairedEntries($other, 12);
         $service = app(GroupMatchmakingService::class);
         $service->generateRandomGroups($assigned, 3, 3);
         $service->generateRandomGroups($other, 3, 3);
@@ -140,19 +130,20 @@ class GroupMatchmakingLifecycleTest extends TestCase
             'nama' => 'Lifecycle Test ' . uniqid(),
             'tanggal' => now()->toDateString(),
             'harga' => 0,
-            'maks_peserta' => 16,
+            'maks_peserta' => 32,
             'jenis' => $jenis,
             'status' => 'ongoing',
+            'registration_paired_at' => now(),
         ]);
     }
 
-    protected function createApprovedEntries(Turnamen $turnamen, int $count)
+    protected function createApprovedPairedEntries(Turnamen $turnamen, int $playerCount)
     {
-        return collect(range(1, $count))->map(function ($index) use ($turnamen) {
+        $entries = collect(range(1, $playerCount))->map(function ($index) use ($turnamen) {
             $pemain = Pemain::create([
                 'nama' => "Lifecycle Player {$index} " . uniqid(),
                 'gender' => $index % 2 ? 'male' : 'female',
-                'no_hp' => '0812' . str_pad((string) $index, 8, '0', STR_PAD_LEFT),
+                'no_hp' => '0812' . str_pad((string) $index . substr(uniqid(), -4), 8, '0', STR_PAD_LEFT),
                 'rating' => 2 + ($index / 10),
             ]);
 
@@ -163,5 +154,17 @@ class GroupMatchmakingLifecycleTest extends TestCase
                 'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]);
         });
+
+        foreach ($entries->chunk(2) as $pair) {
+            $pair = $pair->values();
+            TurnamenPasangan::create([
+                'id_turnamen' => $turnamen->id,
+                'id_peserta_1' => $pair[0]->id,
+                'id_peserta_2' => $pair[1]->id,
+                'paired_at' => now(),
+            ]);
+        }
+
+        return $entries;
     }
 }

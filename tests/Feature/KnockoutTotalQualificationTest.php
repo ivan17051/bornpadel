@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\GrupMember;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenPasangan;
 use App\Models\TurnamenPeserta;
 use App\Services\GroupMatchmakingService;
 use App\Services\KnockoutBracketService;
@@ -18,8 +19,8 @@ class KnockoutTotalQualificationTest extends TestCase
 
     public function test_total_qualification_takes_top_n_per_group_then_best_remaining(): void
     {
-        $turnamen = $this->createOngoingSingleTournament(20);
-        $entries = $this->createApprovedEntries($turnamen, 20);
+        $turnamen = $this->createOngoingSingleTournament(40);
+        $entries = $this->createApprovedEntries($turnamen, 40);
         $groups = app(GroupMatchmakingService::class);
         $scoring = app(MatchScoringService::class);
         $bracket = app(KnockoutBracketService::class);
@@ -64,8 +65,8 @@ class KnockoutTotalQualificationTest extends TestCase
 
     public function test_generate_knockout_bracket_with_total_mode(): void
     {
-        $turnamen = $this->createOngoingSingleTournament(20);
-        $this->createApprovedEntries($turnamen, 20);
+        $turnamen = $this->createOngoingSingleTournament(40);
+        $this->createApprovedEntries($turnamen, 40);
         $groups = app(GroupMatchmakingService::class);
         $scoring = app(MatchScoringService::class);
         $bracket = app(KnockoutBracketService::class);
@@ -121,7 +122,7 @@ class KnockoutTotalQualificationTest extends TestCase
 
     protected function createApprovedEntries(Turnamen $turnamen, int $count)
     {
-        return collect(range(1, $count))->map(function ($index) use ($turnamen) {
+        $entries = collect(range(1, $count))->map(function ($index) use ($turnamen) {
             $pemain = Pemain::create([
                 'nama' => "TQ Player {$index} " . uniqid(),
                 'gender' => $index % 2 ? 'male' : 'female',
@@ -137,5 +138,19 @@ class KnockoutTotalQualificationTest extends TestCase
                 'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]);
         });
+
+        foreach ($entries->chunk(2) as $pair) {
+            $pair = $pair->values();
+            TurnamenPasangan::create([
+                'id_turnamen' => $turnamen->id,
+                'id_peserta_1' => $pair[0]->id,
+                'id_peserta_2' => $pair[1]->id,
+                'paired_at' => now(),
+            ]);
+        }
+
+        $turnamen->update(['registration_paired_at' => now()]);
+
+        return $entries;
     }
 }

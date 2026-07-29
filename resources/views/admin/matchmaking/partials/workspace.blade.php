@@ -1,13 +1,15 @@
 @if ($turnamen)
     @php
-        $unitLabel = $unitLabel ?? ($turnamen->isDouble() ? 'pasangan' : 'pemain');
+        $unitLabel = $unitLabel ?? ($turnamen->playsAsPairs() ? 'pasangan' : 'pemain');
         $unitLabelTitle = ucfirst($unitLabel);
-        $sideLabel = $turnamen->isDouble() ? 'Pasangan' : 'Pemain';
+        $sideLabel = $turnamen->playsAsPairs() ? 'Pasangan' : 'Pemain';
         $isMahjong = $isMahjong ?? $turnamen->isMahjong();
         $isFriendly = $isFriendly ?? $turnamen->isFriendly();
         $groupingUnitCount = $groupingUnitCount ?? $approvedCount;
         $pairingSummary = $pairingSummary ?? null;
-        $isDoubleOpen = $turnamen->isDouble() && $turnamen->isRegistrationOpen();
+        $isPairingOpen = $turnamen->playsAsPairs() && $turnamen->isRegistrationOpen();
+        $randomizesPartners = $turnamen->randomizesPartners();
+        $requiresPairRegistration = $turnamen->requiresPairRegistration();
         $bracketUrl = $bracketUrl ?? route('admin.bracket.index', ['id_turnamen' => $turnamen->id]);
         $isKnockoutPhase = ! $isMahjong && ! $isFriendly && ($hasKnockoutBracket ?? false);
         $expandGroupsByDefault = $isMahjong || $isFriendly || ! $isKnockoutPhase;
@@ -31,7 +33,7 @@
                             Status: {{ strtoupper($turnamen->status) }}
                         </span>
                         <span class="badge text-bg-secondary fs-6">
-                            @if ($isDoubleOpen)
+                            @if ($isPairingOpen)
                                 {{ $approvedCount }} pemain approved
                             @else
                                 {{ $approvedCount }} {{ $unitLabel }} approved
@@ -43,11 +45,16 @@
                     </div>
                     <p class="text-muted mb-0 small">
                         @if ($turnamen->isRegistrationOpen())
-                            @if ($isDoubleOpen && ($pairingSummary['odd_player_warning'] ?? false))
-                                Pendaftaran masih dibuka. <strong class="text-danger">Jumlah pemain belum berpasangan ganjil ({{ $pairingSummary['approved_solos'] ?? 0 }}).</strong>
+                            @if ($isPairingOpen && $randomizesPartners && ($pairingSummary['odd_player_warning'] ?? false))
+                                Pendaftaran masih dibuka. <strong class="text-danger">Jumlah pemain approved ganjil ({{ $pairingSummary['approved_solos'] ?? 0 }}).</strong>
                                 Tolak satu pemain atau tambahkan pemain baru sebelum menutup pendaftaran.
-                            @elseif ($isDoubleOpen)
-                                Pendaftaran masih dibuka. Setiap peserta mendaftar individu; saat ditutup, sistem akan memasangkan {{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan secara acak dari pemain belum berpasangan.
+                            @elseif ($isPairingOpen && $randomizesPartners)
+                                Pendaftaran masih dibuka. Setiap peserta mendaftar individu; saat ditutup, sistem akan memasangkan {{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan secara acak.
+                            @elseif ($isPairingOpen && $requiresPairRegistration && ($pairingSummary['odd_player_warning'] ?? false))
+                                Pendaftaran masih dibuka. <strong class="text-danger">Masih ada {{ $pairingSummary['approved_solos'] ?? 0 }} pemain approved tanpa pasangan.</strong>
+                                Lengkapi pasangan sebelum menutup pendaftaran.
+                            @elseif ($isPairingOpen && $requiresPairRegistration)
+                                Pendaftaran masih dibuka. Pemain boleh daftar individu, lalu dipasangkan sebelum close — {{ $pairingSummary['complete_pairs'] ?? 0 }} pasangan lengkap saat ini.
                             @else
                                 Pendaftaran masih dibuka. Tutup pendaftaran sebelum membuat grup.
                             @endif
@@ -99,22 +106,35 @@
                             </div>
                         </div>
                     @endif
-                    @if ($isDoubleOpen)
+                    @if ($isPairingOpen && $randomizesPartners)
                         <div class="card bg-light border-0 mb-3">
                             <div class="card-body py-3">
                                 <h6 class="text-muted text-uppercase small mb-2">Pemasangan Otomatis</h6>
                                 <ul class="small text-muted mb-0 ps-3">
                                     <li>{{ $pairingSummary['approved_individuals'] ?? 0 }} pemain approved</li>
-                                    <li>{{ $pairingSummary['paired_individuals'] ?? 0 }} pemain sudah berpasangan</li>
                                     <li>{{ $pairingSummary['approved_solos'] ?? 0 }} pemain belum berpasangan</li>
                                     <li>{{ $pairingSummary['pairs_preview'] ?? 0 }} pasangan akan dibuat saat pendaftaran ditutup</li>
                                     @if ($pairingSummary['odd_player_warning'] ?? false)
-                                        <li class="text-danger">Jumlah pemain belum berpasangan ganjil, mohon perbaiki data sebelum menutup pendaftaran</li>
+                                        <li class="text-danger">Jumlah pemain approved ganjil, mohon perbaiki data sebelum menutup pendaftaran</li>
                                     @endif
                                 </ul>
                             </div>
                         </div>
-                    @elseif ($turnamen->isDouble() && ($pairingSummary['is_paired'] ?? false))
+                    @elseif ($isPairingOpen && $requiresPairRegistration)
+                        <div class="card bg-light border-0 mb-3">
+                            <div class="card-body py-3">
+                                <h6 class="text-muted text-uppercase small mb-2">Status Pasangan</h6>
+                                <ul class="small text-muted mb-0 ps-3">
+                                    <li>{{ $pairingSummary['approved_individuals'] ?? 0 }} pemain approved</li>
+                                    <li>{{ $pairingSummary['complete_pairs'] ?? 0 }} pasangan lengkap</li>
+                                    <li>{{ $pairingSummary['approved_solos'] ?? 0 }} pemain tanpa pasangan</li>
+                                    @if ($pairingSummary['odd_player_warning'] ?? false)
+                                        <li class="text-danger">Semua pemain approved harus berpasangan sebelum menutup pendaftaran</li>
+                                    @endif
+                                </ul>
+                            </div>
+                        </div>
+                    @elseif ($turnamen->playsAsPairs() && ($pairingSummary['is_paired'] ?? false))
                         <div class="alert alert-success py-2 small mb-3">
                             <i class="bi bi-check-circle me-1"></i>
                             Pemasangan selesai — {{ $approvedCount }} pasangan siap untuk pembagian grup.
@@ -127,7 +147,7 @@
                                 class="btn btn-warning"
                                 data-url="{{ route('admin.matchmaking.close-registration') }}"
                                 data-turnamen="{{ $turnamen->id }}"
-                                data-double="{{ $turnamen->isDouble() ? '1' : '0' }}"
+                                data-randomize-partners="{{ $randomizesPartners ? '1' : '0' }}"
                                 data-pairs-preview="{{ $pairingSummary['pairs_preview'] ?? 0 }}"
                                 @if (! $canCloseRegistration) disabled @endif>
                             <i class="bi bi-lock me-1"></i> Tutup Pendaftaran
@@ -473,7 +493,7 @@
                                 <ul class="list-group list-group-flush">
                                     @forelse ($g->members as $member)
                                         @php
-                                            $ratingLabel = $turnamen->isDouble()
+                                            $ratingLabel = $turnamen->playsAsPairs()
                                                 ? number_format(optional($member->turnamenPeserta)->average_rating ?? 0, 1)
                                                 : number_format(optional($member->pemain)->rating ?? 0, 1);
                                         @endphp
@@ -899,7 +919,7 @@
                         </div>
                     @else
                         @php
-                            $unit = $turnamen->isDouble() ? 'pasangan' : 'pemain';
+                            $unit = $turnamen->playsAsPairs() ? 'pasangan' : 'pemain';
                             $groupCount = $grup->count();
                             $participantCount = $grup->sum(fn ($g) => $g->members->count());
                             $defaultTotal = min(

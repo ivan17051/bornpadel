@@ -49,7 +49,7 @@ class RegistrationController extends Controller
         $validated = $request->validated();
         $noHp = trim($validated['no_hp']);
         $registrationMode = $validated['registration_mode'] ?? 'single';
-        $isPairMode = $turnamen->isDouble() && $registrationMode === 'pair';
+        $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
         $noHp2 = $isPairMode ? trim($validated['no_hp_2']) : null;
 
         $existingPemain = $this->registrationService->findPemainByPhone($noHp);
@@ -94,7 +94,7 @@ class RegistrationController extends Controller
 
         $noHp = trim((string) request('no_hp', old('no_hp', '')));
         $registrationMode = request('registration_mode', old('registration_mode', 'single'));
-        $isPairMode = $turnamen->isDouble() && $registrationMode === 'pair';
+        $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
         $noHp2 = $isPairMode ? trim((string) request('no_hp_2', old('player_2.no_hp', ''))) : '';
 
         if ($noHp === '') {
@@ -152,7 +152,7 @@ class RegistrationController extends Controller
         $buktiBayar = $request->file('bukti_bayar');
 
         try {
-            $registerAsPair = $turnamen->isDouble() && $request->isPairRegistration();
+            $registerAsPair = $turnamen->requiresPairRegistration() && $request->isPairRegistration();
 
             if ($registerAsPair) {
                 $pair = $this->registrationService->registerPair(
@@ -201,7 +201,7 @@ class RegistrationController extends Controller
             ->route('guest.register.success')
             ->with('registration_success', [
                 'is_double' => $turnamen->isDouble(),
-                'individual_registration' => $turnamen->isDouble() && ! $partner,
+                'individual_registration' => false,
                 'paired_registration' => (bool) $partner,
                 'turnamen_id' => $turnamen->id,
                 'players' => array_values(array_filter([

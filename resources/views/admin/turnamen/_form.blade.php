@@ -80,7 +80,8 @@
         @endforeach
     </select>
     <div class="form-text">
-        Double: pendaftaran guest dapat berpasangan.
+        Single: daftar individu, pasangan diacak saat pendaftaran ditutup.
+        Double: daftar individu atau berpasangan; semua harus berpasangan sebelum pendaftaran ditutup.
         Mahjong: grup 4 pemain tanpa head-to-head.
         Group Match: liga antar grup (4 pemain/grup), tanding pasangan dinamis, tanpa total poin pemain.
     </div>

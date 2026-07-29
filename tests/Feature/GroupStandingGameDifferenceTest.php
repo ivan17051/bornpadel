@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\GrupMember;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenPasangan;
 use App\Models\TurnamenPeserta;
 use App\Services\GroupMatchmakingService;
 use App\Services\MatchScoringService;
@@ -103,7 +104,7 @@ class GroupStandingGameDifferenceTest extends TestCase
 
     protected function createApprovedEntries(Turnamen $turnamen, int $count)
     {
-        return collect(range(1, $count))->map(function ($index) use ($turnamen) {
+        $entries = collect(range(1, $count))->map(function ($index) use ($turnamen) {
             $pemain = Pemain::create([
                 'nama' => "GD Player {$index} " . uniqid(),
                 'gender' => $index % 2 ? 'male' : 'female',
@@ -119,5 +120,19 @@ class GroupStandingGameDifferenceTest extends TestCase
                 'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]);
         });
+
+        foreach ($entries->chunk(2) as $pair) {
+            $pair = $pair->values();
+            TurnamenPasangan::create([
+                'id_turnamen' => $turnamen->id,
+                'id_peserta_1' => $pair[0]->id,
+                'id_peserta_2' => $pair[1]->id,
+                'paired_at' => now(),
+            ]);
+        }
+
+        $turnamen->update(['registration_paired_at' => now()]);
+
+        return $entries;
     }
 }

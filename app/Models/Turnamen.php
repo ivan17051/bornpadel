@@ -81,7 +81,7 @@ class Turnamen extends Model
 
     public function isRegistrationPaired(): bool
     {
-        return $this->isDouble() && $this->registration_paired_at !== null;
+        return $this->playsAsPairs() && $this->registration_paired_at !== null;
     }
 
     public function isSingle(): bool
@@ -92,6 +92,31 @@ class Turnamen extends Model
     public function isDouble(): bool
     {
         return $this->jenis === 'double';
+    }
+
+    /**
+     * Single and Double both compete as fixed pairs in groups/knockout.
+     */
+    public function playsAsPairs(): bool
+    {
+        return $this->isSingle() || $this->isDouble();
+    }
+
+    /**
+     * Single: solo registration; partners are randomized when registration closes.
+     */
+    public function randomizesPartners(): bool
+    {
+        return $this->isSingle();
+    }
+
+    /**
+     * Double: players may register solo or as a pair; every approved entry
+     * must be in a complete pair before registration can close (no auto-random).
+     */
+    public function requiresPairRegistration(): bool
+    {
+        return $this->isDouble();
     }
 
     public function isMahjong(): bool

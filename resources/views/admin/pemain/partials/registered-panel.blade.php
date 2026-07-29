@@ -3,8 +3,8 @@
     $preserveTab = $preserveTab ?? null;
     $soloPesertaOptions = $soloPesertaOptions ?? collect();
     $showBulkActions = auth()->user()->isAdmin() && $turnamen && empty($isDoubleView);
-    $showPartnerActions = auth()->user()->isAdmin() && $turnamen && $turnamen->isDouble() && ! $turnamen->isRegistrationClosed() && empty($isDoubleView);
-    $showPartnerColumn = $turnamen && $turnamen->isDouble() && empty($isDoubleView);
+    $showPartnerActions = auth()->user()->isAdmin() && $turnamen && $turnamen->requiresPairRegistration() && ! $turnamen->isRegistrationClosed() && empty($isDoubleView);
+    $showPartnerColumn = $turnamen && $turnamen->requiresPairRegistration() && empty($isDoubleView);
     $sortThParams = compact('filterRoute', 'preserveTab');
 @endphp
 

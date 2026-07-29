@@ -750,11 +750,11 @@ const BornPadelAdmin = (function () {
 
         if (closeBtn && !closeBtn.disabled) {
             closeBtn.addEventListener('click', async () => {
-                const isDouble = closeBtn.dataset.double === '1';
+                const randomizesPartners = closeBtn.dataset.randomizePartners === '1';
                 const pairsPreview = parseInt(closeBtn.dataset.pairsPreview || '0', 10);
                 const confirmed = await confirmAction({
                     title: 'Tutup pendaftaran turnamen ini?',
-                    text: isDouble
+                    text: randomizesPartners
                         ? `Pemain tidak bisa mendaftar lagi. Sistem akan memasangkan ${pairsPreview} pasangan secara acak dari pemain approved.`
                         : 'Pemain tidak bisa mendaftar lagi.',
                     confirmText: 'Ya, tutup pendaftaran',

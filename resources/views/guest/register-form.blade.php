@@ -4,7 +4,7 @@
 
 @section('content')
 @php
-    $isDouble = $turnamen->isDouble();
+    $isDouble = $turnamen->requiresPairRegistration();
     $isPairMode = $isDouble && ($registrationMode ?? 'single') === 'pair';
     $capacityLabel = $turnamen->maks_peserta
         ? number_format($turnamen->maks_peserta)

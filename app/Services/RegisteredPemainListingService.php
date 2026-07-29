@@ -12,7 +12,7 @@ class RegisteredPemainListingService
 {
     public function paginate(Request $request, ?Turnamen $turnamen): array
     {
-        $isDoubleView = $turnamen && $turnamen->isDouble() && $turnamen->isRegistrationClosed();
+        $isDoubleView = $turnamen && $turnamen->playsAsPairs() && $turnamen->isRegistrationClosed();
 
         if (! $turnamen) {
             return [
@@ -83,7 +83,7 @@ class RegisteredPemainListingService
                     $q->where('status', $request->status);
                 }
 
-                if ($turnamen->isDouble()) {
+                if ($turnamen->requiresPairRegistration()) {
                     $q->with(TurnamenPeserta::partnerPemainEagerLoads());
                 }
             },
@@ -111,7 +111,7 @@ class RegisteredPemainListingService
 
         $allowed = ['nama', 'no_hp', 'gender', 'rating', 'status'];
 
-        if ($turnamen->isDouble()) {
+        if ($turnamen->requiresPairRegistration()) {
             $allowed[] = 'partner';
         }
 
@@ -195,7 +195,7 @@ class RegisteredPemainListingService
 
     protected function resolveSoloPesertaOptions(Turnamen $turnamen)
     {
-        if (! $turnamen->isDouble() || $turnamen->isRegistrationClosed()) {
+        if (! $turnamen->requiresPairRegistration() || $turnamen->isRegistrationClosed()) {
             return collect();
         }
 

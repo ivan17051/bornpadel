@@ -84,7 +84,7 @@
                                                 {{ optional($peserta->turnamen)->nama ?? '—' }}
                                                 @if ($partner)
                                                     <div class="small text-muted">Partner: {{ $partner->nama }}</div>
-                                                @elseif (optional($peserta->turnamen)->isDouble() && (int) $peserta->id_pemain1 === (int) $pemain->id)
+                                                @elseif (optional($peserta->turnamen)->requiresPairRegistration() && (int) $peserta->id_pemain1 === (int) $pemain->id)
                                                     <div class="small text-warning">Belum ada pemain 2</div>
                                                 @endif
                                             </td>

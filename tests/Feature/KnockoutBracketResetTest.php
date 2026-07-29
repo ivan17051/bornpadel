@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Pemain;
 use App\Models\Pertandingan;
 use App\Models\Turnamen;
+use App\Models\TurnamenPasangan;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\GroupMatchmakingService;
@@ -170,7 +171,7 @@ class KnockoutBracketResetTest extends TestCase
             'status' => 'ongoing',
         ]);
 
-        collect(range(1, 8))->each(function ($index) use ($turnamen) {
+        collect(range(1, 16))->each(function ($index) use ($turnamen) {
             $pemain = Pemain::create([
                 'nama' => "BR Player {$index} " . uniqid(),
                 'gender' => $index % 2 ? 'male' : 'female',
@@ -187,11 +188,23 @@ class KnockoutBracketResetTest extends TestCase
             ]);
         });
 
+        $peserta = TurnamenPeserta::query()->forTurnamen($turnamen->id)->orderBy('id')->get();
+        foreach ($peserta->chunk(2) as $pair) {
+            $pair = $pair->values();
+            TurnamenPasangan::create([
+                'id_turnamen' => $turnamen->id,
+                'id_peserta_1' => $pair[0]->id,
+                'id_peserta_2' => $pair[1]->id,
+                'paired_at' => now(),
+            ]);
+        }
+        $turnamen->update(['registration_paired_at' => now()]);
+
         $groups = app(GroupMatchmakingService::class);
         $scoring = app(MatchScoringService::class);
         $bracket = app(KnockoutBracketService::class);
 
-        $groups->generateRandomGroups($turnamen, 2, 2);
+        $groups->generateRandomGroups($turnamen->fresh(), 2, 2);
         $groups->generateGroupMatches($turnamen->fresh());
 
         foreach ($turnamen->pertandingan()->whereNotNull('id_grup')->get() as $match) {

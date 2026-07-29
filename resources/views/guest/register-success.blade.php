@@ -4,7 +4,8 @@
 
 @section('content')
 @php
-    $isDouble = $turnamen && $turnamen->isDouble();
+    $isDouble = $turnamen && $turnamen->requiresPairRegistration();
+    $randomizesPartners = $turnamen && $turnamen->randomizesPartners();
     $playerLabels = $isDouble ? ['Pemain 1', 'Pemain 2'] : ['Peserta'];
 @endphp
 
@@ -32,10 +33,15 @@
                     @endif
                 </p>
 
-                @if ($isDouble)
+                @if ($randomizesPartners)
                     <div class="alert alert-light border text-start mb-4">
                         <i class="bi bi-shuffle me-2"></i>
-                        Jika anda tidak mendaftar berpasangan, maka pasangan untuk turnamen double akan ditentukan secara acak setelah pendaftaran ditutup oleh panitia.
+                        Pasangan untuk turnamen single akan ditentukan secara acak setelah pendaftaran ditutup oleh panitia.
+                    </div>
+                @elseif ($isDouble && count($players) === 1)
+                    <div class="alert alert-light border text-start mb-4">
+                        <i class="bi bi-people me-2"></i>
+                        Pendaftaran individu berhasil. Pasangan akan diatur oleh panitia sebelum pertandingan dimulai.
                     </div>
                 @endif
 
@@ -45,9 +51,7 @@
                     @endphp
                     <div class="card bg-light border-0 text-start {{ $loop->last ? 'mb-4' : 'mb-3' }}">
                         <div class="card-body py-3">
-                            @if ($isDouble && count($players) === 1)
-                                <div class="small text-muted text-uppercase fw-semibold mb-2">Peserta</div>
-                            @elseif ($isDouble)
+                            @if ($isDouble)
                                 <div class="small text-muted text-uppercase fw-semibold mb-2">
                                     {{ $playerLabels[$index] ?? 'Pemain ' . ($index + 1) }}
                                 </div>

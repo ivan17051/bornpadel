@@ -18,10 +18,15 @@
 ])
 
 @if ($turnamen)
-    @if ($turnamen->isDouble())
+    @if ($turnamen->requiresPairRegistration())
+        <div class="alert alert-light border mb-3">
+            <i class="bi bi-people me-2"></i>
+            Turnamen double: daftarkan pemain individu dulu, lalu atur pasangan sebelum menutup pendaftaran.
+        </div>
+    @elseif ($turnamen->randomizesPartners())
         <div class="alert alert-light border mb-3">
             <i class="bi bi-shuffle me-2"></i>
-            Turnamen double: pemain didaftarkan individu. Pasangan dibuat otomatis saat pendaftaran ditutup (atau diatur manual nanti).
+            Turnamen single: pemain didaftarkan individu. Pasangan diacak otomatis saat pendaftaran ditutup.
         </div>
     @endif
 

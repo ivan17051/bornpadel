@@ -33,7 +33,7 @@ class RegistrationController extends Controller
         $buktiBayar = $request->file('bukti_bayar');
 
         try {
-            if ($turnamen->isDouble() && $request->isPairRegistration()) {
+            if ($turnamen->requiresPairRegistration() && $request->isPairRegistration()) {
                 $pair = $this->registrationService->registerPair(
                     $turnamen,
                     $request->playerOnePayload(),
@@ -77,9 +77,7 @@ class RegistrationController extends Controller
             'success' => true,
             'message' => $partner
                 ? 'Pendaftaran berpasangan berhasil! Tim kami akan memverifikasi data Anda.'
-                : ($turnamen->isDouble()
-                    ? 'Pendaftaran individu berhasil! Pasangan akan dibuat otomatis setelah pendaftaran ditutup.'
-                    : 'Pendaftaran berhasil! Tim kami akan memverifikasi data Anda.'),
+                : 'Pendaftaran berhasil! Tim kami akan memverifikasi data Anda.',
             'data' => [
                 'registration_type' => $partner ? 'pair' : 'single',
                 'pemain' => [

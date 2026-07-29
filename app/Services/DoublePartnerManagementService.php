@@ -96,7 +96,7 @@ class DoublePartnerManagementService
     {
         $peserta->loadMissing('turnamen');
 
-        if (! $peserta->turnamen || ! $peserta->turnamen->isDouble()) {
+        if (! $peserta->turnamen || ! $peserta->turnamen->requiresPairRegistration()) {
             throw new RuntimeException('Fitur pasangan hanya tersedia untuk turnamen double.');
         }
     }

@@ -315,9 +315,13 @@ class PemainController extends Controller
             return back()->withInput()->withErrors(['no_hp' => $e->getMessage()]);
         }
 
+        $successMessage = $turnamen->requiresPairRegistration()
+            ? 'Pemain berhasil ditambahkan. Atur pasangan sebelum menutup pendaftaran.'
+            : 'Pemain berhasil ditambahkan.';
+
         return redirect()
             ->route('admin.pemain.index', ['id_turnamen' => $turnamen->id])
-            ->with('success', 'Pemain berhasil ditambahkan.');
+            ->with('success', $successMessage);
     }
 
     protected function otherPemainForSlot(TurnamenPeserta $peserta, int $slot): ?Pemain
@@ -330,7 +334,7 @@ class PemainController extends Controller
         $peserta->loadMissing(['turnamen', 'pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1']);
         $this->tournamentAccess->assertTurnamenId((int) $peserta->id_turnamen);
 
-        if (! $peserta->turnamen->isDouble()) {
+        if (! $peserta->turnamen->requiresPairRegistration()) {
             return redirect()
                 ->route('admin.pemain.index', ['id_turnamen' => $peserta->id_turnamen])
                 ->with('error', 'Turnamen ini bukan kategori double.');
@@ -597,7 +601,7 @@ class PemainController extends Controller
             $peserta->update(['status' => $request->status]);
         }
 
-        $isPairEntry = $peserta->turnamen && $peserta->turnamen->isDouble() && $peserta->isCompletePair();
+        $isPairEntry = $peserta->turnamen && $peserta->turnamen->playsAsPairs() && $peserta->isCompletePair();
 
         $messages = [
             'approved' => $isPairEntry ? 'Pasangan berhasil disetujui.' : 'Pemain berhasil disetujui.',
@@ -706,7 +710,7 @@ class PemainController extends Controller
 
         DB::transaction(function () use ($pemain, $pesertaQuery) {
             $pesertaQuery->with('turnamen')->get()->each(function (TurnamenPeserta $peserta) use ($pemain) {
-                if ($peserta->turnamen && $peserta->turnamen->isDouble()) {
+                if ($peserta->turnamen && $peserta->turnamen->playsAsPairs()) {
                     $this->registrationService->detachPemainFromPeserta($peserta, $pemain->id);
                 }
             });

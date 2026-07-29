@@ -8,6 +8,7 @@ use App\Models\TurnamenPeserta;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class PemainRegistrationService
@@ -314,7 +315,7 @@ class PemainRegistrationService
      */
     public function getPublicParticipantList(Turnamen $turnamen): array
     {
-        if ($turnamen->isDouble() && $turnamen->isRegistrationClosed()) {
+        if ($turnamen->playsAsPairs() && $turnamen->isRegistrationClosed()) {
             $items = TurnamenPeserta::query()
                 ->forTurnamen($turnamen->id)
                 ->whereHas('pasanganAsPeserta1')
@@ -357,14 +358,14 @@ class PemainRegistrationService
             });
 
         return [
-            'type' => $turnamen->isDouble() ? 'double_individual' : 'single',
+            'type' => $turnamen->requiresPairRegistration() ? 'double_individual' : 'single',
             'items' => $items,
         ];
     }
 
     public function getSoloPesertaOptions(Turnamen $turnamen): Collection
     {
-        if (! $turnamen->isDouble()) {
+        if (! $turnamen->requiresPairRegistration()) {
             return collect();
         }
 
@@ -414,48 +415,74 @@ class PemainRegistrationService
         ?UploadedFile $foto2,
         ?UploadedFile $buktiBayar = null,
         string $sumber = TurnamenPeserta::SUMBER_INTERNAL,
-        bool $updateExistingProfile = true
+        bool $updateExistingProfile = true,
+        ?string $statusOverride = null,
+        ?TournamentCapacityService $capacityService = null
     ): array {
+        if (! $turnamen->requiresPairRegistration()) {
+            throw new RuntimeException('Pendaftaran berpasangan hanya tersedia untuk turnamen double.');
+        }
+
         if (trim($player1['no_hp']) === trim($player2['no_hp'])) {
             throw new RuntimeException('Nomor HP pemain 1 dan pemain 2 tidak boleh sama.');
         }
 
-        $pemain = $this->upsertPemain($player1, $foto1, $updateExistingProfile);
-        $partner = $this->upsertPemain($player2, $foto2, $updateExistingProfile);
+        $existingPlayer1 = $this->findPemainByPhone($player1['no_hp']);
+        $existingPlayer2 = $this->findPemainByPhone($player2['no_hp']);
 
-        if ($this->isRegisteredForTournament($pemain, $turnamen)) {
+        if ($existingPlayer1 && $this->isRegisteredForTournament($existingPlayer1, $turnamen)) {
             throw new RuntimeException('Nomor HP pemain 1 sudah terdaftar pada turnamen ini.');
         }
 
-        if ($this->isRegisteredForTournament($partner, $turnamen)) {
+        if ($existingPlayer2 && $this->isRegisteredForTournament($existingPlayer2, $turnamen)) {
             throw new RuntimeException('Nomor HP pemain 2 sudah terdaftar pada turnamen ini.');
         }
 
-        $buktiPath = $this->storeBuktiBayar($buktiBayar);
-        $status = $this->resolveRegistrationStatusFromBukti($buktiPath);
+        $status = $statusOverride ?: $this->resolveRegistrationStatusFromBukti(null, $buktiBayar);
+        $capacityService = $capacityService ?? app(TournamentCapacityService::class);
 
-        $peserta1 = TurnamenPeserta::create([
-            'id_turnamen' => $turnamen->id,
-            'id_pemain1' => $pemain->id,
-            'status' => $status,
-            'bukti_bayar' => $buktiPath,
-            'sumber' => $sumber,
-        ]);
+        if ($status === 'approved') {
+            $capacityService->assertCanApprove($turnamen, 2);
+        }
 
-        $peserta2 = TurnamenPeserta::create([
-            'id_turnamen' => $turnamen->id,
-            'id_pemain1' => $partner->id,
-            'status' => $status,
-            'bukti_bayar' => $buktiPath,
-            'sumber' => $sumber,
-        ]);
+        return DB::transaction(function () use (
+            $turnamen,
+            $player1,
+            $foto1,
+            $player2,
+            $foto2,
+            $buktiBayar,
+            $sumber,
+            $updateExistingProfile,
+            $status
+        ) {
+            $pemain = $this->upsertPemain($player1, $foto1, $updateExistingProfile);
+            $partner = $this->upsertPemain($player2, $foto2, $updateExistingProfile);
+            $buktiPath = $this->storeBuktiBayar($buktiBayar);
 
-        app(DoublePairingService::class)->createPair($turnamen, $peserta1, $peserta2);
+            $peserta1 = TurnamenPeserta::create([
+                'id_turnamen' => $turnamen->id,
+                'id_pemain1' => $pemain->id,
+                'status' => $status,
+                'bukti_bayar' => $buktiPath,
+                'sumber' => $sumber,
+            ]);
 
-        return [
-            'pemain' => $pemain,
-            'partner' => $partner,
-        ];
+            $peserta2 = TurnamenPeserta::create([
+                'id_turnamen' => $turnamen->id,
+                'id_pemain1' => $partner->id,
+                'status' => $status,
+                'bukti_bayar' => $buktiPath,
+                'sumber' => $sumber,
+            ]);
+
+            app(DoublePairingService::class)->createPair($turnamen, $peserta1, $peserta2);
+
+            return [
+                'pemain' => $pemain,
+                'partner' => $partner,
+            ];
+        });
     }
 
     public function upsertPemain(array $data, ?UploadedFile $foto = null, bool $updateExisting = true): Pemain

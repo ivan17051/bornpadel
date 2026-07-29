@@ -40,8 +40,14 @@ class LookupPemainRegistrationRequest extends FormRequest
             }
         }
 
-        if ($turnamen && $turnamen->isDouble() && $this->input('registration_mode') === 'pair') {
-            $rules['no_hp_2'] = ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp'];
+        if ($turnamen && $turnamen->requiresPairRegistration()) {
+            $rules['registration_mode'] = ['required', 'in:single,pair'];
+
+            if ($this->input('registration_mode') === 'pair') {
+                $rules['no_hp_2'] = ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp'];
+            }
+        } elseif ($turnamen && $turnamen->randomizesPartners()) {
+            $rules['registration_mode'] = ['nullable', 'in:single'];
         }
 
         return $rules;
@@ -54,8 +60,11 @@ class LookupPemainRegistrationRequest extends FormRequest
                 $this->input('id_turnamen') ? (int) $this->input('id_turnamen') : null
             );
 
-            if ($turnamen && ! $turnamen->isDouble() && $this->input('registration_mode') === 'pair') {
-                $validator->errors()->add('registration_mode', 'Pendaftaran berpasangan hanya tersedia untuk turnamen double.');
+            if ($turnamen && ! $turnamen->requiresPairRegistration() && $this->input('registration_mode') === 'pair') {
+                $validator->errors()->add(
+                    'registration_mode',
+                    'Pendaftaran berpasangan hanya tersedia untuk turnamen double.'
+                );
             }
         });
     }

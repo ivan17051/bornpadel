@@ -48,7 +48,7 @@ class MatchmakingPageService
             ? $this->matchmakingService->getDoublePairingSummary($turnamen)
             : null;
 
-        $groupingUnitCount = $turnamen && $turnamen->isDouble()
+        $groupingUnitCount = $turnamen && $turnamen->playsAsPairs()
             ? ($turnamen->isRegistrationOpen()
                 ? (int) ($pairingSummary['pairs_preview'] ?? 0)
                 : $this->matchmakingService->countApprovedPairs($turnamen))

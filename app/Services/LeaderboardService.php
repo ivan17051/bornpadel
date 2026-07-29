@@ -72,7 +72,7 @@ class LeaderboardService
                     'id' => $grup->id,
                     'nama' => $grup->nama,
                     'babak' => $grup->babak,
-                    'is_double' => $turnamen->isDouble(),
+                    'is_double' => $turnamen->playsAsPairs(),
                     'is_mahjong' => $turnamen->isMahjong(),
                     'matches_complete' => $matchesTotal > 0 && $matchesTotal === $matchesCompleted,
                     'standings' => $grup->members->values()->map(function ($member, $index) use ($turnamen, $grup) {
