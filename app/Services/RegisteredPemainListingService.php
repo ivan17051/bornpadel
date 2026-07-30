@@ -86,6 +86,10 @@ class RegisteredPemainListingService
                 if ($turnamen->requiresPairRegistration()) {
                     $q->with(TurnamenPeserta::partnerPemainEagerLoads());
                 }
+
+                if ($turnamen->allowsGroupRegistration()) {
+                    $q->with('grupPendaftaranMember.grupPendaftaran');
+                }
             },
         ]);
 
@@ -116,7 +120,11 @@ class RegisteredPemainListingService
         }
 
         if (! in_array($sort, $allowed, true)) {
-            $query->latest();
+            if ($turnamen->allowsGroupRegistration()) {
+                $this->applyFriendlyGroupDefaultSort($query, $turnamen);
+            } else {
+                $query->latest();
+            }
 
             return;
         }
@@ -147,6 +155,21 @@ class RegisteredPemainListingService
         }
 
         $query->orderBy($sort, $dir);
+    }
+
+    protected function applyFriendlyGroupDefaultSort(Builder $query, Turnamen $turnamen): void
+    {
+        $query->select('m_pemain.*')
+            ->join('turnamen_peserta as tp_fg', function ($join) use ($turnamen) {
+                $join->on('m_pemain.id', '=', 'tp_fg.id_pemain1')
+                    ->where('tp_fg.id_turnamen', '=', $turnamen->id);
+            })
+            ->leftJoin('turnamen_grup_pendaftaran_member as tgm', 'tgm.id_peserta', '=', 'tp_fg.id')
+            ->leftJoin('turnamen_grup_pendaftaran as tgp', 'tgp.id', '=', 'tgm.id_grup_pendaftaran')
+            ->orderByRaw('CASE WHEN tgp.id IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('tgp.nama')
+            ->orderBy('tgm.urutan')
+            ->orderBy('m_pemain.nama');
     }
 
     protected function applyPesertaPairSort(Builder $query, Request $request): void

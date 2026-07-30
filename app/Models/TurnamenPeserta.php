@@ -47,6 +47,11 @@ class TurnamenPeserta extends Model
         return $this->hasOne(TurnamenPasangan::class, 'id_peserta_2');
     }
 
+    public function grupPendaftaranMember()
+    {
+        return $this->hasOne(TurnamenGrupPendaftaranMember::class, 'id_peserta');
+    }
+
     public function getPasanganAttribute(): ?TurnamenPasangan
     {
         $this->loadMissing(['pasanganAsPeserta1', 'pasanganAsPeserta2']);

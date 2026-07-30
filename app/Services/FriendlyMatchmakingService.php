@@ -6,6 +6,7 @@ use App\Models\Grup;
 use App\Models\GrupMember;
 use App\Models\Pertandingan;
 use App\Models\Turnamen;
+use App\Models\TurnamenGrupPendaftaran;
 use App\Models\TurnamenPeserta;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -167,16 +168,25 @@ class FriendlyMatchmakingService
             );
         }
 
-        $ordered = $this->orderEntries($entries, $mode);
+        return DB::transaction(function () use ($turnamen, $entries, $mode, $preview) {
+            $materialized = $this->materializeCompletePreGroups($turnamen);
+            $groups = $materialized['groups'];
+            $assignedPesertaIds = $materialized['peserta_ids'];
 
-        return DB::transaction(function () use ($turnamen, $ordered, $mode, $preview) {
-            $chunks = $ordered->chunk(self::PLAYERS_PER_GROUP)->values();
-            $groups = collect();
+            $solos = $entries
+                ->reject(fn (TurnamenPeserta $peserta) => in_array($peserta->id, $assignedPesertaIds, true))
+                ->values();
 
-            foreach ($chunks as $index => $chunk) {
+            $orderedSolos = $this->orderEntries($solos, $mode);
+            $usedNames = $groups->pluck('nama')
+                ->map(fn ($nama) => mb_strtolower(trim((string) $nama)))
+                ->all();
+            $letterIndex = 0;
+
+            foreach ($orderedSolos->chunk(self::PLAYERS_PER_GROUP)->values() as $chunk) {
                 $grup = Grup::create([
                     'id_turnamen' => $turnamen->id,
-                    'nama' => 'Grup ' . chr(65 + $index),
+                    'nama' => $this->nextAvailableLetterGroupName($usedNames, $letterIndex),
                     'babak' => 1,
                     'ronde' => 1,
                     'is_aktif' => true,
@@ -186,15 +196,7 @@ class FriendlyMatchmakingService
                 ]);
 
                 foreach ($chunk as $peserta) {
-                    GrupMember::create([
-                        'id_grup' => $grup->id,
-                        'id_pemain' => $peserta->id_pemain1,
-                        'id_turnamen_peserta' => $peserta->id,
-                        'poin_didapat' => 0,
-                        'set_menang' => 0,
-                        'games_menang' => 0,
-                        'poin_akumulasi' => 0,
-                    ]);
+                    $this->createMember($grup, $peserta);
                 }
 
                 $groups->push($grup->load(['members.pemain']));
@@ -285,6 +287,7 @@ class FriendlyMatchmakingService
 
     /**
      * Create empty groups (Grup A, B, ...) without assigning players.
+     * Complete approved pre-groups are materialized as named Grup with members assigned.
      *
      * @return array{groups: Collection, group_count: int}
      */
@@ -304,15 +307,27 @@ class FriendlyMatchmakingService
         }
 
         return DB::transaction(function () use ($turnamen, $preview) {
-            $groups = collect();
+            $materialized = $this->materializeCompletePreGroups($turnamen);
+            $groups = $materialized['groups'];
+            $remainingGroupCount = $preview['group_count'] - $groups->count();
 
-            for ($index = 0; $index < $preview['group_count']; $index++) {
-                $groups->push($this->createEmptyGroup($turnamen, $index));
+            $usedNames = $groups->pluck('nama')
+                ->map(fn ($nama) => mb_strtolower(trim((string) $nama)))
+                ->all();
+            $letterIndex = 0;
+
+            for ($i = 0; $i < $remainingGroupCount; $i++) {
+                $groups->push($this->createEmptyGroupWithName(
+                    $turnamen,
+                    $this->nextAvailableLetterGroupName($usedNames, $letterIndex)
+                ));
             }
+
+            $this->ensureInterGroupSlots($turnamen);
 
             return [
                 'groups' => $groups,
-                'group_count' => $preview['group_count'],
+                'group_count' => $groups->count(),
             ];
         });
     }
@@ -551,9 +566,14 @@ class FriendlyMatchmakingService
 
     protected function createEmptyGroup(Turnamen $turnamen, int $index): Grup
     {
+        return $this->createEmptyGroupWithName($turnamen, 'Grup ' . chr(65 + $index));
+    }
+
+    protected function createEmptyGroupWithName(Turnamen $turnamen, string $nama): Grup
+    {
         return Grup::create([
             'id_turnamen' => $turnamen->id,
-            'nama' => 'Grup ' . chr(65 + $index),
+            'nama' => $nama,
             'babak' => 1,
             'ronde' => 1,
             'is_aktif' => true,
@@ -561,6 +581,138 @@ class FriendlyMatchmakingService
             'set_menang' => 0,
             'games_menang' => 0,
         ]);
+    }
+
+    /**
+     * Materialize complete approved registration pre-groups as real competition Grup.
+     * Does not touch turnamen_grup_pendaftaran rows (resetGroups also leaves them intact).
+     *
+     * @return array{groups: Collection<int, Grup>, peserta_ids: array<int, int>}
+     */
+    public function materializeCompletePreGroups(Turnamen $turnamen): array
+    {
+        $preGroups = $this->getCompletePreGroups($turnamen);
+        $groups = collect();
+        $pesertaIds = [];
+
+        foreach ($preGroups as $preGroup) {
+            $grup = Grup::create([
+                'id_turnamen' => $turnamen->id,
+                'nama' => $preGroup->nama,
+                'babak' => 1,
+                'ronde' => 1,
+                'is_aktif' => true,
+                'poin_didapat' => 0,
+                'set_menang' => 0,
+                'games_menang' => 0,
+            ]);
+
+            foreach ($preGroup->members as $member) {
+                $peserta = $member->peserta;
+                if (! $peserta) {
+                    continue;
+                }
+                $this->createMember($grup, $peserta);
+                $pesertaIds[] = (int) $peserta->id;
+            }
+
+            $groups->push($grup->load(['members.pemain']));
+        }
+
+        return [
+            'groups' => $groups,
+            'peserta_ids' => $pesertaIds,
+        ];
+    }
+
+    /**
+     * @return Collection<int, TurnamenGrupPendaftaran>
+     */
+    public function getCompletePreGroups(Turnamen $turnamen): Collection
+    {
+        return TurnamenGrupPendaftaran::query()
+            ->forTurnamen($turnamen->id)
+            ->with(['members.peserta.pemain1'])
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (TurnamenGrupPendaftaran $group) => $group->isFullyApproved())
+            ->values();
+    }
+
+    /**
+     * Registration groups for admin UI (pre-groups + solo bucket).
+     *
+     * @return Collection<int, array{id: int|null, nama: string, is_solo_bucket: bool, is_complete: bool, members: Collection}>
+     */
+    public function getFriendlyRegistrationGroups(Turnamen $turnamen): Collection
+    {
+        $preGroups = TurnamenGrupPendaftaran::query()
+            ->forTurnamen($turnamen->id)
+            ->with(['members.peserta.pemain1'])
+            ->orderBy('nama')
+            ->orderBy('id')
+            ->get();
+
+        $groupedPesertaIds = $preGroups
+            ->flatMap(fn (TurnamenGrupPendaftaran $group) => $group->members->pluck('id_peserta'))
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $result = $preGroups->map(function (TurnamenGrupPendaftaran $group) {
+            return [
+                'id' => $group->id,
+                'nama' => $group->nama,
+                'is_solo_bucket' => false,
+                'is_complete' => $group->isFullyApproved(),
+                'members' => $group->members->map(function ($member) {
+                    return $member->peserta;
+                })->filter()->values(),
+            ];
+        });
+
+        $solos = TurnamenPeserta::query()
+            ->forTurnamen($turnamen->id)
+            ->whereNotIn('id', $groupedPesertaIds ?: [0])
+            ->with('pemain1')
+            ->orderBy('id')
+            ->get();
+
+        if ($solos->isNotEmpty() || $result->isEmpty()) {
+            $result->push([
+                'id' => null,
+                'nama' => 'Individu / Belum berkelompok',
+                'is_solo_bucket' => true,
+                'is_complete' => false,
+                'members' => $solos,
+            ]);
+        }
+
+        return $result->values();
+    }
+
+    /**
+     * @param  array<int, string>  $usedLowerNames
+     */
+    protected function nextAvailableLetterGroupName(array &$usedLowerNames, int &$index): string
+    {
+        while ($index < 100) {
+            $nama = $index < 26
+                ? 'Grup ' . chr(65 + $index)
+                : 'Grup ' . ($index + 1);
+            $index++;
+            $lower = mb_strtolower($nama);
+
+            if (! in_array($lower, $usedLowerNames, true)) {
+                $usedLowerNames[] = $lower;
+
+                return $nama;
+            }
+        }
+
+        $fallback = 'Grup ' . uniqid();
+        $usedLowerNames[] = mb_strtolower($fallback);
+
+        return $fallback;
     }
 
     protected function createMember(Grup $grup, TurnamenPeserta $peserta): GrupMember

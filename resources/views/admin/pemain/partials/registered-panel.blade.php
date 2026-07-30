@@ -5,6 +5,7 @@
     $showBulkActions = auth()->user()->isAdmin() && $turnamen && empty($isDoubleView);
     $showPartnerActions = auth()->user()->isAdmin() && $turnamen && $turnamen->requiresPairRegistration() && ! $turnamen->isRegistrationClosed() && empty($isDoubleView);
     $showPartnerColumn = $turnamen && $turnamen->requiresPairRegistration() && empty($isDoubleView);
+    $showFriendlyGroups = $turnamen && $turnamen->allowsGroupRegistration() && empty($isDoubleView) && ! request()->filled('sort');
     $sortThParams = compact('filterRoute', 'preserveTab');
 @endphp
 
@@ -139,7 +140,7 @@
                         @else
                             @if ($showBulkActions)
                                 <th style="width: 2.5rem;">
-                                    <input type="checkbox" class="form-check-input" id="select-all-approvable" title="Pilih semua yang dapat disetujui">
+                                    <input type="checkbox" class="form-check-input select-all-approvable" title="Pilih semua yang dapat disetujui">
                                 </th>
                             @endif
                             <th style="width: 3.5rem;"></th>
@@ -211,13 +212,30 @@
                             </tr>
                         @endforelse
                     @else
+                        @php
+                            $prevFriendlyGroupKey = '__unset__';
+                            $friendlyColspan = 8 + ($showBulkActions ? 1 : 0) + ($showPartnerColumn ? 1 : 0);
+                        @endphp
                         @forelse ($pemain as $item)
                             @php
                                 $pesertaRow = $turnamen ? $item->turnamenPesertaAsPemain1->first() : null;
                                 $partnerPemain = $showPartnerColumn ? optional($pesertaRow)->partner_pemain : null;
                                 $registrationStatus = optional($pesertaRow)->status;
                                 $canBulkApprove = $showBulkActions && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
+                                $friendlyGroup = $showFriendlyGroups
+                                    ? optional(optional($pesertaRow)->grupPendaftaranMember)->grupPendaftaran
+                                    : null;
+                                $friendlyGroupKey = $friendlyGroup ? 'g:' . $friendlyGroup->id : 'solo';
                             @endphp
+                            @if ($showFriendlyGroups && $friendlyGroupKey !== $prevFriendlyGroupKey)
+                                <tr class="table-secondary">
+                                    <td colspan="{{ $friendlyColspan }}" class="small fw-semibold py-2">
+                                        <i class="bi bi-people me-1"></i>
+                                        {{ $friendlyGroup ? $friendlyGroup->nama : 'Individu / Belum berkelompok' }}
+                                    </td>
+                                </tr>
+                                @php $prevFriendlyGroupKey = $friendlyGroupKey; @endphp
+                            @endif
                             <tr data-pemain-id="{{ $item->id }}" data-peserta-id="{{ optional($pesertaRow)->id }}">
                                 @if ($showBulkActions)
                                     <td>

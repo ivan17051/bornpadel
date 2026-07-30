@@ -129,6 +129,11 @@ class Turnamen extends Model
         return $this->jenis === 'friendly';
     }
 
+    public function allowsGroupRegistration(): bool
+    {
+        return $this->isFriendly();
+    }
+
     public function usesKnockoutBracket(): bool
     {
         return $this->isSingle() || $this->isDouble();
@@ -171,6 +176,11 @@ class Turnamen extends Model
     public function grup()
     {
         return $this->hasMany(Grup::class, 'id_turnamen');
+    }
+
+    public function grupPendaftaran()
+    {
+        return $this->hasMany(TurnamenGrupPendaftaran::class, 'id_turnamen');
     }
 
     public function pertandingan()

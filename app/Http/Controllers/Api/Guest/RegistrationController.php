@@ -33,7 +33,29 @@ class RegistrationController extends Controller
         $buktiBayar = $request->file('bukti_bayar');
 
         try {
-            if ($turnamen->requiresPairRegistration() && $request->isPairRegistration()) {
+            if ($turnamen->allowsGroupRegistration() && $request->isGroupRegistration()) {
+                $result = $this->registrationService->registerGroup(
+                    $turnamen,
+                    (string) $request->input('nama_grup'),
+                    $request->groupPlayersPayload(),
+                    [
+                        $request->file('foto'),
+                        $request->file('foto_2'),
+                        $request->file('foto_3'),
+                        $request->file('foto_4'),
+                    ],
+                    $buktiBayar,
+                    TurnamenPeserta::SUMBER_INTERNAL,
+                    false
+                );
+
+                $players = $result['players'];
+                $pemain = $players[0];
+                $partner = null;
+                $pasangan = null;
+                $grupPendaftaran = $result['grup_pendaftaran'];
+                $registrationType = 'group';
+            } elseif ($turnamen->requiresPairRegistration() && $request->isPairRegistration()) {
                 $pair = $this->registrationService->registerPair(
                     $turnamen,
                     $request->playerOnePayload(),
@@ -52,6 +74,9 @@ class RegistrationController extends Controller
                     ->where('id_pemain1', $pemain->id)
                     ->first();
                 $pasangan = optional($peserta)->pasangan;
+                $grupPendaftaran = null;
+                $registrationType = 'pair';
+                $players = collect([$pemain, $partner]);
             } else {
                 $pemain = $this->registrationService->register(
                     $turnamen,
@@ -63,6 +88,9 @@ class RegistrationController extends Controller
                 );
                 $partner = null;
                 $pasangan = null;
+                $grupPendaftaran = null;
+                $registrationType = 'single';
+                $players = collect([$pemain]);
             }
         } catch (\RuntimeException $e) {
             return response()->json([
@@ -71,20 +99,26 @@ class RegistrationController extends Controller
             ], 422);
         }
 
-        $status = $this->registrationService->getRegistrationStatus($pemain, $turnamen);
+        if ($registrationType === 'group') {
+            $message = 'Pendaftaran grup berhasil! Tim kami akan memverifikasi data Anda.';
+        } elseif ($registrationType === 'pair') {
+            $message = 'Pendaftaran berpasangan berhasil! Tim kami akan memverifikasi data Anda.';
+        } else {
+            $message = 'Pendaftaran berhasil! Tim kami akan memverifikasi data Anda.';
+        }
 
         return response()->json([
             'success' => true,
-            'message' => $partner
-                ? 'Pendaftaran berpasangan berhasil! Tim kami akan memverifikasi data Anda.'
-                : 'Pendaftaran berhasil! Tim kami akan memverifikasi data Anda.',
+            'message' => $message,
             'data' => [
-                'registration_type' => $partner ? 'pair' : 'single',
+                'registration_type' => $registrationType,
+                'nama_grup' => optional($grupPendaftaran)->nama,
+                'grup_pendaftaran_id' => optional($grupPendaftaran)->id,
                 'pemain' => [
                     'id' => $pemain->id,
                     'nama' => $pemain->nama,
                     'no_hp' => $pemain->no_hp,
-                    'status' => $status,
+                    'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
                 ],
                 'partner' => $partner ? [
                     'id' => $partner->id,
@@ -92,6 +126,14 @@ class RegistrationController extends Controller
                     'no_hp' => $partner->no_hp,
                     'status' => $this->registrationService->getRegistrationStatus($partner, $turnamen),
                 ] : null,
+                'players' => $players->map(function ($player) use ($turnamen) {
+                    return [
+                        'id' => $player->id,
+                        'nama' => $player->nama,
+                        'no_hp' => $player->no_hp,
+                        'status' => $this->registrationService->getRegistrationStatus($player, $turnamen),
+                    ];
+                })->values()->all(),
                 'pasangan_id' => optional($pasangan)->id,
                 'turnamen' => [
                     'id' => $turnamen->id,

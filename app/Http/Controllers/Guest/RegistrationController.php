@@ -50,34 +50,44 @@ class RegistrationController extends Controller
         $noHp = trim($validated['no_hp']);
         $registrationMode = $validated['registration_mode'] ?? 'single';
         $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
-        $noHp2 = $isPairMode ? trim($validated['no_hp_2']) : null;
+        $isGroupMode = $turnamen->allowsGroupRegistration() && $registrationMode === 'group';
+        $noHp2 = ($isPairMode || $isGroupMode) ? trim($validated['no_hp_2'] ?? '') : null;
+        $noHp3 = $isGroupMode ? trim($validated['no_hp_3'] ?? '') : null;
+        $noHp4 = $isGroupMode ? trim($validated['no_hp_4'] ?? '') : null;
+        $namaGrup = $isGroupMode ? trim($validated['nama_grup'] ?? '') : null;
 
-        $existingPemain = $this->registrationService->findPemainByPhone($noHp);
+        $phones = array_filter([
+            'no_hp' => $noHp,
+            'no_hp_2' => $noHp2,
+            'no_hp_3' => $noHp3,
+            'no_hp_4' => $noHp4,
+        ], fn ($value) => $value !== null && $value !== '');
 
-        if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $turnamen)) {
-            return back()
-                ->withInput()
-                ->withErrors(['no_hp' => 'Nomor HP pemain 1 sudah terdaftar pada turnamen ini.']);
-        }
+        foreach ($phones as $field => $phone) {
+            $existing = $this->registrationService->findPemainByPhone($phone);
+            if ($existing && $this->registrationService->isRegisteredForTournament($existing, $turnamen)) {
+                $label = $field === 'no_hp' ? 'pemain 1' : 'pemain ' . substr($field, -1);
 
-        if ($isPairMode) {
-            $existingPemain2 = $this->registrationService->findPemainByPhone($noHp2);
-
-            if ($existingPemain2 && $this->registrationService->isRegisteredForTournament($existingPemain2, $turnamen)) {
                 return back()
                     ->withInput()
-                    ->withErrors(['no_hp_2' => 'Nomor HP pemain 2 sudah terdaftar pada turnamen ini.']);
+                    ->withErrors([$field => 'Nomor HP ' . $label . ' sudah terdaftar pada turnamen ini.']);
             }
         }
 
         $formParams = [
             'no_hp' => $noHp,
             'id_turnamen' => $turnamen->id,
-            'registration_mode' => $isPairMode ? 'pair' : 'single',
+            'registration_mode' => $isGroupMode ? 'group' : ($isPairMode ? 'pair' : 'single'),
         ];
 
-        if ($isPairMode) {
+        if ($isPairMode || $isGroupMode) {
             $formParams['no_hp_2'] = $noHp2;
+        }
+
+        if ($isGroupMode) {
+            $formParams['no_hp_3'] = $noHp3;
+            $formParams['no_hp_4'] = $noHp4;
+            $formParams['nama_grup'] = $namaGrup;
         }
 
         return redirect()->route('guest.register.form', $formParams);
@@ -95,7 +105,11 @@ class RegistrationController extends Controller
         $noHp = trim((string) request('no_hp', old('no_hp', '')));
         $registrationMode = request('registration_mode', old('registration_mode', 'single'));
         $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
-        $noHp2 = $isPairMode ? trim((string) request('no_hp_2', old('player_2.no_hp', ''))) : '';
+        $isGroupMode = $turnamen->allowsGroupRegistration() && $registrationMode === 'group';
+        $noHp2 = ($isPairMode || $isGroupMode) ? trim((string) request('no_hp_2', old('player_2.no_hp', ''))) : '';
+        $noHp3 = $isGroupMode ? trim((string) request('no_hp_3', old('player_3.no_hp', ''))) : '';
+        $noHp4 = $isGroupMode ? trim((string) request('no_hp_4', old('player_4.no_hp', ''))) : '';
+        $namaGrup = $isGroupMode ? trim((string) request('nama_grup', old('nama_grup', ''))) : '';
 
         if ($noHp === '') {
             return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id]);
@@ -106,36 +120,53 @@ class RegistrationController extends Controller
                 ->withErrors(['no_hp_2' => 'Nomor HP pemain 2 wajib diisi untuk pendaftaran berpasangan.']);
         }
 
-        $existingPemain = $this->registrationService->findPemainByPhone($noHp);
-
-        if ($existingPemain && $this->registrationService->isRegisteredForTournament($existingPemain, $turnamen)) {
+        if ($isGroupMode && ($noHp2 === '' || $noHp3 === '' || $noHp4 === '' || $namaGrup === '')) {
             return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
-                ->withErrors(['no_hp' => 'Nomor HP pemain 1 sudah terdaftar pada turnamen ini.']);
+                ->withErrors(['no_hp' => 'Lengkapi 4 nomor HP dan nama grup untuk pendaftaran satu grup.']);
         }
 
-        $existingPemain2 = null;
-        $isExisting2 = false;
+        $phoneChecks = [
+            ['phone' => $noHp, 'field' => 'no_hp', 'label' => 'pemain 1'],
+        ];
 
-        if ($isPairMode) {
-            $existingPemain2 = $this->registrationService->findPemainByPhone($noHp2);
+        if ($isPairMode || $isGroupMode) {
+            $phoneChecks[] = ['phone' => $noHp2, 'field' => 'no_hp_2', 'label' => 'pemain 2'];
+        }
 
-            if ($existingPemain2 && $this->registrationService->isRegisteredForTournament($existingPemain2, $turnamen)) {
+        if ($isGroupMode) {
+            $phoneChecks[] = ['phone' => $noHp3, 'field' => 'no_hp_3', 'label' => 'pemain 3'];
+            $phoneChecks[] = ['phone' => $noHp4, 'field' => 'no_hp_4', 'label' => 'pemain 4'];
+        }
+
+        foreach ($phoneChecks as $check) {
+            $existing = $this->registrationService->findPemainByPhone($check['phone']);
+            if ($existing && $this->registrationService->isRegisteredForTournament($existing, $turnamen)) {
                 return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
-                    ->withErrors(['no_hp_2' => 'Nomor HP pemain 2 sudah terdaftar pada turnamen ini.']);
+                    ->withErrors([$check['field'] => 'Nomor HP ' . $check['label'] . ' sudah terdaftar pada turnamen ini.']);
             }
-
-            $isExisting2 = (bool) $existingPemain2;
         }
+
+        $existingPemain = $this->registrationService->findPemainByPhone($noHp);
+        $existingPemain2 = ($isPairMode || $isGroupMode) ? $this->registrationService->findPemainByPhone($noHp2) : null;
+        $existingPemain3 = $isGroupMode ? $this->registrationService->findPemainByPhone($noHp3) : null;
+        $existingPemain4 = $isGroupMode ? $this->registrationService->findPemainByPhone($noHp4) : null;
 
         return view('guest.register-form', [
             'turnamen' => $turnamen,
             'noHp' => $noHp,
             'noHp2' => $noHp2,
+            'noHp3' => $noHp3,
+            'noHp4' => $noHp4,
+            'namaGrup' => $namaGrup,
             'existingPemain' => $existingPemain,
             'existingPemain2' => $existingPemain2,
+            'existingPemain3' => $existingPemain3,
+            'existingPemain4' => $existingPemain4,
             'isExisting' => (bool) $existingPemain,
-            'isExisting2' => $isExisting2,
-            'registrationMode' => $isPairMode ? 'pair' : 'single',
+            'isExisting2' => (bool) $existingPemain2,
+            'isExisting3' => (bool) $existingPemain3,
+            'isExisting4' => (bool) $existingPemain4,
+            'registrationMode' => $isGroupMode ? 'group' : ($isPairMode ? 'pair' : 'single'),
         ]);
     }
 
@@ -148,13 +179,35 @@ class RegistrationController extends Controller
                 ->with('warning', 'Pendaftaran ditutup. Tidak ada turnamen aktif.');
         }
 
-        $validated = $request->validated();
         $buktiBayar = $request->file('bukti_bayar');
+        $namaGrup = null;
 
         try {
+            $registerAsGroup = $turnamen->allowsGroupRegistration() && $request->isGroupRegistration();
             $registerAsPair = $turnamen->requiresPairRegistration() && $request->isPairRegistration();
 
-            if ($registerAsPair) {
+            if ($registerAsGroup) {
+                $result = $this->registrationService->registerGroup(
+                    $turnamen,
+                    (string) $request->input('nama_grup'),
+                    $request->groupPlayersPayload(),
+                    [
+                        $request->file('foto'),
+                        $request->file('foto_2'),
+                        $request->file('foto_3'),
+                        $request->file('foto_4'),
+                    ],
+                    $buktiBayar,
+                    TurnamenPeserta::SUMBER_INTERNAL,
+                    false
+                );
+
+                $players = $result['players'];
+                $pemain = $players[0];
+                $partner = null;
+                $namaGrup = $result['grup_pendaftaran']->nama;
+                $extraPlayers = $players->slice(1)->values();
+            } elseif ($registerAsPair) {
                 $pair = $this->registrationService->registerPair(
                     $turnamen,
                     $request->playerOnePayload(),
@@ -168,6 +221,7 @@ class RegistrationController extends Controller
 
                 $pemain = $pair['pemain'];
                 $partner = $pair['partner'];
+                $extraPlayers = collect();
             } else {
                 $pemain = $this->registrationService->register(
                     $turnamen,
@@ -178,18 +232,24 @@ class RegistrationController extends Controller
                     false
                 );
                 $partner = null;
+                $extraPlayers = collect();
             }
         } catch (\RuntimeException $e) {
             $field = 'no_hp';
 
             if (str_contains($e->getMessage(), 'gambar') || str_contains($e->getMessage(), 'WebP') || str_contains($e->getMessage(), 'Foto')) {
                 $field = 'foto';
+            } elseif (str_contains($e->getMessage(), 'Nama grup')) {
+                $field = 'nama_grup';
             }
 
             return redirect()
                 ->route('guest.register.form', array_filter([
                     'no_hp' => $request->input('no_hp'),
                     'no_hp_2' => $request->input('player_2.no_hp'),
+                    'no_hp_3' => $request->input('player_3.no_hp'),
+                    'no_hp_4' => $request->input('player_4.no_hp'),
+                    'nama_grup' => $request->input('nama_grup'),
                     'registration_mode' => $request->input('registration_mode'),
                     'id_turnamen' => $turnamen->id,
                 ]))
@@ -197,17 +257,26 @@ class RegistrationController extends Controller
                 ->withErrors([$field => $e->getMessage()]);
         }
 
+        $playerPayloads = [$this->playerPayload($pemain, $turnamen)];
+
+        if ($partner) {
+            $playerPayloads[] = $this->playerPayload($partner, $turnamen);
+        }
+
+        foreach ($extraPlayers ?? collect() as $extra) {
+            $playerPayloads[] = $this->playerPayload($extra, $turnamen);
+        }
+
         return redirect()
             ->route('guest.register.success')
             ->with('registration_success', [
                 'is_double' => $turnamen->isDouble(),
+                'is_group' => (bool) $namaGrup,
+                'nama_grup' => $namaGrup,
                 'individual_registration' => false,
                 'paired_registration' => (bool) $partner,
                 'turnamen_id' => $turnamen->id,
-                'players' => array_values(array_filter([
-                    $this->playerPayload($pemain, $turnamen),
-                    $partner ? $this->playerPayload($partner, $turnamen) : null,
-                ])),
+                'players' => $playerPayloads,
             ]);
     }
 
@@ -229,8 +298,16 @@ class RegistrationController extends Controller
             })
             ->filter()
             ->values();
+        $namaGrup = $registration['nama_grup'] ?? null;
+        $isGroupRegistration = ! empty($registration['is_group']);
 
-        return view('guest.register-success', compact('players', 'playerModels', 'turnamen'));
+        return view('guest.register-success', compact(
+            'players',
+            'playerModels',
+            'turnamen',
+            'namaGrup',
+            'isGroupRegistration'
+        ));
     }
 
     protected function playerPayload(Pemain $pemain, $turnamen): array

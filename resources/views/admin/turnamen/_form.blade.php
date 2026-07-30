@@ -84,6 +84,7 @@
         Double: daftar individu atau berpasangan; semua harus berpasangan sebelum pendaftaran ditutup.
         Mahjong: grup 4 pemain tanpa head-to-head.
         Group Match: liga antar grup (4 pemain/grup), tanding pasangan dinamis, tanpa total poin pemain.
+        Tamu dapat daftar individu atau satu grup lengkap (4 pemain + nama grup); grup lengkap yang sudah disetujui dipertahankan saat matchmaking.
     </div>
     @error('jenis')
         <div class="invalid-feedback">{{ $message }}</div>

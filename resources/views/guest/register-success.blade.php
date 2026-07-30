@@ -6,7 +6,11 @@
 @php
     $isDouble = $turnamen && $turnamen->requiresPairRegistration();
     $randomizesPartners = $turnamen && $turnamen->randomizesPartners();
-    $playerLabels = $isDouble ? ['Pemain 1', 'Pemain 2'] : ['Peserta'];
+    $isGroupRegistration = $isGroupRegistration ?? false;
+    $namaGrup = $namaGrup ?? null;
+    $playerLabels = $isGroupRegistration
+        ? ['Pemain 1', 'Pemain 2', 'Pemain 3', 'Pemain 4']
+        : ($isDouble ? ['Pemain 1', 'Pemain 2'] : ['Peserta']);
 @endphp
 
 <div class="row justify-content-center">
@@ -14,7 +18,7 @@
         <div class="card guest-card text-center">
             <div class="card-body p-4 p-md-5">
                 @if ($playerModels->isNotEmpty())
-                    <div class="d-flex justify-content-center gap-3 mb-4">
+                    <div class="d-flex justify-content-center gap-3 mb-4 flex-wrap">
                         @foreach ($playerModels as $model)
                             <x-pemain-avatar :pemain="$model" :size="96" class="border" />
                         @endforeach
@@ -33,7 +37,12 @@
                     @endif
                 </p>
 
-                @if ($randomizesPartners)
+                @if ($isGroupRegistration && $namaGrup)
+                    <div class="alert alert-light border text-start mb-4">
+                        <i class="bi bi-people-fill me-2"></i>
+                        Grup <strong>{{ $namaGrup }}</strong> berhasil didaftarkan (4 pemain).
+                    </div>
+                @elseif ($randomizesPartners)
                     <div class="alert alert-light border text-start mb-4">
                         <i class="bi bi-shuffle me-2"></i>
                         Pasangan untuk turnamen single akan ditentukan secara acak setelah pendaftaran ditutup oleh panitia.
@@ -51,7 +60,7 @@
                     @endphp
                     <div class="card bg-light border-0 text-start {{ $loop->last ? 'mb-4' : 'mb-3' }}">
                         <div class="card-body py-3">
-                            @if ($isDouble)
+                            @if ($isDouble || $isGroupRegistration)
                                 <div class="small text-muted text-uppercase fw-semibold mb-2">
                                     {{ $playerLabels[$index] ?? 'Pemain ' . ($index + 1) }}
                                 </div>

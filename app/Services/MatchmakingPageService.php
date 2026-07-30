@@ -60,6 +60,7 @@ class MatchmakingPageService
         $isFriendly = $turnamen ? $turnamen->isFriendly() : false;
         $friendlyMatches = collect();
         $friendlyUnassigned = collect();
+        $friendlyRegistrationGroups = collect();
         $canCreateFriendlySkeleton = false;
         $canRandomizeFriendlyUnassigned = false;
 
@@ -109,6 +110,10 @@ class MatchmakingPageService
                 $friendlyUnassigned = $this->friendlyService->getUnassignedApprovedEntries($turnamen);
                 $canCreateFriendlySkeleton = $this->friendlyService->canCreateSkeletonGroups($turnamen);
                 $canRandomizeFriendlyUnassigned = $this->friendlyService->canRandomizeUnassigned($turnamen);
+
+                if ($turnamen->isRegistrationOpen() || $grup->isEmpty()) {
+                    $friendlyRegistrationGroups = $this->friendlyService->getFriendlyRegistrationGroups($turnamen);
+                }
             } else {
                 $groupSplitPreview = $this->matchmakingService->previewGroupSplit(
                     $groupingUnitCount,
@@ -154,6 +159,7 @@ class MatchmakingPageService
             'isFriendly' => $isFriendly,
             'friendlyMatches' => $friendlyMatches,
             'friendlyUnassigned' => $friendlyUnassigned,
+            'friendlyRegistrationGroups' => $friendlyRegistrationGroups,
             'canCreateFriendlySkeleton' => $canCreateFriendlySkeleton,
             'canRandomizeFriendlyUnassigned' => $canRandomizeFriendlyUnassigned,
             'canAddFriendlyMatch' => $turnamen && $isFriendly

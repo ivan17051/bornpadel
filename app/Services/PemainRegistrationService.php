@@ -3,7 +3,10 @@
 namespace App\Services;
 
 use App\Models\Pemain;
+use App\Models\Grup;
 use App\Models\Turnamen;
+use App\Models\TurnamenGrupPendaftaran;
+use App\Models\TurnamenGrupPendaftaranMember;
 use App\Models\TurnamenPeserta;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
@@ -483,6 +486,145 @@ class PemainRegistrationService
                 'partner' => $partner,
             ];
         });
+    }
+
+    /**
+     * Register a full group of exactly 4 players for Group Match (friendly).
+     *
+     * @param  array<int, array<string, mixed>>  $players  Exactly 4 player payloads
+     * @param  array<int, UploadedFile|null>  $fotos
+     * @return array{grup_pendaftaran: \App\Models\TurnamenGrupPendaftaran, players: Collection<int, Pemain>}
+     */
+    public function registerGroup(
+        Turnamen $turnamen,
+        string $namaGrup,
+        array $players,
+        array $fotos = [],
+        ?UploadedFile $buktiBayar = null,
+        string $sumber = TurnamenPeserta::SUMBER_INTERNAL,
+        bool $updateExistingProfile = true,
+        ?string $statusOverride = null,
+        ?TournamentCapacityService $capacityService = null
+    ): array {
+        if (! $turnamen->allowsGroupRegistration()) {
+            throw new RuntimeException('Pendaftaran satu grup hanya tersedia untuk Group Match.');
+        }
+
+        if (count($players) !== 4) {
+            throw new RuntimeException('Pendaftaran grup harus berisi tepat 4 pemain.');
+        }
+
+        $phones = [];
+        foreach ($players as $index => $player) {
+            $phone = trim((string) ($player['no_hp'] ?? ''));
+            if ($phone === '') {
+                throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' wajib diisi.');
+            }
+            if (in_array($phone, $phones, true)) {
+                throw new RuntimeException('Nomor HP keempat pemain harus berbeda satu sama lain.');
+            }
+            $phones[] = $phone;
+        }
+
+        foreach ($phones as $index => $phone) {
+            $existing = $this->findPemainByPhone($phone);
+            if ($existing && $this->isRegisteredForTournament($existing, $turnamen)) {
+                throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' sudah terdaftar pada turnamen ini.');
+            }
+        }
+
+        $this->assertGroupNameAvailable($turnamen, $namaGrup);
+
+        $status = $statusOverride ?: $this->resolveRegistrationStatusFromBukti(null, $buktiBayar);
+        $capacityService = $capacityService ?? app(TournamentCapacityService::class);
+
+        if ($status === 'approved') {
+            $capacityService->assertCanApprove($turnamen, 4);
+        }
+
+        return DB::transaction(function () use (
+            $turnamen,
+            $namaGrup,
+            $players,
+            $fotos,
+            $buktiBayar,
+            $sumber,
+            $updateExistingProfile,
+            $status
+        ) {
+            $this->assertGroupNameAvailable($turnamen, $namaGrup);
+
+            $buktiPath = $this->storeBuktiBayar($buktiBayar);
+            $createdPlayers = collect();
+            $pesertaRows = collect();
+
+            foreach ($players as $index => $playerData) {
+                $foto = $fotos[$index] ?? null;
+                $pemain = $this->upsertPemain($playerData, $foto instanceof UploadedFile ? $foto : null, $updateExistingProfile);
+
+                if ($this->isRegisteredForTournament($pemain, $turnamen)) {
+                    throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' sudah terdaftar pada turnamen ini.');
+                }
+
+                $peserta = TurnamenPeserta::create([
+                    'id_turnamen' => $turnamen->id,
+                    'id_pemain1' => $pemain->id,
+                    'status' => $status,
+                    'bukti_bayar' => $buktiPath,
+                    'sumber' => $sumber,
+                ]);
+
+                $createdPlayers->push($pemain);
+                $pesertaRows->push($peserta);
+            }
+
+            $grupPendaftaran = TurnamenGrupPendaftaran::create([
+                'id_turnamen' => $turnamen->id,
+                'nama' => trim($namaGrup),
+            ]);
+
+            foreach ($pesertaRows as $index => $peserta) {
+                TurnamenGrupPendaftaranMember::create([
+                    'id_grup_pendaftaran' => $grupPendaftaran->id,
+                    'id_peserta' => $peserta->id,
+                    'urutan' => $index + 1,
+                ]);
+            }
+
+            return [
+                'grup_pendaftaran' => $grupPendaftaran->fresh('members'),
+                'players' => $createdPlayers,
+            ];
+        });
+    }
+
+    public function assertGroupNameAvailable(Turnamen $turnamen, string $nama): void
+    {
+        $nama = trim($nama);
+
+        if ($nama === '') {
+            throw new RuntimeException('Nama grup wajib diisi.');
+        }
+
+        if (mb_strlen($nama) > 255) {
+            throw new RuntimeException('Nama grup maksimal 255 karakter.');
+        }
+
+        $lower = mb_strtolower($nama);
+
+        $existsPendaftaran = TurnamenGrupPendaftaran::query()
+            ->forTurnamen($turnamen->id)
+            ->whereRaw('LOWER(nama) = ?', [$lower])
+            ->exists();
+
+        $existsGrup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->whereRaw('LOWER(nama) = ?', [$lower])
+            ->exists();
+
+        if ($existsPendaftaran || $existsGrup) {
+            throw new RuntimeException('Nama grup sudah digunakan pada turnamen ini.');
+        }
     }
 
     public function upsertPemain(array $data, ?UploadedFile $foto = null, bool $updateExisting = true): Pemain

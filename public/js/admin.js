@@ -142,79 +142,82 @@ const BornPadelAdmin = (function () {
     };
 
     const initBulkApproval = () => {
-        const card = document.getElementById('pemain-table-card');
-        const bulkBtns = Array.from(document.querySelectorAll('.btn-bulk-approve'));
-        const selectAll = document.getElementById('select-all-approvable');
+        const cards = Array.from(document.querySelectorAll('.pemain-table-card[data-bulk-approve-url]'));
+        if (cards.length === 0) return;
 
-        if (!card || bulkBtns.length === 0) return;
+        cards.forEach((card) => {
+            const bulkBtns = Array.from(card.querySelectorAll('.btn-bulk-approve'));
+            const selectAll = card.querySelector('.select-all-approvable');
+            if (bulkBtns.length === 0) return;
 
-        const checkboxes = () => Array.from(document.querySelectorAll('.peserta-bulk-checkbox'));
+            const checkboxes = () => Array.from(card.querySelectorAll('.peserta-bulk-checkbox'));
 
-        const updateBulkControls = () => {
-            const selected = checkboxes().filter((cb) => cb.checked);
-            const count = selected.length;
+            const updateBulkControls = () => {
+                const selected = checkboxes().filter((cb) => cb.checked);
+                const count = selected.length;
 
-            bulkBtns.forEach((btn) => {
-                btn.disabled = count === 0;
-                btn.title = count === 0
-                    ? 'Pilih peserta pada tabel terlebih dahulu'
-                    : `Setujui ${count} peserta terpilih`;
-            });
+                bulkBtns.forEach((btn) => {
+                    btn.disabled = count === 0;
+                    btn.title = count === 0
+                        ? 'Pilih peserta pada tabel terlebih dahulu'
+                        : `Setujui ${count} peserta terpilih`;
+                });
+
+                if (selectAll) {
+                    const all = checkboxes();
+                    selectAll.checked = all.length > 0 && selected.length === all.length;
+                    selectAll.indeterminate = selected.length > 0 && selected.length < all.length;
+                }
+            };
+
+            checkboxes().forEach((cb) => cb.addEventListener('change', updateBulkControls));
 
             if (selectAll) {
-                const all = checkboxes();
-                selectAll.checked = all.length > 0 && selected.length === all.length;
-                selectAll.indeterminate = selected.length > 0 && selected.length < all.length;
-            }
-        };
-
-        checkboxes().forEach((cb) => cb.addEventListener('change', updateBulkControls));
-
-        if (selectAll) {
-            selectAll.addEventListener('change', () => {
-                checkboxes().forEach((cb) => {
-                    cb.checked = selectAll.checked;
+                selectAll.addEventListener('change', () => {
+                    checkboxes().forEach((cb) => {
+                        cb.checked = selectAll.checked;
+                    });
+                    updateBulkControls();
                 });
-                updateBulkControls();
-            });
-        }
-
-        const runBulkApprove = async (triggerBtn) => {
-            const selectedIds = checkboxes()
-                .filter((cb) => cb.checked)
-                .map((cb) => parseInt(cb.value, 10));
-
-            if (!selectedIds.length) return;
-
-            const confirmed = await confirmAction({
-                title: `Setujui ${selectedIds.length} peserta terpilih?`,
-                confirmText: 'Ya, setujui semua',
-                icon: 'question',
-                confirmButtonColor: '#198754',
-            });
-
-            if (!confirmed) return;
-
-            bulkBtns.forEach((btn) => setButtonLoading(btn, true));
-
-            try {
-                await apiRequest(card.dataset.bulkApproveUrl, 'POST', {
-                    id_turnamen: parseInt(card.dataset.turnamenId, 10),
-                    peserta_ids: selectedIds,
-                });
-                showAlert(`${selectedIds.length} peserta berhasil disetujui.`, 'success');
-                reloadPage();
-            } catch (e) {
-                showAlert(e.message, 'error');
-                bulkBtns.forEach((btn) => setButtonLoading(btn, false));
             }
-        };
 
-        bulkBtns.forEach((btn) => {
-            btn.addEventListener('click', () => runBulkApprove(btn));
+            const runBulkApprove = async (triggerBtn) => {
+                const selectedIds = checkboxes()
+                    .filter((cb) => cb.checked)
+                    .map((cb) => parseInt(cb.value, 10));
+
+                if (!selectedIds.length) return;
+
+                const confirmed = await confirmAction({
+                    title: `Setujui ${selectedIds.length} peserta terpilih?`,
+                    confirmText: 'Ya, setujui semua',
+                    icon: 'question',
+                    confirmButtonColor: '#198754',
+                });
+
+                if (!confirmed) return;
+
+                bulkBtns.forEach((btn) => setButtonLoading(btn, true));
+
+                try {
+                    await apiRequest(card.dataset.bulkApproveUrl, 'POST', {
+                        id_turnamen: parseInt(card.dataset.turnamenId, 10),
+                        peserta_ids: selectedIds,
+                    });
+                    showAlert(`${selectedIds.length} peserta berhasil disetujui.`, 'success');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                    bulkBtns.forEach((btn) => setButtonLoading(btn, false));
+                }
+            };
+
+            bulkBtns.forEach((btn) => {
+                btn.addEventListener('click', () => runBulkApprove(btn));
+            });
+
+            updateBulkControls();
         });
-
-        updateBulkControls();
     };
 
     const apiRequestFormData = async (url, formData) => {
