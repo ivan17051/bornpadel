@@ -7,6 +7,12 @@
     <title>@yield('title', 'Born Padel') — Turnamen</title>
     <link rel="icon" type="image/png" href="{{ asset('public/img/bornpadel.png') }}">
 
+    @hasSection('og')
+        @yield('og')
+    @else
+        @include('guest.partials.og-meta')
+    @endif
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/source-sans-3@5.0.12/index.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" crossorigin="anonymous">

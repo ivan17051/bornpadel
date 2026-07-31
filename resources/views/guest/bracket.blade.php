@@ -2,6 +2,18 @@
 
 @section('title', 'Bracket Knockout')
 
+@section('og')
+    @include('guest.partials.og-meta', [
+        'ogTurnamen' => $turnamen ?? null,
+        'ogUrl' => isset($turnamen) && $turnamen
+            ? route('guest.bracket', ['id_turnamen' => $turnamen->id])
+            : route('guest.bracket'),
+        'ogTitle' => isset($turnamen) && $turnamen
+            ? 'Bracket — ' . $turnamen->nama
+            : 'Bracket — Born Padel',
+    ])
+@endsection
+
 @section('content')
 <div class="row justify-content-center">
     <div class="col-12">

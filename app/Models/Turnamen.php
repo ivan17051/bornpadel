@@ -17,6 +17,7 @@ class Turnamen extends Model
         'harga',
         'maks_peserta',
         'syarat',
+        'foto',
         'jenis',
         'status',
         'mahjong_is_final',
@@ -154,6 +155,16 @@ class Turnamen extends Model
         }
 
         return 'Single';
+    }
+
+    public function getFotoUrlAttribute(): ?string
+    {
+        return app(\App\Services\TurnamenPhotoService::class)->url($this->foto);
+    }
+
+    public function getShareImageUrlAttribute(): string
+    {
+        return app(\App\Services\TurnamenPhotoService::class)->shareUrl($this->foto);
     }
 
     public function turnamenPeserta()

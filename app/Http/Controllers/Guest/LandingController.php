@@ -35,11 +35,18 @@ class LandingController extends Controller
             ? $this->registrationService->getPublicCompletedMonthsForYear($completedFilter['year'])
             : [];
 
+        $featuredTurnamen = $activeTournaments
+            ->first(function ($turnamen) {
+                return filled($turnamen->foto);
+            })
+            ?? $activeTournaments->first();
+
         return view('guest.landing', [
             'activeTournaments' => $activeTournaments,
             'completedTournaments' => $completedTournaments,
             'completedFilter' => $completedFilter,
             'completedMonths' => $completedMonths,
+            'featuredTurnamen' => $featuredTurnamen,
         ]);
     }
 }

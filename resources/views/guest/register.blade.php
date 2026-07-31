@@ -2,6 +2,19 @@
 
 @section('title', 'Pendaftaran')
 
+@section('og')
+    @include('guest.partials.og-meta', [
+        'ogTurnamen' => $turnamen,
+        'ogUrl' => route('guest.register', ['id_turnamen' => $turnamen->id]),
+        'ogDescription' => trim(sprintf(
+            'Daftar %s%s. %s',
+            $turnamen->jenis_label,
+            $turnamen->tanggal ? ' · ' . $turnamen->tanggal->format('d M Y') : '',
+            $turnamen->status === 'open' ? 'Pendaftaran dibuka.' : ''
+        )),
+    ])
+@endsection
+
 @section('content')
 @php
     $isDouble = $turnamen->requiresPairRegistration();

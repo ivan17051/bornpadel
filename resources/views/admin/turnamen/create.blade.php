@@ -16,7 +16,7 @@
                 <h5 class="card-title mb-0">Form Turnamen Baru</h5>
             </div>
             <div class="card-body">
-                <form action="{{ route('admin.turnamen.store') }}" method="POST">
+                <form action="{{ route('admin.turnamen.store') }}" method="POST" enctype="multipart/form-data">
                     @csrf
                     @include('admin.turnamen._form')
                     <div class="d-flex gap-2">
@@ -31,3 +31,7 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script src="{{ asset('public/js/pemain-photo-preview.js') }}"></script>
+@endpush

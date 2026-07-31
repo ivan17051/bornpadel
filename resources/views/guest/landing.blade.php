@@ -2,6 +2,15 @@
 
 @section('title', 'Beranda')
 
+@section('og')
+    @include('guest.partials.og-meta', [
+        'ogTurnamen' => $featuredTurnamen ?? null,
+        'ogUrl' => route('guest.landing'),
+        'ogTitle' => 'Born Padel',
+        'ogDescription' => 'Jadwal turnamen padel, klasemen, bracket, dan pendaftaran di Born Padel.',
+    ])
+@endsection
+
 @php
     use Carbon\Carbon;
 

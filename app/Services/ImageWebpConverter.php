@@ -63,6 +63,45 @@ class ImageWebpConverter
         imagedestroy($image);
     }
 
+    /**
+     * Convert an uploaded image to a compressed JPEG file saved at $fullPath.
+     * Prefer JPEG for Open Graph / WhatsApp link previews.
+     */
+    public function convertToJpeg(
+        UploadedFile $file,
+        string $fullPath,
+        int $maxWidth = self::DEFAULT_MAX_WIDTH,
+        int $quality = self::DEFAULT_QUALITY
+    ): void {
+        if (! function_exists('imagejpeg')) {
+            throw new RuntimeException('Konversi JPEG tidak didukung di server ini.');
+        }
+
+        $image = $this->createImageResource($file);
+        $image = $this->resizeIfNeeded($image, $maxWidth);
+
+        // Flatten transparency onto white for JPEG.
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $canvas = imagecreatetruecolor($width, $height);
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        imagefill($canvas, 0, 0, $white);
+        imagecopy($canvas, $image, 0, 0, 0, 0, $width, $height);
+        imagedestroy($image);
+
+        $directory = dirname($fullPath);
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        if (! imagejpeg($canvas, $fullPath, $quality)) {
+            imagedestroy($canvas);
+            throw new RuntimeException('Gagal menyimpan gambar dalam format JPEG.');
+        }
+
+        imagedestroy($canvas);
+    }
+
     protected function createImageResource(UploadedFile $file)
     {
         $mime = $file->getMimeType();

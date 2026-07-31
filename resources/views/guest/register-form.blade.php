@@ -2,6 +2,13 @@
 
 @section('title', 'Pendaftaran')
 
+@section('og')
+    @include('guest.partials.og-meta', [
+        'ogTurnamen' => $turnamen,
+        'ogUrl' => route('guest.register', ['id_turnamen' => $turnamen->id]),
+    ])
+@endsection
+
 @section('content')
 @php
     $isDouble = $turnamen->requiresPairRegistration();

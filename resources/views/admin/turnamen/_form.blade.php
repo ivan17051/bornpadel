@@ -70,6 +70,45 @@
     @enderror
 </div>
 
+@php
+    $photoService = app(\App\Services\TurnamenPhotoService::class);
+    $fotoPreview = optional($turnamenModel)->foto_url ?: $photoService->placeholderUrl();
+@endphp
+<div class="mb-3">
+    <label for="foto" class="form-label">Foto Turnamen <span class="text-muted fw-normal">(opsional)</span></label>
+    <div class="d-flex align-items-start gap-3 mb-2">
+        <img id="turnamen-foto-preview"
+             src="{{ $fotoPreview }}"
+             alt="Preview foto turnamen"
+             class="rounded border bg-light object-fit-cover"
+             width="160"
+             height="90"
+             style="width: 160px; height: 90px; object-fit: cover;">
+        <div class="small text-muted">
+            Digunakan sebagai preview saat link turnamen dibagikan ke WhatsApp.
+            Disarankan rasio mendekati 16:9, minimal 300×300 px. Format JPG/PNG/WebP, maks. 5 MB.
+        </div>
+    </div>
+    <input type="file"
+           name="foto"
+           id="foto"
+           class="form-control @error('foto') is-invalid @enderror"
+           accept="image/jpeg,image/png,image/webp"
+           data-pemain-photo-input
+           data-preview-target="turnamen-foto-preview"
+           data-placeholder="{{ $photoService->placeholderUrl() }}">
+    @error('foto')
+        <div class="invalid-feedback">{{ $message }}</div>
+    @enderror
+    @if (optional($turnamenModel)->foto)
+        <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" value="1" id="remove_foto" name="remove_foto"
+                   {{ old('remove_foto') ? 'checked' : '' }}>
+            <label class="form-check-label" for="remove_foto">Hapus foto saat ini</label>
+        </div>
+    @endif
+</div>
+
 <div class="mb-3">
     <label for="jenis" class="form-label">Jenis Turnamen <span class="text-danger">*</span></label>
     <select name="jenis" id="jenis" class="form-select @error('jenis') is-invalid @enderror" required>

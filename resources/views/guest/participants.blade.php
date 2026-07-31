@@ -2,6 +2,14 @@
 
 @section('title', 'Daftar Peserta')
 
+@section('og')
+    @include('guest.partials.og-meta', [
+        'ogTurnamen' => $turnamen,
+        'ogUrl' => route('guest.participants', ['id_turnamen' => $turnamen->id]),
+        'ogTitle' => 'Peserta — ' . $turnamen->nama,
+    ])
+@endsection
+
 @section('content')
 <div class="row justify-content-center">
     <div class="col-lg-9 col-xl-8">

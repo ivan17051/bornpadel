@@ -19,6 +19,8 @@ class UpdateTurnamenRequest extends FormRequest
             'harga' => ['required', 'numeric', 'min:0'],
             'maks_peserta' => ['nullable', 'integer', 'min:1'],
             'syarat' => ['nullable', 'string'],
+            'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
+            'remove_foto' => ['nullable', 'boolean'],
             'jenis' => ['required', 'in:single,double,mahjong,friendly'],
             'status' => ['required', 'in:draft,open,ongoing,completed'],
         ];
@@ -34,6 +36,9 @@ class UpdateTurnamenRequest extends FormRequest
             'harga.min' => 'Biaya pendaftaran tidak boleh negatif.',
             'status.in' => 'Status turnamen tidak valid.',
             'jenis.in' => 'Jenis turnamen tidak valid.',
+            'foto.image' => 'Foto harus berupa gambar.',
+            'foto.mimes' => 'Foto harus berformat JPG, PNG, atau WebP.',
+            'foto.max' => 'Ukuran foto maksimal 5 MB.',
         ];
     }
 }

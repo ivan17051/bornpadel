@@ -16,7 +16,7 @@
                 <h5 class="card-title mb-0">{{ $turnamen->nama }}</h5>
             </div>
             <div class="card-body">
-                <form action="{{ route('admin.turnamen.update', $turnamen) }}" method="POST">
+                <form action="{{ route('admin.turnamen.update', $turnamen) }}" method="POST" enctype="multipart/form-data">
                     @csrf
                     @method('PUT')
                     @include('admin.turnamen._form', ['turnamen' => $turnamen])
@@ -32,3 +32,7 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script src="{{ asset('public/js/pemain-photo-preview.js') }}"></script>
+@endpush

@@ -34,7 +34,12 @@ class TournamentDeletionService
                     'id_next_pertandingan_kalah' => null,
                 ]);
 
+            $fotoPath = $turnamen->foto;
             $turnamen->delete();
+
+            if ($fotoPath) {
+                app(TurnamenPhotoService::class)->delete($fotoPath);
+            }
         });
     }
 }

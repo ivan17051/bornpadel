@@ -2,6 +2,18 @@
 
 @section('title', 'Pendaftaran Berhasil')
 
+@section('og')
+    @include('guest.partials.og-meta', [
+        'ogTurnamen' => $turnamen ?? null,
+        'ogUrl' => isset($turnamen) && $turnamen
+            ? route('guest.register', ['id_turnamen' => $turnamen->id])
+            : route('guest.landing'),
+        'ogTitle' => isset($turnamen) && $turnamen
+            ? 'Pendaftaran berhasil — ' . $turnamen->nama
+            : 'Pendaftaran berhasil — Born Padel',
+    ])
+@endsection
+
 @section('content')
 @php
     $isDouble = $turnamen && $turnamen->requiresPairRegistration();

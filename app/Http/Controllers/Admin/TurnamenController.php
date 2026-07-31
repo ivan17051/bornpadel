@@ -8,17 +8,21 @@ use App\Http\Requests\Admin\StoreTurnamenRequest;
 use App\Http\Requests\Admin\UpdateTurnamenRequest;
 use App\Models\Turnamen;
 use App\Services\TournamentDeletionService;
+use App\Services\TurnamenPhotoService;
 use Illuminate\Http\Request;
 use RuntimeException;
 
 class TurnamenController extends Controller
 {
     protected $deletionService;
+    protected $photoService;
 
-    public function __construct(TournamentDeletionService $deletionService)
+    public function __construct(TournamentDeletionService $deletionService, TurnamenPhotoService $photoService)
     {
         $this->deletionService = $deletionService;
+        $this->photoService = $photoService;
     }
+
     public function index(Request $request)
     {
         $query = Turnamen::query()->latest('doc');
@@ -44,7 +48,17 @@ class TurnamenController extends Controller
 
     public function store(StoreTurnamenRequest $request)
     {
-        Turnamen::create($request->validated());
+        $data = collect($request->validated())->except(['foto'])->all();
+
+        if ($request->hasFile('foto')) {
+            try {
+                $data['foto'] = $this->photoService->storeAsJpeg($request->file('foto'));
+            } catch (RuntimeException $e) {
+                return back()->withInput()->withErrors(['foto' => $e->getMessage()]);
+            }
+        }
+
+        Turnamen::create($data);
 
         return redirect()
             ->route('admin.turnamen.index')
@@ -58,7 +72,25 @@ class TurnamenController extends Controller
 
     public function update(UpdateTurnamenRequest $request, Turnamen $turnamen)
     {
-        $turnamen->update($request->validated());
+        $data = collect($request->validated())->except(['foto', 'remove_foto'])->all();
+
+        if ($request->boolean('remove_foto') && ! $request->hasFile('foto')) {
+            $this->photoService->delete($turnamen->foto);
+            $data['foto'] = null;
+        }
+
+        if ($request->hasFile('foto')) {
+            try {
+                $newFoto = $this->photoService->storeAsJpeg($request->file('foto'));
+            } catch (RuntimeException $e) {
+                return back()->withInput()->withErrors(['foto' => $e->getMessage()]);
+            }
+
+            $this->photoService->delete($turnamen->foto);
+            $data['foto'] = $newFoto;
+        }
+
+        $turnamen->update($data);
 
         return redirect()
             ->route('admin.turnamen.index')
