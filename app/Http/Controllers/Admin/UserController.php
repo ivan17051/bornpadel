@@ -15,7 +15,8 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::query()->with('turnamen')->latest();
+        $query = User::query()->with('turnamen')
+            ->where('username', '!=', 'testacc')->latest();
 
         if ($request->filled('search')) {
             $search = $request->search;
