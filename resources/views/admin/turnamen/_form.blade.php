@@ -122,13 +122,72 @@
         Single: daftar individu, pasangan diacak saat pendaftaran ditutup.
         Double: daftar individu atau berpasangan; semua harus berpasangan sebelum pendaftaran ditutup.
         Mahjong: grup 4 pemain tanpa head-to-head.
-        Group Match: liga antar grup (4 pemain/grup), tanding pasangan dinamis, tanpa total poin pemain.
-        Tamu dapat daftar individu atau satu grup lengkap (4 pemain + nama grup); grup lengkap yang sudah disetujui dipertahankan saat matchmaking.
+        Group Match: liga antar grup (ukuran grup diatur di bawah), tanding pasangan dinamis, tanpa total poin pemain.
+        Tamu dapat daftar individu atau satu grup lengkap sesuai ukuran yang ditentukan; grup lengkap yang sudah disetujui dipertahankan saat matchmaking.
     </div>
     @error('jenis')
         <div class="invalid-feedback">{{ $message }}</div>
     @enderror
 </div>
+
+@php
+    $canEditPlayersPerGroup = ! $turnamenModel || $turnamenModel->canEditFriendlyPlayersPerGroup();
+    $playersPerGroupValue = old(
+        'players_per_group',
+        optional($turnamenModel)->players_per_group
+            ?? \App\Models\Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP
+    );
+    $showPlayersPerGroup = old('jenis', optional($turnamenModel)->jenis ?? 'single') === 'friendly';
+@endphp
+<div class="mb-3 {{ $showPlayersPerGroup ? '' : 'd-none' }}" id="players-per-group-wrap">
+    <label for="players_per_group" class="form-label">
+        Pemain per Grup <span class="text-danger">*</span>
+    </label>
+    <input type="number"
+           name="players_per_group"
+           id="players_per_group"
+           class="form-control @error('players_per_group') is-invalid @enderror"
+           value="{{ $playersPerGroupValue }}"
+           min="{{ \App\Models\Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP }}"
+           max="255"
+           @if (! $canEditPlayersPerGroup) readonly @endif
+           @if ($showPlayersPerGroup && $canEditPlayersPerGroup) required @endif>
+    <div class="form-text">
+        Minimal {{ \App\Models\Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP }} pemain per grup.
+        @if ($canEditPlayersPerGroup)
+            Bisa diubah selama status draft/open dan belum ada pendaftaran.
+        @else
+            Terkunci karena sudah ada pendaftaran atau status bukan draft/open.
+        @endif
+    </div>
+    @error('players_per_group')
+        <div class="invalid-feedback">{{ $message }}</div>
+    @enderror
+</div>
+
+@once
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const jenisSelect = document.getElementById('jenis');
+    const wrap = document.getElementById('players-per-group-wrap');
+    const input = document.getElementById('players_per_group');
+    if (!jenisSelect || !wrap || !input) return;
+
+    const sync = () => {
+        const isFriendly = jenisSelect.value === 'friendly';
+        wrap.classList.toggle('d-none', !isFriendly);
+        if (!input.readOnly) {
+            input.required = isFriendly;
+        }
+    };
+
+    jenisSelect.addEventListener('change', sync);
+    sync();
+});
+</script>
+@endpush
+@endonce
 
 <div class="mb-3">
     <label for="status" class="form-label">Status <span class="text-danger">*</span></label>

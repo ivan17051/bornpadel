@@ -39,11 +39,16 @@ class TurnamenGrupPendaftaran extends Model
         return $query->where('id_turnamen', $turnamenId);
     }
 
-    public function isFullyApproved(): bool
+    public function isFullyApproved(?Turnamen $turnamen = null): bool
     {
-        $this->loadMissing('members.peserta');
+        $this->loadMissing(['members.peserta', 'turnamen']);
 
-        if ($this->members->count() !== 4) {
+        $turnamen = $turnamen ?? $this->turnamen;
+        $expectedSize = $turnamen
+            ? $turnamen->friendlyPlayersPerGroup()
+            : Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP;
+
+        if ($this->members->count() !== $expectedSize) {
             return false;
         }
 

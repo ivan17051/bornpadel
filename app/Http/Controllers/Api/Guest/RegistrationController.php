@@ -38,12 +38,7 @@ class RegistrationController extends Controller
                     $turnamen,
                     (string) $request->input('nama_grup'),
                     $request->groupPlayersPayload(),
-                    [
-                        $request->file('foto'),
-                        $request->file('foto_2'),
-                        $request->file('foto_3'),
-                        $request->file('foto_4'),
-                    ],
+                    $request->groupFotosPayload(),
                     $buktiBayar,
                     TurnamenPeserta::SUMBER_INTERNAL,
                     false

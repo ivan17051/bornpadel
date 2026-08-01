@@ -220,7 +220,7 @@ class FriendlyGroupRegistrationTest extends TestCase
             ->count());
     }
 
-    protected function createOpenFriendly(): Turnamen
+    protected function createOpenFriendly(int $playersPerGroup = 4): Turnamen
     {
         return Turnamen::create([
             'nama' => 'Friendly Group Test ' . uniqid(),
@@ -228,6 +228,7 @@ class FriendlyGroupRegistrationTest extends TestCase
             'harga' => 100000,
             'maks_peserta' => 32,
             'jenis' => 'friendly',
+            'players_per_group' => $playersPerGroup,
             'status' => 'open',
         ]);
     }
@@ -235,11 +236,11 @@ class FriendlyGroupRegistrationTest extends TestCase
     /**
      * @return array<int, array<string, mixed>>
      */
-    protected function playerPayloads(int $seed): array
+    protected function playerPayloads(int $seed, int $count = 4): array
     {
         $players = [];
 
-        for ($i = 1; $i <= 4; $i++) {
+        for ($i = 1; $i <= $count; $i++) {
             $players[] = [
                 'nama' => "Group Player {$seed}-{$i}",
                 'gender' => $i % 2 ? 'male' : 'female',
@@ -249,5 +250,44 @@ class FriendlyGroupRegistrationTest extends TestCase
         }
 
         return $players;
+    }
+
+    public function test_custom_group_size_registration_and_edit_lock(): void
+    {
+        $turnamen = $this->createOpenFriendly(3);
+        $this->assertSame(3, $turnamen->friendlyPlayersPerGroup());
+        $this->assertTrue($turnamen->canEditFriendlyPlayersPerGroup());
+
+        $result = app(PemainRegistrationService::class)->registerGroup(
+            $turnamen,
+            'Trio Squad',
+            $this->playerPayloads(50, 3),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false
+        );
+
+        $this->assertCount(3, $result['players']);
+        $this->assertSame(3, $result['grup_pendaftaran']->members()->count());
+        $this->assertFalse($turnamen->fresh()->canEditFriendlyPlayersPerGroup());
+    }
+
+    public function test_wrong_group_size_is_rejected(): void
+    {
+        $turnamen = $this->createOpenFriendly(3);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Pendaftaran grup harus berisi tepat 3 pemain.');
+
+        app(PemainRegistrationService::class)->registerGroup(
+            $turnamen,
+            'Wrong Size',
+            $this->playerPayloads(60, 4),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false
+        );
     }
 }

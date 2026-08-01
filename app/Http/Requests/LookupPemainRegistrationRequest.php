@@ -3,6 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\NormalizesPhoneNumbers;
+use App\Models\Pemain;
+use App\Models\Turnamen;
 use App\Services\PemainRegistrationService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -18,7 +20,17 @@ class LookupPemainRegistrationRequest extends FormRequest
 
     protected function prepareForValidation()
     {
-        $this->normalizePhoneFields(['no_hp', 'no_hp_2', 'no_hp_3', 'no_hp_4']);
+        $fields = ['no_hp'];
+        $turnamen = $this->resolveTurnamen();
+        $size = $turnamen && $turnamen->allowsGroupRegistration()
+            ? $turnamen->friendlyPlayersPerGroup()
+            : 4;
+
+        for ($n = 2; $n <= max(4, $size); $n++) {
+            $fields[] = 'no_hp_' . $n;
+        }
+
+        $this->normalizePhoneFields($fields);
     }
 
     public function rules()
@@ -29,9 +41,7 @@ class LookupPemainRegistrationRequest extends FormRequest
             'registration_mode' => ['nullable', 'in:single,pair,group'],
         ];
 
-        $turnamen = app(PemainRegistrationService::class)->resolveOpenTournament(
-            $this->input('id_turnamen') ? (int) $this->input('id_turnamen') : null
-        );
+        $turnamen = $this->resolveTurnamen();
 
         if (! $turnamen) {
             $openCount = app(PemainRegistrationService::class)->getOpenTournaments()->count();
@@ -51,9 +61,18 @@ class LookupPemainRegistrationRequest extends FormRequest
 
             if ($this->input('registration_mode') === 'group') {
                 $rules['nama_grup'] = ['required', 'string', 'max:255'];
-                $rules['no_hp_2'] = ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp'];
-                $rules['no_hp_3'] = ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp', 'different:no_hp_2'];
-                $rules['no_hp_4'] = ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/', 'different:no_hp', 'different:no_hp_2', 'different:no_hp_3'];
+                $size = $turnamen->friendlyPlayersPerGroup();
+                $previous = ['no_hp'];
+
+                for ($n = 2; $n <= $size; $n++) {
+                    $field = 'no_hp_' . $n;
+                    $different = array_map(fn ($prev) => 'different:' . $prev, $previous);
+                    $rules[$field] = array_merge(
+                        ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
+                        $different
+                    );
+                    $previous[] = $field;
+                }
             }
         } elseif ($turnamen && $turnamen->randomizesPartners()) {
             $rules['registration_mode'] = ['nullable', 'in:single'];
@@ -65,9 +84,7 @@ class LookupPemainRegistrationRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
-            $turnamen = app(PemainRegistrationService::class)->resolveOpenTournament(
-                $this->input('id_turnamen') ? (int) $this->input('id_turnamen') : null
-            );
+            $turnamen = $this->resolveTurnamen();
 
             if (! $turnamen) {
                 return;
@@ -103,21 +120,27 @@ class LookupPemainRegistrationRequest extends FormRequest
         });
     }
 
+    protected function resolveTurnamen(): ?Turnamen
+    {
+        return app(PemainRegistrationService::class)->resolveOpenTournament(
+            $this->input('id_turnamen') ? (int) $this->input('id_turnamen') : null
+        );
+    }
+
     public function messages()
     {
-        return [
+        $messages = [
             'no_hp.required' => 'Nomor HP pemain 1 wajib diisi.',
             'no_hp.regex' => 'Format nomor HP pemain 1 tidak valid.',
-            'no_hp_2.required' => 'Nomor HP pemain 2 wajib diisi.',
-            'no_hp_2.regex' => 'Format nomor HP pemain 2 tidak valid.',
-            'no_hp_2.different' => 'Nomor HP pemain 2 harus berbeda dari pemain lain.',
-            'no_hp_3.required' => 'Nomor HP pemain 3 wajib diisi.',
-            'no_hp_3.regex' => 'Format nomor HP pemain 3 tidak valid.',
-            'no_hp_3.different' => 'Nomor HP pemain 3 harus berbeda dari pemain lain.',
-            'no_hp_4.required' => 'Nomor HP pemain 4 wajib diisi.',
-            'no_hp_4.regex' => 'Format nomor HP pemain 4 tidak valid.',
-            'no_hp_4.different' => 'Nomor HP pemain 4 harus berbeda dari pemain lain.',
             'nama_grup.required' => 'Nama grup wajib diisi.',
         ];
+
+        for ($n = 2; $n <= 32; $n++) {
+            $messages["no_hp_{$n}.required"] = "Nomor HP pemain {$n} wajib diisi.";
+            $messages["no_hp_{$n}.regex"] = "Format nomor HP pemain {$n} tidak valid.";
+            $messages["no_hp_{$n}.different"] = "Nomor HP pemain {$n} harus berbeda dari pemain lain.";
+        }
+
+        return $messages;
     }
 }

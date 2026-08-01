@@ -51,22 +51,27 @@ class RegistrationController extends Controller
         $registrationMode = $validated['registration_mode'] ?? 'single';
         $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
         $isGroupMode = $turnamen->allowsGroupRegistration() && $registrationMode === 'group';
-        $noHp2 = ($isPairMode || $isGroupMode) ? trim($validated['no_hp_2'] ?? '') : null;
-        $noHp3 = $isGroupMode ? trim($validated['no_hp_3'] ?? '') : null;
-        $noHp4 = $isGroupMode ? trim($validated['no_hp_4'] ?? '') : null;
+        $groupSize = $isGroupMode ? $turnamen->friendlyPlayersPerGroup() : 0;
         $namaGrup = $isGroupMode ? trim($validated['nama_grup'] ?? '') : null;
 
-        $phones = array_filter([
-            'no_hp' => $noHp,
-            'no_hp_2' => $noHp2,
-            'no_hp_3' => $noHp3,
-            'no_hp_4' => $noHp4,
-        ], fn ($value) => $value !== null && $value !== '');
+        $phones = ['no_hp' => $noHp];
+
+        if ($isPairMode || $isGroupMode) {
+            $phones['no_hp_2'] = trim($validated['no_hp_2'] ?? '');
+        }
+
+        if ($isGroupMode) {
+            for ($n = 3; $n <= $groupSize; $n++) {
+                $phones['no_hp_' . $n] = trim($validated['no_hp_' . $n] ?? '');
+            }
+        }
+
+        $phones = array_filter($phones, fn ($value) => $value !== null && $value !== '');
 
         foreach ($phones as $field => $phone) {
             $existing = $this->registrationService->findPemainByPhone($phone);
             if ($existing && $this->registrationService->isRegisteredForTournament($existing, $turnamen)) {
-                $label = $field === 'no_hp' ? 'pemain 1' : 'pemain ' . substr($field, -1);
+                $label = $field === 'no_hp' ? 'pemain 1' : 'pemain ' . substr($field, 6);
 
                 return back()
                     ->withInput()
@@ -81,12 +86,13 @@ class RegistrationController extends Controller
         ];
 
         if ($isPairMode || $isGroupMode) {
-            $formParams['no_hp_2'] = $noHp2;
+            $formParams['no_hp_2'] = $phones['no_hp_2'] ?? '';
         }
 
         if ($isGroupMode) {
-            $formParams['no_hp_3'] = $noHp3;
-            $formParams['no_hp_4'] = $noHp4;
+            for ($n = 3; $n <= $groupSize; $n++) {
+                $formParams['no_hp_' . $n] = $phones['no_hp_' . $n] ?? '';
+            }
             $formParams['nama_grup'] = $namaGrup;
         }
 
@@ -106,23 +112,39 @@ class RegistrationController extends Controller
         $registrationMode = request('registration_mode', old('registration_mode', 'single'));
         $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
         $isGroupMode = $turnamen->allowsGroupRegistration() && $registrationMode === 'group';
-        $noHp2 = ($isPairMode || $isGroupMode) ? trim((string) request('no_hp_2', old('player_2.no_hp', ''))) : '';
-        $noHp3 = $isGroupMode ? trim((string) request('no_hp_3', old('player_3.no_hp', ''))) : '';
-        $noHp4 = $isGroupMode ? trim((string) request('no_hp_4', old('player_4.no_hp', ''))) : '';
+        $groupSize = $isGroupMode ? $turnamen->friendlyPlayersPerGroup() : 0;
         $namaGrup = $isGroupMode ? trim((string) request('nama_grup', old('nama_grup', ''))) : '';
+
+        $phones = [$noHp];
+        if ($isPairMode || $isGroupMode) {
+            $phones[1] = trim((string) request('no_hp_2', old('player_2.no_hp', '')));
+        }
+        if ($isGroupMode) {
+            for ($n = 3; $n <= $groupSize; $n++) {
+                $phones[$n - 1] = trim((string) request(
+                    'no_hp_' . $n,
+                    old('player_' . $n . '.no_hp', '')
+                ));
+            }
+        }
 
         if ($noHp === '') {
             return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id]);
         }
 
-        if ($isPairMode && $noHp2 === '') {
+        if ($isPairMode && ($phones[1] ?? '') === '') {
             return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
                 ->withErrors(['no_hp_2' => 'Nomor HP pemain 2 wajib diisi untuk pendaftaran berpasangan.']);
         }
 
-        if ($isGroupMode && ($noHp2 === '' || $noHp3 === '' || $noHp4 === '' || $namaGrup === '')) {
-            return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
-                ->withErrors(['no_hp' => 'Lengkapi 4 nomor HP dan nama grup untuk pendaftaran satu grup.']);
+        if ($isGroupMode) {
+            $missingPhone = collect($phones)->contains(fn ($phone) => $phone === '');
+            if ($missingPhone || $namaGrup === '') {
+                return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+                    ->withErrors([
+                        'no_hp' => "Lengkapi {$groupSize} nomor HP dan nama grup untuk pendaftaran satu grup.",
+                    ]);
+            }
         }
 
         $phoneChecks = [
@@ -130,12 +152,17 @@ class RegistrationController extends Controller
         ];
 
         if ($isPairMode || $isGroupMode) {
-            $phoneChecks[] = ['phone' => $noHp2, 'field' => 'no_hp_2', 'label' => 'pemain 2'];
+            $phoneChecks[] = ['phone' => $phones[1], 'field' => 'no_hp_2', 'label' => 'pemain 2'];
         }
 
         if ($isGroupMode) {
-            $phoneChecks[] = ['phone' => $noHp3, 'field' => 'no_hp_3', 'label' => 'pemain 3'];
-            $phoneChecks[] = ['phone' => $noHp4, 'field' => 'no_hp_4', 'label' => 'pemain 4'];
+            for ($n = 3; $n <= $groupSize; $n++) {
+                $phoneChecks[] = [
+                    'phone' => $phones[$n - 1],
+                    'field' => 'no_hp_' . $n,
+                    'label' => 'pemain ' . $n,
+                ];
+            }
         }
 
         foreach ($phoneChecks as $check) {
@@ -146,26 +173,23 @@ class RegistrationController extends Controller
             }
         }
 
-        $existingPemain = $this->registrationService->findPemainByPhone($noHp);
-        $existingPemain2 = ($isPairMode || $isGroupMode) ? $this->registrationService->findPemainByPhone($noHp2) : null;
-        $existingPemain3 = $isGroupMode ? $this->registrationService->findPemainByPhone($noHp3) : null;
-        $existingPemain4 = $isGroupMode ? $this->registrationService->findPemainByPhone($noHp4) : null;
+        $existingPlayers = [];
+        foreach ($phones as $index => $phone) {
+            $existingPlayers[$index] = $phone !== ''
+                ? $this->registrationService->findPemainByPhone($phone)
+                : null;
+        }
 
         return view('guest.register-form', [
             'turnamen' => $turnamen,
+            'phones' => $phones,
             'noHp' => $noHp,
-            'noHp2' => $noHp2,
-            'noHp3' => $noHp3,
-            'noHp4' => $noHp4,
+            'noHp2' => $phones[1] ?? '',
             'namaGrup' => $namaGrup,
-            'existingPemain' => $existingPemain,
-            'existingPemain2' => $existingPemain2,
-            'existingPemain3' => $existingPemain3,
-            'existingPemain4' => $existingPemain4,
-            'isExisting' => (bool) $existingPemain,
-            'isExisting2' => (bool) $existingPemain2,
-            'isExisting3' => (bool) $existingPemain3,
-            'isExisting4' => (bool) $existingPemain4,
+            'groupSize' => $groupSize ?: $turnamen->friendlyPlayersPerGroup(),
+            'existingPlayers' => $existingPlayers,
+            'existingPemain' => $existingPlayers[0] ?? null,
+            'isExisting' => (bool) ($existingPlayers[0] ?? null),
             'registrationMode' => $isGroupMode ? 'group' : ($isPairMode ? 'pair' : 'single'),
         ]);
     }
@@ -191,12 +215,7 @@ class RegistrationController extends Controller
                     $turnamen,
                     (string) $request->input('nama_grup'),
                     $request->groupPlayersPayload(),
-                    [
-                        $request->file('foto'),
-                        $request->file('foto_2'),
-                        $request->file('foto_3'),
-                        $request->file('foto_4'),
-                    ],
+                    $request->groupFotosPayload(),
                     $buktiBayar,
                     TurnamenPeserta::SUMBER_INTERNAL,
                     false
@@ -244,15 +263,14 @@ class RegistrationController extends Controller
             }
 
             return redirect()
-                ->route('guest.register.form', array_filter([
+                ->route('guest.register.form', array_filter(array_merge([
                     'no_hp' => $request->input('no_hp'),
-                    'no_hp_2' => $request->input('player_2.no_hp'),
-                    'no_hp_3' => $request->input('player_3.no_hp'),
-                    'no_hp_4' => $request->input('player_4.no_hp'),
                     'nama_grup' => $request->input('nama_grup'),
                     'registration_mode' => $request->input('registration_mode'),
                     'id_turnamen' => $turnamen->id,
-                ]))
+                ], collect(range(2, $turnamen->friendlyPlayersPerGroup()))
+                    ->mapWithKeys(fn ($n) => ['no_hp_' . $n => $request->input('player_' . $n . '.no_hp')])
+                    ->all())))
                 ->withInput()
                 ->withErrors([$field => $e->getMessage()]);
         }

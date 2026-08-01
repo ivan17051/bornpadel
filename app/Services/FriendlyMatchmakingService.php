@@ -14,7 +14,13 @@ use RuntimeException;
 
 class FriendlyMatchmakingService
 {
+    /** @deprecated Use Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP / friendlyPlayersPerGroup() */
     public const PLAYERS_PER_GROUP = 4;
+
+    public function playersPerGroup(Turnamen $turnamen): int
+    {
+        return $turnamen->friendlyPlayersPerGroup();
+    }
 
     public function canGenerateGroups(Turnamen $turnamen): bool
     {
@@ -26,7 +32,10 @@ class FriendlyMatchmakingService
     public function canCreateSkeletonGroups(Turnamen $turnamen): bool
     {
         return $this->canGenerateGroups($turnamen)
-            && $this->previewGroupSplit($this->getApprovedEntries($turnamen)->count()) !== null;
+            && $this->previewGroupSplit(
+                $this->getApprovedEntries($turnamen)->count(),
+                $this->playersPerGroup($turnamen)
+            ) !== null;
     }
 
     public function canRandomizeUnassigned(Turnamen $turnamen): bool
@@ -128,26 +137,46 @@ class FriendlyMatchmakingService
             ->get();
     }
 
-    public function previewGroupSplit(int $approvedCount): ?array
+    public function previewGroupSplit(int $approvedCount, ?int $playersPerGroup = null): ?array
     {
-        if ($approvedCount < self::PLAYERS_PER_GROUP || $approvedCount % self::PLAYERS_PER_GROUP !== 0) {
+        $perGroup = max(
+            Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP,
+            (int) ($playersPerGroup ?: self::PLAYERS_PER_GROUP)
+        );
+        $minPlayers = $perGroup * 2;
+
+        if ($approvedCount < $minPlayers || $approvedCount % $perGroup !== 0) {
             return null;
         }
 
-        $groupCount = intdiv($approvedCount, self::PLAYERS_PER_GROUP);
+        $groupCount = intdiv($approvedCount, $perGroup);
 
         if ($groupCount < 2) {
             return null;
         }
 
-        $sizes = array_fill(0, $groupCount, self::PLAYERS_PER_GROUP);
+        $sizes = array_fill(0, $groupCount, $perGroup);
 
         return [
             'group_count' => $groupCount,
             'sizes' => $sizes,
             'label' => implode(' + ', $sizes),
             'match_slots' => (int) (($groupCount * ($groupCount - 1)) / 2),
+            'players_per_group' => $perGroup,
         ];
+    }
+
+    protected function groupSplitRequirementMessage(Turnamen $turnamen): string
+    {
+        $perGroup = $this->playersPerGroup($turnamen);
+        $minPlayers = $perGroup * 2;
+
+        return sprintf(
+            'Group Match membutuhkan minimal %d pemain approved dan kelipatan %d (grup berisi %d pemain).',
+            $minPlayers,
+            $perGroup,
+            $perGroup
+        );
     }
 
     /**
@@ -160,15 +189,14 @@ class FriendlyMatchmakingService
         }
 
         $entries = $this->getApprovedEntries($turnamen);
-        $preview = $this->previewGroupSplit($entries->count());
+        $perGroup = $this->playersPerGroup($turnamen);
+        $preview = $this->previewGroupSplit($entries->count(), $perGroup);
 
         if (! $preview) {
-            throw new RuntimeException(
-                'Group Match membutuhkan minimal 8 pemain approved dan kelipatan 4 (grup berisi 4 pemain).'
-            );
+            throw new RuntimeException($this->groupSplitRequirementMessage($turnamen));
         }
 
-        return DB::transaction(function () use ($turnamen, $entries, $mode, $preview) {
+        return DB::transaction(function () use ($turnamen, $entries, $mode, $preview, $perGroup) {
             $materialized = $this->materializeCompletePreGroups($turnamen);
             $groups = $materialized['groups'];
             $assignedPesertaIds = $materialized['peserta_ids'];
@@ -183,7 +211,7 @@ class FriendlyMatchmakingService
                 ->all();
             $letterIndex = 0;
 
-            foreach ($orderedSolos->chunk(self::PLAYERS_PER_GROUP)->values() as $chunk) {
+            foreach ($orderedSolos->chunk($perGroup)->values() as $chunk) {
                 $grup = Grup::create([
                     'id_turnamen' => $turnamen->id,
                     'nama' => $this->nextAvailableLetterGroupName($usedNames, $letterIndex),
@@ -298,12 +326,10 @@ class FriendlyMatchmakingService
         }
 
         $entries = $this->getApprovedEntries($turnamen);
-        $preview = $this->previewGroupSplit($entries->count());
+        $preview = $this->previewGroupSplit($entries->count(), $this->playersPerGroup($turnamen));
 
         if (! $preview) {
-            throw new RuntimeException(
-                'Group Match membutuhkan minimal 8 pemain approved dan kelipatan 4 (grup berisi 4 pemain).'
-            );
+            throw new RuntimeException($this->groupSplitRequirementMessage($turnamen));
         }
 
         return DB::transaction(function () use ($turnamen, $preview) {
@@ -346,8 +372,9 @@ class FriendlyMatchmakingService
         $unassigned = $this->orderEntries($this->getUnassignedApprovedEntries($turnamen), $mode);
 
         return DB::transaction(function () use ($turnamen, $unassigned, $mode) {
+            $perGroup = $this->playersPerGroup($turnamen);
             $groups = $turnamen->grup()->withCount('members')->orderBy('id')->get();
-            $remainingSeats = $groups->sum(fn (Grup $grup) => max(0, self::PLAYERS_PER_GROUP - (int) $grup->members_count));
+            $remainingSeats = $groups->sum(fn (Grup $grup) => max(0, $perGroup - (int) $grup->members_count));
 
             if ($unassigned->count() > $remainingSeats) {
                 throw new RuntimeException(
@@ -360,7 +387,7 @@ class FriendlyMatchmakingService
 
             foreach ($groups as $grup) {
                 $currentCount = (int) $grup->members()->count();
-                $open = self::PLAYERS_PER_GROUP - $currentCount;
+                $open = $perGroup - $currentCount;
 
                 for ($i = 0; $i < $open && $queue->isNotEmpty(); $i++) {
                     $peserta = $queue->shift();
@@ -413,10 +440,11 @@ class FriendlyMatchmakingService
         }
 
         $currentCount = $grup->members()->count();
-        $slotsRemaining = self::PLAYERS_PER_GROUP - $currentCount;
+        $perGroup = $this->playersPerGroup($turnamen);
+        $slotsRemaining = $perGroup - $currentCount;
 
         if ($slotsRemaining <= 0) {
-            throw new RuntimeException("{$grup->nama} sudah penuh (maksimal 4 pemain).");
+            throw new RuntimeException("{$grup->nama} sudah penuh (maksimal {$perGroup} pemain).");
         }
 
         if (count($pesertaIds) > $slotsRemaining) {
@@ -520,7 +548,8 @@ class FriendlyMatchmakingService
     public function areGroupsComplete(Turnamen $turnamen): bool
     {
         $entries = $this->getApprovedEntries($turnamen);
-        $preview = $this->previewGroupSplit($entries->count());
+        $perGroup = $this->playersPerGroup($turnamen);
+        $preview = $this->previewGroupSplit($entries->count(), $perGroup);
 
         if (! $preview) {
             return false;
@@ -536,7 +565,7 @@ class FriendlyMatchmakingService
             return false;
         }
 
-        return $groups->every(fn (Grup $grup) => (int) $grup->members_count === self::PLAYERS_PER_GROUP);
+        return $groups->every(fn (Grup $grup) => (int) $grup->members_count === $perGroup);
     }
 
     public function hasFriendlyMatchSlots(Turnamen $turnamen): bool
@@ -635,7 +664,7 @@ class FriendlyMatchmakingService
             ->with(['members.peserta.pemain1'])
             ->orderBy('id')
             ->get()
-            ->filter(fn (TurnamenGrupPendaftaran $group) => $group->isFullyApproved())
+            ->filter(fn (TurnamenGrupPendaftaran $group) => $group->isFullyApproved($turnamen))
             ->values();
     }
 
@@ -663,7 +692,7 @@ class FriendlyMatchmakingService
                 'id' => $group->id,
                 'nama' => $group->nama,
                 'is_solo_bucket' => false,
-                'is_complete' => $group->isFullyApproved(),
+                'is_complete' => $group->isFullyApproved($turnamen),
                 'members' => $group->members->map(function ($member) {
                     return $member->peserta;
                 })->filter()->values(),

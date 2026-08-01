@@ -49,6 +49,7 @@ class TurnamenController extends Controller
     public function store(StoreTurnamenRequest $request)
     {
         $data = collect($request->validated())->except(['foto'])->all();
+        $data = $this->normalizePlayersPerGroup($data);
 
         if ($request->hasFile('foto')) {
             try {
@@ -74,6 +75,14 @@ class TurnamenController extends Controller
     {
         $data = collect($request->validated())->except(['foto', 'remove_foto'])->all();
 
+        if (($data['jenis'] ?? $turnamen->jenis) !== 'friendly') {
+            $data['players_per_group'] = null;
+        } elseif ($turnamen->canEditFriendlyPlayersPerGroup()) {
+            $data = $this->normalizePlayersPerGroup($data);
+        } else {
+            unset($data['players_per_group']);
+        }
+
         if ($request->boolean('remove_foto') && ! $request->hasFile('foto')) {
             $this->photoService->delete($turnamen->foto);
             $data['foto'] = null;
@@ -95,6 +104,24 @@ class TurnamenController extends Controller
         return redirect()
             ->route('admin.turnamen.index')
             ->with('success', 'Turnamen berhasil diperbarui.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function normalizePlayersPerGroup(array $data): array
+    {
+        if (($data['jenis'] ?? null) === 'friendly') {
+            $data['players_per_group'] = max(
+                Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP,
+                (int) ($data['players_per_group'] ?? Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP)
+            );
+        } else {
+            $data['players_per_group'] = null;
+        }
+
+        return $data;
     }
 
     public function destroy(DestroyTurnamenRequest $request, Turnamen $turnamen)

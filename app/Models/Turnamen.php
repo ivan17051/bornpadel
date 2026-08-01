@@ -11,6 +11,10 @@ class Turnamen extends Model
     const CREATED_AT = 'doc';
     const UPDATED_AT = 'dom';
 
+    public const DEFAULT_FRIENDLY_PLAYERS_PER_GROUP = 4;
+
+    public const MIN_FRIENDLY_PLAYERS_PER_GROUP = 2;
+
     protected $fillable = [
         'nama',
         'tanggal',
@@ -19,6 +23,7 @@ class Turnamen extends Model
         'syarat',
         'foto',
         'jenis',
+        'players_per_group',
         'status',
         'mahjong_is_final',
         'registration_paired_at',
@@ -28,6 +33,7 @@ class Turnamen extends Model
     protected $casts = [
         'tanggal' => 'date',
         'harga' => 'decimal:2',
+        'players_per_group' => 'integer',
         'doc' => 'datetime',
         'dom' => 'datetime',
         'mahjong_is_final' => 'boolean',
@@ -133,6 +139,45 @@ class Turnamen extends Model
     public function allowsGroupRegistration(): bool
     {
         return $this->isFriendly();
+    }
+
+    /**
+     * Roster size for Group Match (friendly) groups and full-group registration.
+     */
+    public function friendlyPlayersPerGroup(): int
+    {
+        if (! $this->isFriendly()) {
+            return self::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP;
+        }
+
+        $value = (int) ($this->players_per_group ?: self::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP);
+
+        return max(self::MIN_FRIENDLY_PLAYERS_PER_GROUP, $value);
+    }
+
+    /**
+     * Group size may change only while draft/open and nobody has registered yet.
+     */
+    public function canEditFriendlyPlayersPerGroup(): bool
+    {
+        if (! $this->exists) {
+            return true;
+        }
+
+        if (! in_array($this->status, ['draft', 'open'], true)) {
+            return false;
+        }
+
+        return ! $this->hasRegistrations();
+    }
+
+    public function hasRegistrations(): bool
+    {
+        if ($this->relationLoaded('turnamenPeserta')) {
+            return $this->turnamenPeserta->isNotEmpty();
+        }
+
+        return $this->turnamenPeserta()->exists();
     }
 
     public function usesKnockoutBracket(): bool

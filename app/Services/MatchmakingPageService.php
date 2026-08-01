@@ -63,6 +63,9 @@ class MatchmakingPageService
         $friendlyRegistrationGroups = collect();
         $canCreateFriendlySkeleton = false;
         $canRandomizeFriendlyUnassigned = false;
+        $friendlyPlayersPerGroup = $turnamen && $isFriendly
+            ? $turnamen->friendlyPlayersPerGroup()
+            : \App\Models\Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP;
 
         if ($turnamen) {
             $grupQuery = $isMahjong ? $turnamen->activeGrup() : $turnamen->grup();
@@ -97,7 +100,11 @@ class MatchmakingPageService
                     ]
                     : null;
             } elseif ($isFriendly) {
-                $groupSplitPreview = $this->friendlyService->previewGroupSplit($approvedCount);
+                $friendlyPlayersPerGroup = $turnamen->friendlyPlayersPerGroup();
+                $groupSplitPreview = $this->friendlyService->previewGroupSplit(
+                    $approvedCount,
+                    $friendlyPlayersPerGroup
+                );
                 $friendlyMatches = $this->friendlyService->getMatches($turnamen)
                     ->map(function ($match) {
                         $match->setAttribute(
@@ -157,6 +164,7 @@ class MatchmakingPageService
             'pairingSummary' => $pairingSummary,
             'isMahjong' => $isMahjong,
             'isFriendly' => $isFriendly,
+            'friendlyPlayersPerGroup' => $friendlyPlayersPerGroup,
             'friendlyMatches' => $friendlyMatches,
             'friendlyUnassigned' => $friendlyUnassigned,
             'friendlyRegistrationGroups' => $friendlyRegistrationGroups,

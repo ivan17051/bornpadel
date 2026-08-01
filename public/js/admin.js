@@ -1679,19 +1679,24 @@ const BornPadelAdmin = (function () {
                 const isMahjong = btn.dataset.mahjong === '1';
                 const isFriendly = btn.dataset.friendly === '1';
                 const total = parseInt(previewEl?.dataset.approved || '0', 10);
+                const playersPerGroup = parseInt(
+                    previewEl?.dataset.playersPerGroup || (isFriendly ? '4' : '4'),
+                    10
+                ) || 4;
+                const minApproved = isFriendly ? playersPerGroup * 2 : 4;
 
                 let previewText;
                 if (isMahjong || isFriendly) {
-                    if (total < (isFriendly ? 8 : 4) || total % 4 !== 0) {
+                    if (total < minApproved || total % playersPerGroup !== 0) {
                         showAlert(
                             isFriendly
-                                ? 'Jumlah pemain approved harus minimal 8 dan kelipatan 4.'
+                                ? `Jumlah pemain approved harus minimal ${minApproved} dan kelipatan ${playersPerGroup}.`
                                 : 'Jumlah pemain approved harus minimal 4 dan kelipatan 4.',
                             'error'
                         );
                         return;
                     }
-                    previewText = `${total} pemain → ${total / 4} grup (4 pemain per grup)`;
+                    previewText = `${total} pemain → ${total / playersPerGroup} grup (${playersPerGroup} pemain per grup)`;
                 } else {
                     const groupSettings = getGroupSettings();
                     const sizes = calculateGroupSizes(
@@ -1840,6 +1845,7 @@ const BornPadelAdmin = (function () {
                     id: parseInt(item.dataset.grupId, 10),
                     name: item.dataset.grupName || 'Grup',
                     slotsRemaining,
+                    playersPerGroup: parseInt(item.dataset.playersPerGroup || '4', 10) || 4,
                 };
 
                 if (titleEl) {
@@ -1849,7 +1855,7 @@ const BornPadelAdmin = (function () {
                     helpEl.textContent = `Pilih hingga ${slotsRemaining} pemain yang belum digrup untuk ${activeGrup.name}.`;
                 }
                 if (slotsHintEl) {
-                    slotsHintEl.textContent = `Sisa slot: ${slotsRemaining} dari 4.`;
+                    slotsHintEl.textContent = `Sisa slot: ${slotsRemaining} dari ${activeGrup.playersPerGroup}.`;
                 }
 
                 destroySelect2();

@@ -14,23 +14,32 @@
     $isDouble = $turnamen->requiresPairRegistration();
     $isPairMode = $isDouble && ($registrationMode ?? 'single') === 'pair';
     $isGroupMode = $turnamen->allowsGroupRegistration() && ($registrationMode ?? 'single') === 'group';
+    $groupSize = $groupSize ?? ($isGroupMode ? $turnamen->friendlyPlayersPerGroup() : 4);
+    $phones = $phones ?? array_filter([
+        $noHp ?? '',
+        $noHp2 ?? null,
+        $noHp3 ?? null,
+        $noHp4 ?? null,
+    ], fn ($v) => $v !== null);
+    $existingPlayers = $existingPlayers ?? [
+        $existingPemain ?? null,
+        $existingPemain2 ?? null,
+        $existingPemain3 ?? null,
+        $existingPemain4 ?? null,
+    ];
     $capacityLabel = $turnamen->maks_peserta
         ? number_format($turnamen->maks_peserta)
         : 'Tidak Terbatas';
     $hargaSatuan = (float) $turnamen->harga;
-    $hargaMultiplier = $isGroupMode ? 4 : ($isPairMode ? 2 : 1);
+    $hargaMultiplier = $isGroupMode ? $groupSize : ($isPairMode ? 2 : 1);
     $hargaTampil = $hargaSatuan * $hargaMultiplier;
-    $existingFlags = [
-        $isExisting,
-        $isPairMode || $isGroupMode ? ($isExisting2 ?? false) : true,
-        $isGroupMode ? ($isExisting3 ?? false) : true,
-        $isGroupMode ? ($isExisting4 ?? false) : true,
-    ];
+    $playerCount = $isGroupMode ? $groupSize : ($isPairMode ? 2 : 1);
+    $existingFlags = [];
+    for ($i = 0; $i < $playerCount; $i++) {
+        $existingFlags[] = (bool) ($existingPlayers[$i] ?? false);
+    }
     $bothExisting = ! in_array(false, $existingFlags, true);
-    $anyExisting = $isExisting
-        || ($isExisting2 ?? false)
-        || ($isExisting3 ?? false)
-        || ($isExisting4 ?? false);
+    $anyExisting = in_array(true, $existingFlags, true);
 @endphp
 
 <div class="row justify-content-center">
@@ -43,7 +52,7 @@
                 <span class="badge text-bg-primary mt-2">Pendaftaran Berpasangan</span>
             @endif
             @if ($isGroupMode)
-                <span class="badge text-bg-primary mt-2">Pendaftaran Satu Grup</span>
+                <span class="badge text-bg-primary mt-2">Pendaftaran Satu Grup ({{ $groupSize }})</span>
             @endif
         </div>
 
@@ -63,16 +72,12 @@
                             <strong class="small">{{ $namaGrup }}</strong>
                         </div>
                     @endif
-                    <div class="col-6 col-md-3">
-                        <div class="info-label">HP Pemain 1</div>
-                        <strong class="small">{{ $noHp }}</strong>
-                    </div>
-                    @if ($isPairMode || $isGroupMode)
+                    @for ($i = 0; $i < min(2, $playerCount); $i++)
                         <div class="col-6 col-md-3">
-                            <div class="info-label">HP Pemain 2</div>
-                            <strong class="small">{{ $noHp2 }}</strong>
+                            <div class="info-label">HP Pemain {{ $i + 1 }}</div>
+                            <strong class="small">{{ $phones[$i] ?? '' }}</strong>
                         </div>
-                    @endif
+                    @endfor
                     @if (! $isGroupMode)
                         <div class="col-6 col-md-3">
                             <div class="info-label">Peserta</div>
@@ -116,52 +121,18 @@
                     @endif
 
                     @php
-                        $playerBlocks = [
-                            [
-                                'label' => 'Pemain 1',
-                                'existing' => $isExisting,
-                                'pemain' => $existingPemain,
-                                'phone' => $noHp,
-                                'prefix' => '',
-                                'foto' => 'foto',
-                                'inputId' => 'guest-foto',
-                                'previewId' => 'guest-foto-preview',
-                            ],
-                        ];
-
-                        if ($isPairMode || $isGroupMode) {
+                        $playerBlocks = [];
+                        for ($i = 0; $i < $playerCount; $i++) {
+                            $n = $i + 1;
                             $playerBlocks[] = [
-                                'label' => 'Pemain 2',
-                                'existing' => $isExisting2 ?? false,
-                                'pemain' => $existingPemain2 ?? null,
-                                'phone' => $noHp2,
-                                'prefix' => 'player_2',
-                                'foto' => 'foto_2',
-                                'inputId' => 'guest-foto-2',
-                                'previewId' => 'guest-foto-2-preview',
-                            ];
-                        }
-
-                        if ($isGroupMode) {
-                            $playerBlocks[] = [
-                                'label' => 'Pemain 3',
-                                'existing' => $isExisting3 ?? false,
-                                'pemain' => $existingPemain3 ?? null,
-                                'phone' => $noHp3,
-                                'prefix' => 'player_3',
-                                'foto' => 'foto_3',
-                                'inputId' => 'guest-foto-3',
-                                'previewId' => 'guest-foto-3-preview',
-                            ];
-                            $playerBlocks[] = [
-                                'label' => 'Pemain 4',
-                                'existing' => $isExisting4 ?? false,
-                                'pemain' => $existingPemain4 ?? null,
-                                'phone' => $noHp4,
-                                'prefix' => 'player_4',
-                                'foto' => 'foto_4',
-                                'inputId' => 'guest-foto-4',
-                                'previewId' => 'guest-foto-4-preview',
+                                'label' => 'Pemain ' . $n,
+                                'existing' => (bool) ($existingPlayers[$i] ?? false),
+                                'pemain' => $existingPlayers[$i] ?? null,
+                                'phone' => $phones[$i] ?? '',
+                                'prefix' => $n === 1 ? '' : 'player_' . $n,
+                                'foto' => $n === 1 ? 'foto' : 'foto_' . $n,
+                                'inputId' => $n === 1 ? 'guest-foto' : 'guest-foto-' . $n,
+                                'previewId' => $n === 1 ? 'guest-foto-preview' : 'guest-foto-' . $n . '-preview',
                             ];
                         }
                     @endphp
@@ -169,7 +140,7 @@
                     @foreach ($playerBlocks as $index => $block)
                         <div class="registration-player-block {{ $index > 0 ? 'border-top pt-4' : '' }} mb-4">
                             <h6 class="fw-semibold text-primary mb-3">
-                                <i class="bi bi-{{ $index + 1 }}-circle me-1"></i> {{ $block['label'] }}
+                                <i class="bi bi-person-circle me-1"></i> {{ $block['label'] }}
                             </h6>
                             @if ($block['existing'])
                                 @include('guest.partials.register-existing-confirm', [

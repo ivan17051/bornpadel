@@ -489,9 +489,9 @@ class PemainRegistrationService
     }
 
     /**
-     * Register a full group of exactly 4 players for Group Match (friendly).
+     * Register a full group for Group Match (friendly). Size comes from the tournament.
      *
-     * @param  array<int, array<string, mixed>>  $players  Exactly 4 player payloads
+     * @param  array<int, array<string, mixed>>  $players
      * @param  array<int, UploadedFile|null>  $fotos
      * @return array{grup_pendaftaran: \App\Models\TurnamenGrupPendaftaran, players: Collection<int, Pemain>}
      */
@@ -510,8 +510,12 @@ class PemainRegistrationService
             throw new RuntimeException('Pendaftaran satu grup hanya tersedia untuk Group Match.');
         }
 
-        if (count($players) !== 4) {
-            throw new RuntimeException('Pendaftaran grup harus berisi tepat 4 pemain.');
+        $expectedSize = $turnamen->friendlyPlayersPerGroup();
+
+        if (count($players) !== $expectedSize) {
+            throw new RuntimeException(
+                "Pendaftaran grup harus berisi tepat {$expectedSize} pemain."
+            );
         }
 
         $phones = [];
@@ -521,7 +525,7 @@ class PemainRegistrationService
                 throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' wajib diisi.');
             }
             if (in_array($phone, $phones, true)) {
-                throw new RuntimeException('Nomor HP keempat pemain harus berbeda satu sama lain.');
+                throw new RuntimeException('Nomor HP setiap pemain dalam grup harus berbeda satu sama lain.');
             }
             $phones[] = $phone;
         }
@@ -539,7 +543,7 @@ class PemainRegistrationService
         $capacityService = $capacityService ?? app(TournamentCapacityService::class);
 
         if ($status === 'approved') {
-            $capacityService->assertCanApprove($turnamen, 4);
+            $capacityService->assertCanApprove($turnamen, $expectedSize);
         }
 
         return DB::transaction(function () use (

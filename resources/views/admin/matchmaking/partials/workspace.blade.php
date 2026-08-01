@@ -96,11 +96,16 @@
                                      class="small text-muted"
                                      data-approved="{{ $approvedCount }}"
                                      data-mahjong="{{ $isMahjong ? '1' : '0' }}"
-                                     data-friendly="{{ $isFriendly ? '1' : '0' }}">
+                                     data-friendly="{{ $isFriendly ? '1' : '0' }}"
+                                     data-players-per-group="{{ $isFriendly ? ($friendlyPlayersPerGroup ?? 4) : 4 }}">
                                     @if ($groupSplitPreview)
                                         {{ $approvedCount }} pemain → {{ $groupSplitPreview['group_count'] }} grup ({{ $groupSplitPreview['label'] }})
                                     @else
-                                        Jumlah pemain approved harus minimal {{ $isFriendly ? '8' : '4' }} dan kelipatan 4.
+                                        @php
+                                            $ppg = $isFriendly ? ($friendlyPlayersPerGroup ?? 4) : 4;
+                                            $minApproved = $isFriendly ? ($ppg * 2) : 4;
+                                        @endphp
+                                        Jumlah pemain approved harus minimal {{ $minApproved }} dan kelipatan {{ $ppg }}.
                                     @endif
                                 </div>
                             </div>
@@ -343,7 +348,7 @@
                                         {{ $regGroup['nama'] }}
                                         @if (! ($regGroup['is_solo_bucket'] ?? false))
                                             <span class="badge text-bg-light text-dark border ms-1">
-                                                {{ ($regGroup['members'] ?? collect())->count() }}/4
+                                                {{ ($regGroup['members'] ?? collect())->count() }}/{{ $friendlyPlayersPerGroup ?? 4 }}
                                             </span>
                                             @if ($regGroup['is_complete'] ?? false)
                                                 <span class="badge bg-success ms-1">Siap materialisasi</span>
@@ -541,8 +546,9 @@
         @else
             @foreach ($grup as $g)
                 @php
+                    $playersPerGroup = $friendlyPlayersPerGroup ?? 4;
                     $friendlySlotsRemaining = $isFriendly
-                        ? max(0, 4 - $g->members->count())
+                        ? max(0, $playersPerGroup - $g->members->count())
                         : 0;
                     $canAssignFriendlyMembers = $isFriendly
                         && ($groupsEditable ?? false)
@@ -556,6 +562,7 @@
                          data-grup-name="{{ $g->nama }}"
                          data-member-count="{{ $g->members->count() }}"
                          data-slots-remaining="{{ $friendlySlotsRemaining }}"
+                         data-players-per-group="{{ $playersPerGroup }}"
                      @endif>
                     <h2 class="accordion-header d-flex align-items-stretch" id="group-heading-{{ $g->id }}">
                         <button class="accordion-button {{ $expandGroupsByDefault ? '' : 'collapsed' }}"
@@ -571,7 +578,7 @@
                                 </span>
                                 @if ($isFriendly)
                                     <span class="badge text-bg-info ms-auto">
-                                        {{ $g->members->count() }}/4 pemain
+                                        {{ $g->members->count() }}/{{ $playersPerGroup }} pemain
                                     </span>
                                     <span class="badge text-bg-secondary">
                                         Poin {{ (int) $g->poin_didapat }}

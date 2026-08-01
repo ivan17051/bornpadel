@@ -52,7 +52,7 @@
                 @if ($isGroupRegistration && $namaGrup)
                     <div class="alert alert-light border text-start mb-4">
                         <i class="bi bi-people-fill me-2"></i>
-                        Grup <strong>{{ $namaGrup }}</strong> berhasil didaftarkan (4 pemain).
+                        Grup <strong>{{ $namaGrup }}</strong> berhasil didaftarkan ({{ count($players) }} pemain).
                     </div>
                 @elseif ($randomizesPartners)
                     <div class="alert alert-light border text-start mb-4">

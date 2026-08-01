@@ -22,7 +22,14 @@ class StorePemainRegistrationRequest extends FormRequest
     {
         $this->normalizePhoneFields(['no_hp']);
 
-        foreach (['player_2', 'player_3', 'player_4'] as $playerKey) {
+        $turnamen = $this->resolveTurnamen();
+        $maxExtra = 4;
+        if ($turnamen && $turnamen->allowsGroupRegistration()) {
+            $maxExtra = max(4, $turnamen->friendlyPlayersPerGroup());
+        }
+
+        for ($n = 2; $n <= $maxExtra; $n++) {
+            $playerKey = 'player_' . $n;
             $player = (array) $this->input($playerKey, []);
             $playerPhone = $player['no_hp'] ?? null;
 
@@ -59,7 +66,7 @@ class StorePemainRegistrationRequest extends FormRequest
             $rules['registration_mode'] = ['required', 'in:single,pair'];
 
             if ($this->input('registration_mode') === 'pair') {
-                $existingPlayerTwo = $this->existingPlayerTwo();
+                $existingPlayerTwo = $this->existingPlayerByPrefix('player_2');
                 $rules = array_merge($rules, $this->playerFieldRules('player_2', (bool) $existingPlayerTwo));
                 $rules['foto_2'] = ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'];
             }
@@ -68,7 +75,9 @@ class StorePemainRegistrationRequest extends FormRequest
 
             if ($this->input('registration_mode') === 'group') {
                 $rules['nama_grup'] = ['required', 'string', 'max:255'];
-                foreach ([2, 3, 4] as $n) {
+                $size = $turnamen->friendlyPlayersPerGroup();
+
+                for ($n = 2; $n <= $size; $n++) {
                     $prefix = 'player_' . $n;
                     $existing = $this->existingPlayerByPrefix($prefix);
                     $rules = array_merge($rules, $this->playerFieldRules($prefix, (bool) $existing));
@@ -115,12 +124,14 @@ class StorePemainRegistrationRequest extends FormRequest
             }
 
             if ($turnamen->allowsGroupRegistration() && $this->input('registration_mode') === 'group') {
+                $size = $turnamen->friendlyPlayersPerGroup();
                 $phones = [
                     'no_hp' => trim((string) $this->input('no_hp')),
-                    'player_2.no_hp' => trim((string) $this->input('player_2.no_hp')),
-                    'player_3.no_hp' => trim((string) $this->input('player_3.no_hp')),
-                    'player_4.no_hp' => trim((string) $this->input('player_4.no_hp')),
                 ];
+
+                for ($n = 2; $n <= $size; $n++) {
+                    $phones['player_' . $n . '.no_hp'] = trim((string) $this->input('player_' . $n . '.no_hp'));
+                }
 
                 $seen = [];
                 foreach ($phones as $field => $phone) {
@@ -177,47 +188,41 @@ class StorePemainRegistrationRequest extends FormRequest
         return $this->playerPayloadByPrefix('player_2');
     }
 
-    public function playerThreePayload(): array
-    {
-        return $this->playerPayloadByPrefix('player_3');
-    }
-
-    public function playerFourPayload(): array
-    {
-        return $this->playerPayloadByPrefix('player_4');
-    }
-
     /**
      * @return array<int, array<string, mixed>>
      */
     public function groupPlayersPayload(): array
     {
-        return [
-            $this->playerOnePayload(),
-            $this->playerTwoPayload(),
-            $this->playerThreePayload(),
-            $this->playerFourPayload(),
-        ];
+        $turnamen = $this->resolveTurnamen();
+        $size = $turnamen ? $turnamen->friendlyPlayersPerGroup() : Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP;
+        $players = [$this->playerOnePayload()];
+
+        for ($n = 2; $n <= $size; $n++) {
+            $players[] = $this->playerPayloadByPrefix('player_' . $n);
+        }
+
+        return $players;
+    }
+
+    /**
+     * @return array<int, \Illuminate\Http\UploadedFile|null>
+     */
+    public function groupFotosPayload(): array
+    {
+        $turnamen = $this->resolveTurnamen();
+        $size = $turnamen ? $turnamen->friendlyPlayersPerGroup() : Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP;
+        $fotos = [$this->file('foto')];
+
+        for ($n = 2; $n <= $size; $n++) {
+            $fotos[] = $this->file('foto_' . $n);
+        }
+
+        return $fotos;
     }
 
     public function existingPlayerOne(): ?Pemain
     {
         return $this->existingPlayerByPrefix('');
-    }
-
-    public function existingPlayerTwo(): ?Pemain
-    {
-        return $this->existingPlayerByPrefix('player_2');
-    }
-
-    public function existingPlayerThree(): ?Pemain
-    {
-        return $this->existingPlayerByPrefix('player_3');
-    }
-
-    public function existingPlayerFour(): ?Pemain
-    {
-        return $this->existingPlayerByPrefix('player_4');
     }
 
     protected function playerPayloadByPrefix(string $prefix): array
@@ -302,52 +307,35 @@ class StorePemainRegistrationRequest extends FormRequest
 
     public function messages()
     {
-        return [
+        $messages = [
             'nama.required' => 'Nama wajib diisi.',
-            'player_2.nama.required' => 'Nama pemain 2 wajib diisi.',
-            'player_3.nama.required' => 'Nama pemain 3 wajib diisi.',
-            'player_4.nama.required' => 'Nama pemain 4 wajib diisi.',
             'tgl_lahir.before' => 'Tanggal lahir harus sebelum hari ini.',
-            'player_2.tgl_lahir.before' => 'Tanggal lahir pemain 2 harus sebelum hari ini.',
-            'player_3.tgl_lahir.before' => 'Tanggal lahir pemain 3 harus sebelum hari ini.',
-            'player_4.tgl_lahir.before' => 'Tanggal lahir pemain 4 harus sebelum hari ini.',
             'gender.required' => 'Jenis kelamin wajib dipilih.',
-            'player_2.gender.required' => 'Jenis kelamin pemain 2 wajib dipilih.',
-            'player_3.gender.required' => 'Jenis kelamin pemain 3 wajib dipilih.',
-            'player_4.gender.required' => 'Jenis kelamin pemain 4 wajib dipilih.',
             'gender.in' => 'Jenis kelamin tidak valid.',
-            'player_2.gender.in' => 'Jenis kelamin pemain 2 tidak valid.',
-            'player_3.gender.in' => 'Jenis kelamin pemain 3 tidak valid.',
-            'player_4.gender.in' => 'Jenis kelamin pemain 4 tidak valid.',
             'no_hp.required' => 'Nomor HP wajib diisi.',
-            'player_2.no_hp.required' => 'Nomor HP pemain 2 wajib diisi.',
-            'player_3.no_hp.required' => 'Nomor HP pemain 3 wajib diisi.',
-            'player_4.no_hp.required' => 'Nomor HP pemain 4 wajib diisi.',
             'no_hp.regex' => 'Format nomor HP tidak valid.',
-            'player_2.no_hp.regex' => 'Format nomor HP pemain 2 tidak valid.',
-            'player_3.no_hp.regex' => 'Format nomor HP pemain 3 tidak valid.',
-            'player_4.no_hp.regex' => 'Format nomor HP pemain 4 tidak valid.',
             'nama_grup.required' => 'Nama grup wajib diisi.',
             'rating.numeric' => 'Rating harus berupa angka.',
-            'player_2.rating.numeric' => 'Rating pemain 2 harus berupa angka.',
-            'player_3.rating.numeric' => 'Rating pemain 3 harus berupa angka.',
-            'player_4.rating.numeric' => 'Rating pemain 4 harus berupa angka.',
             'rating.max' => 'Rating maksimal 10.',
-            'player_2.rating.max' => 'Rating pemain 2 maksimal 10.',
-            'player_3.rating.max' => 'Rating pemain 3 maksimal 10.',
-            'player_4.rating.max' => 'Rating pemain 4 maksimal 10.',
             'foto.image' => 'Foto harus berupa gambar.',
-            'foto_2.image' => 'Foto pemain 2 harus berupa gambar.',
-            'foto_3.image' => 'Foto pemain 3 harus berupa gambar.',
-            'foto_4.image' => 'Foto pemain 4 harus berupa gambar.',
             'foto.mimes' => 'Foto harus berformat JPG, PNG, atau WebP.',
-            'foto_2.mimes' => 'Foto pemain 2 harus berformat JPG, PNG, atau WebP.',
-            'foto_3.mimes' => 'Foto pemain 3 harus berformat JPG, PNG, atau WebP.',
-            'foto_4.mimes' => 'Foto pemain 4 harus berformat JPG, PNG, atau WebP.',
             'foto.max' => 'Ukuran foto maksimal 5 MB.',
-            'foto_2.max' => 'Ukuran foto pemain 2 maksimal 5 MB.',
-            'foto_3.max' => 'Ukuran foto pemain 3 maksimal 5 MB.',
-            'foto_4.max' => 'Ukuran foto pemain 4 maksimal 5 MB.',
         ];
+
+        for ($n = 2; $n <= 32; $n++) {
+            $messages["player_{$n}.nama.required"] = "Nama pemain {$n} wajib diisi.";
+            $messages["player_{$n}.tgl_lahir.before"] = "Tanggal lahir pemain {$n} harus sebelum hari ini.";
+            $messages["player_{$n}.gender.required"] = "Jenis kelamin pemain {$n} wajib dipilih.";
+            $messages["player_{$n}.gender.in"] = "Jenis kelamin pemain {$n} tidak valid.";
+            $messages["player_{$n}.no_hp.required"] = "Nomor HP pemain {$n} wajib diisi.";
+            $messages["player_{$n}.no_hp.regex"] = "Format nomor HP pemain {$n} tidak valid.";
+            $messages["player_{$n}.rating.numeric"] = "Rating pemain {$n} harus berupa angka.";
+            $messages["player_{$n}.rating.max"] = "Rating pemain {$n} maksimal 10.";
+            $messages["foto_{$n}.image"] = "Foto pemain {$n} harus berupa gambar.";
+            $messages["foto_{$n}.mimes"] = "Foto pemain {$n} harus berformat JPG, PNG, atau WebP.";
+            $messages["foto_{$n}.max"] = "Ukuran foto pemain {$n} maksimal 5 MB.";
+        }
+
+        return $messages;
     }
 }

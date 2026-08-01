@@ -19,6 +19,7 @@
 @php
     $isDouble = $turnamen->requiresPairRegistration();
     $allowsGroup = $turnamen->allowsGroupRegistration();
+    $groupSize = $allowsGroup ? $turnamen->friendlyPlayersPerGroup() : 4;
     $registrationMode = old('registration_mode', 'single');
     $isPairMode = $isDouble && $registrationMode === 'pair';
     $isGroupMode = $allowsGroup && $registrationMode === 'group';
@@ -26,7 +27,7 @@
         ? number_format($turnamen->maks_peserta)
         : 'Tidak Terbatas';
     $hargaSatuan = (float) $turnamen->harga;
-    $hargaMultiplier = $isGroupMode ? 4 : ($isPairMode ? 2 : 1);
+    $hargaMultiplier = $isGroupMode ? $groupSize : ($isPairMode ? 2 : 1);
     $hargaTampil = $hargaSatuan * $hargaMultiplier;
 @endphp
 
@@ -79,7 +80,7 @@
                     @if ($isDouble)
                         Turnamen double: daftar sendiri dulu, lalu pasangan diatur kemudian. Opsional: daftar langsung berpasangan.
                     @elseif ($allowsGroup)
-                        Group Match: daftar individu, atau daftar satu grup lengkap (4 pemain + nama grup).
+                        Group Match: daftar individu, atau daftar satu grup lengkap ({{ $groupSize }} pemain + nama grup).
                     @elseif ($turnamen->randomizesPartners())
                         Turnamen single: daftar sendiri. Pasangan akan diacak otomatis setelah pendaftaran ditutup.
                     @else
@@ -90,7 +91,8 @@
                 </p>
 
                 <form action="{{ route('guest.register.lookup') }}" method="POST" novalidate id="register-lookup-form"
-                      data-harga-satuan="{{ $hargaSatuan }}">
+                      data-harga-satuan="{{ $hargaSatuan }}"
+                      data-group-size="{{ $groupSize }}">
                     @csrf
                     <input type="hidden" name="id_turnamen" value="{{ $turnamen->id }}">
 
@@ -126,7 +128,7 @@
                                            value="group"
                                            autocomplete="off"
                                            {{ $registrationMode === 'group' ? 'checked' : '' }}>
-                                    <label class="btn btn-outline-primary" for="registration-mode-group">Satu Grup (4 pemain)</label>
+                                    <label class="btn btn-outline-primary" for="registration-mode-group">Satu Grup ({{ $groupSize }} pemain)</label>
                                 @endif
                             </div>
                             @error('registration_mode')
@@ -137,7 +139,7 @@
                         <input type="hidden" name="registration_mode" value="single">
                     @endif
 
-                    <div class="mb-4 {{ $isGroupMode ? '' : '' }}" id="nama-grup-section" style="{{ $isGroupMode ? '' : 'display:none' }}">
+                    <div class="mb-4" id="nama-grup-section" style="{{ $isGroupMode ? '' : 'display:none' }}">
                         <label for="nama_grup" class="form-label fw-semibold">Nama Grup <span class="text-danger">*</span></label>
                         <input type="text"
                                name="nama_grup"
@@ -160,36 +162,25 @@
                     </div>
 
                     @if ($isDouble || $allowsGroup)
-                        <div id="player-2-phone-section" class="mb-4 {{ ($isPairMode || $isGroupMode) ? '' : 'd-none' }}">
-                            <x-phone-input name="no_hp_2"
-                                           id="guest_no_hp_2"
-                                           label="Nomor HP Pemain 2"
-                                           :value="old('no_hp_2')"
-                                           :required="$isPairMode || $isGroupMode"
-                                           size="lg"
-                                           error-key="no_hp_2" />
-                        </div>
-                    @endif
-
-                    @if ($allowsGroup)
-                        <div id="player-3-phone-section" class="mb-4 {{ $isGroupMode ? '' : 'd-none' }}">
-                            <x-phone-input name="no_hp_3"
-                                           id="guest_no_hp_3"
-                                           label="Nomor HP Pemain 3"
-                                           :value="old('no_hp_3')"
-                                           :required="$isGroupMode"
-                                           size="lg"
-                                           error-key="no_hp_3" />
-                        </div>
-                        <div id="player-4-phone-section" class="mb-4 {{ $isGroupMode ? '' : 'd-none' }}">
-                            <x-phone-input name="no_hp_4"
-                                           id="guest_no_hp_4"
-                                           label="Nomor HP Pemain 4"
-                                           :value="old('no_hp_4')"
-                                           :required="$isGroupMode"
-                                           size="lg"
-                                           error-key="no_hp_4" />
-                        </div>
+                        @php $maxExtraPhones = $allowsGroup ? $groupSize : 2; @endphp
+                        @for ($n = 2; $n <= $maxExtraPhones; $n++)
+                            @php
+                                $showPhone = $isPairMode
+                                    ? $n === 2
+                                    : ($isGroupMode && $n <= $groupSize);
+                            @endphp
+                            <div id="player-{{ $n }}-phone-section"
+                                 class="mb-4 group-extra-phone {{ $showPhone ? '' : 'd-none' }}"
+                                 data-player-index="{{ $n }}">
+                                <x-phone-input name="no_hp_{{ $n }}"
+                                               id="guest_no_hp_{{ $n }}"
+                                               label="Nomor HP Pemain {{ $n }}"
+                                               :value="old('no_hp_' . $n)"
+                                               :required="$showPhone"
+                                               size="lg"
+                                               error-key="no_hp_{{ $n }}" />
+                            </div>
+                        @endfor
                     @endif
 
                     <div class="d-grid gap-2">
@@ -215,18 +206,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!form) return;
 
     const hargaSatuan = parseFloat(form.dataset.hargaSatuan || '0');
+    const groupSize = parseInt(form.dataset.groupSize || '4', 10) || 4;
     const hargaDisplay = document.getElementById('register-harga-display');
     const hargaNote = document.getElementById('register-harga-note');
     const hargaMultiplierEl = document.getElementById('register-harga-multiplier');
     const namaGrupSection = document.getElementById('nama-grup-section');
     const namaGrupInput = document.getElementById('nama_grup');
-    const playerTwoSection = document.getElementById('player-2-phone-section');
-    const playerTwoInput = document.getElementById('guest_no_hp_2');
-    const playerThreeSection = document.getElementById('player-3-phone-section');
-    const playerThreeInput = document.getElementById('guest_no_hp_3');
-    const playerFourSection = document.getElementById('player-4-phone-section');
-    const playerFourInput = document.getElementById('guest_no_hp_4');
     const modeInputs = form.querySelectorAll('input[name="registration_mode"]');
+    const extraPhoneSections = form.querySelectorAll('.group-extra-phone');
 
     const formatRp = (value) => 'Rp ' + Math.round(value).toLocaleString('id-ID');
 
@@ -234,29 +221,19 @@ document.addEventListener('DOMContentLoaded', function () {
         const mode = form.querySelector('input[name="registration_mode"]:checked')?.value || 'single';
         const isPair = mode === 'pair';
         const isGroup = mode === 'group';
-        const multiplier = isGroup ? 4 : (isPair ? 2 : 1);
+        const multiplier = isGroup ? groupSize : (isPair ? 2 : 1);
 
-        if (playerTwoSection) {
-            playerTwoSection.classList.toggle('d-none', !(isPair || isGroup));
-        }
-        if (playerTwoInput) {
-            playerTwoInput.required = isPair || isGroup;
-            if (!(isPair || isGroup)) playerTwoInput.value = '';
-        }
-        if (playerThreeSection) {
-            playerThreeSection.classList.toggle('d-none', !isGroup);
-        }
-        if (playerThreeInput) {
-            playerThreeInput.required = isGroup;
-            if (!isGroup) playerThreeInput.value = '';
-        }
-        if (playerFourSection) {
-            playerFourSection.classList.toggle('d-none', !isGroup);
-        }
-        if (playerFourInput) {
-            playerFourInput.required = isGroup;
-            if (!isGroup) playerFourInput.value = '';
-        }
+        extraPhoneSections.forEach((section) => {
+            const index = parseInt(section.dataset.playerIndex || '0', 10);
+            const input = section.querySelector('input[type="tel"], input[type="text"], input:not([type="hidden"])');
+            const show = isPair ? index === 2 : (isGroup && index <= groupSize);
+            section.classList.toggle('d-none', !show);
+            if (input) {
+                input.required = show;
+                if (!show) input.value = '';
+            }
+        });
+
         if (namaGrupSection) {
             namaGrupSection.style.display = isGroup ? '' : 'none';
         }
