@@ -359,6 +359,37 @@ class MatchmakingController extends Controller
         ]);
     }
 
+    public function storeMahjongGroupPointEntries(Request $request, Grup $grup)
+    {
+        $request->validate([
+            'scores' => ['required', 'array', 'size:4'],
+            'scores.*.id' => ['required', 'integer'],
+            'scores.*.poin' => ['required', 'integer'],
+        ]);
+
+        try {
+            $updatedMembers = $this->mahjongService->addGroupPointEntries(
+                $grup,
+                $request->input('scores')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin grup berhasil disimpan.',
+            'data' => [
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
+                })->values(),
+            ],
+        ]);
+    }
+
     public function destroyMahjongPointEntry(GrupMember $member, \App\Models\MahjongPoinEntry $entry)
     {
         try {

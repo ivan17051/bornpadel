@@ -190,6 +190,49 @@ class MahjongMatchmakingService
         return $this->syncPoinDidapatFromEntries($member);
     }
 
+    /**
+     * Add one poin entry for every member in the group (one mahjong hand).
+     *
+     * @param  array<int, array{id: int, poin: int}>  $scores
+     * @return Collection<int, GrupMember>
+     */
+    public function addGroupPointEntries(Grup $grup, array $scores): Collection
+    {
+        return DB::transaction(function () use ($grup, $scores) {
+            $this->assertActiveMahjongGroup($grup);
+
+            $grup->loadMissing('members');
+            $membersById = $grup->members->keyBy('id');
+
+            if ($membersById->count() !== self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Grup Mahjong harus berisi tepat 4 pemain.');
+            }
+
+            if (count($scores) !== self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Poin harus diisi untuk keempat pemain dalam grup.');
+            }
+
+            $scoreIds = collect($scores)->pluck('id')->map(fn ($id) => (int) $id)->sort()->values();
+            $memberIds = $membersById->keys()->map(fn ($id) => (int) $id)->sort()->values();
+
+            if ($scoreIds->all() !== $memberIds->all()) {
+                throw new RuntimeException('Daftar pemain tidak cocok dengan anggota grup.');
+            }
+
+            foreach ($scores as $score) {
+                $memberId = (int) $score['id'];
+                MahjongPoinEntry::create([
+                    'id_grup_member' => $memberId,
+                    'poin' => (int) $score['poin'],
+                ]);
+            }
+
+            return $membersById->values()->map(function (GrupMember $member) {
+                return $this->syncPoinDidapatFromEntries($member);
+            })->values();
+        });
+    }
+
     public function deleteMemberPointEntry(GrupMember $member, MahjongPoinEntry $entry): GrupMember
     {
         $this->assertActiveMahjongMember($member);
@@ -215,11 +258,22 @@ class MahjongMatchmakingService
     {
         $member->loadMissing('grup.turnamen');
 
-        if (! $member->grup || ! $member->grup->turnamen || ! $member->grup->turnamen->isMahjong()) {
+        if (! $member->grup) {
+            throw new RuntimeException('Anggota grup tidak ditemukan.');
+        }
+
+        $this->assertActiveMahjongGroup($member->grup);
+    }
+
+    protected function assertActiveMahjongGroup(Grup $grup): void
+    {
+        $grup->loadMissing('turnamen');
+
+        if (! $grup->turnamen || ! $grup->turnamen->isMahjong()) {
             throw new RuntimeException('Pembaruan poin hanya untuk turnamen Mahjong.');
         }
 
-        if (! $member->grup->is_aktif) {
+        if (! $grup->is_aktif) {
             throw new RuntimeException('Grup tidak aktif.');
         }
     }

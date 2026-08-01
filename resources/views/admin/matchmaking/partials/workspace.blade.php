@@ -59,9 +59,9 @@
                                 Pendaftaran masih dibuka. Tutup pendaftaran sebelum membuat grup.
                             @endif
                         @elseif ($isMahjong && ($mahjongIsFinal ?? false))
-                            Grup final aktif. Input poin babak final lalu selesaikan turnamen untuk menentukan juara.
+                            Grup final aktif. Input poin babak final per grup lalu selesaikan turnamen untuk menentukan juara.
                         @elseif ($isMahjong && $canReshuffle)
-                            Grup Mahjong aktif. Input poin per pemain, reshuffle kapan saja, atau lanjut ke babak berikutnya.
+                            Grup Mahjong aktif. Input poin per grup, reshuffle kapan saja, atau lanjut ke babak berikutnya.
                         @elseif ($isFriendly && ($canAddFriendlyMatch ?? false))
                             Grup Group Match aktif. Slot pertandingan antar grup sudah dibuat — isi pasangan (2 pemain) per sisi, atau tambah tanding ekstra.
                         @elseif ($isFriendly && $grup->isNotEmpty() && ($friendlyUnassigned ?? collect())->isNotEmpty())
@@ -446,7 +446,7 @@
         @if ($isMahjong)
             @foreach ($grup as $g)
                 <div class="accordion-item">
-                    <h2 class="accordion-header" id="group-heading-{{ $g->id }}">
+                    <h2 class="accordion-header d-flex align-items-stretch" id="group-heading-{{ $g->id }}">
                         <button class="accordion-button {{ $expandGroupsByDefault ? '' : 'collapsed' }}"
                                 type="button"
                                 data-bs-toggle="collapse"
@@ -463,6 +463,17 @@
                                 <span class="badge text-bg-info ms-auto">{{ $g->members->count() }} pemain</span>
                             </span>
                         </button>
+                        <div class="friendly-grup-header-actions d-flex align-items-center gap-1 px-2">
+                            <button type="button"
+                                    class="btn btn-sm btn-primary btn-mahjong-input-poin"
+                                    data-grup-id="{{ $g->id }}"
+                                    data-grup-name="{{ $g->nama }}"
+                                    data-url="{{ route('admin.matchmaking.mahjong-group-point-entries.store', $g) }}"
+                                    data-members='@json($g->members->map(fn ($m) => ["id" => $m->id, "name" => $m->display_name])->values())'
+                                    title="Input poin untuk semua pemain di grup">
+                                <i class="bi bi-pencil-square me-1"></i>Input Poin
+                            </button>
+                        </div>
                     </h2>
                     <div id="group-collapse-{{ $g->id }}"
                          class="accordion-collapse collapse {{ $expandGroupsByDefault ? 'show' : '' }}"
@@ -474,9 +485,8 @@
                                     <tr>
                                         <th>Pemain</th>
                                         <th class="text-center" style="width:7rem">Akumulasi</th>
-                                        <th class="text-center" style="width:11rem">Poin Babak</th>
+                                        <th class="text-center" style="width:14rem">Poin Babak</th>
                                         <th class="text-center" style="width:7rem">Total</th>
-                                        <th style="min-width:14rem">Tambah Poin</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -496,7 +506,8 @@
                                                     {{ (int) $member->poin_didapat }}
                                                 </span>
                                                 <div class="mahjong-poin-entries mt-1 d-flex flex-wrap justify-content-center gap-1"
-                                                     data-member-id="{{ $member->id }}">
+                                                     data-member-id="{{ $member->id }}"
+                                                     data-destroy-url-template="{{ route('admin.matchmaking.mahjong-point-entries.destroy', ['member' => $member->id, 'entry' => '__ENTRY__']) }}">
                                                     @foreach ($memberEntries as $entry)
                                                         <span class="badge text-bg-light text-dark border mahjong-poin-entry"
                                                               data-entry-id="{{ $entry->id }}">
@@ -517,20 +528,6 @@
                                                 <span class="badge text-bg-primary mahjong-total-poin" data-member-id="{{ $member->id }}">
                                                     {{ $member->total_poin }}
                                                 </span>
-                                            </td>
-                                            <td>
-                                                <div class="input-group input-group-sm">
-                                                    <input type="number"
-                                                           class="form-control text-center mahjong-poin-input"
-                                                           placeholder="0"
-                                                           data-member-id="{{ $member->id }}"
-                                                           data-url="{{ route('admin.matchmaking.mahjong-point-entries.store', $member) }}">
-                                                    <button type="button"
-                                                            class="btn btn-outline-primary btn-add-mahjong-poin"
-                                                            data-member-id="{{ $member->id }}">
-                                                        <i class="bi bi-plus-lg me-1"></i>Tambah
-                                                    </button>
-                                                </div>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -1129,6 +1126,33 @@
                             dengan {{ $unitLabel }} dari grup lain:
                         </p>
                         <div id="group-swap-list" class="list-group list-group-flush"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($isMahjong ?? false)
+        <div class="modal fade" id="mahjongGroupPointsModal" tabindex="-1" aria-labelledby="mahjongGroupPointsModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="mahjongGroupPointsModalLabel">
+                            <i class="bi bi-pencil-square me-1"></i> Input Poin
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3" id="mahjong-group-points-help">
+                            Isi poin untuk keempat pemain dalam grup, lalu simpan sekaligus.
+                        </p>
+                        <div id="mahjong-group-points-fields" class="d-grid gap-3"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-primary" id="btn-save-mahjong-group-points">
+                            <i class="bi bi-check-lg me-1"></i> Simpan
+                        </button>
                     </div>
                 </div>
             </div>

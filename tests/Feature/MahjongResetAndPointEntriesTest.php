@@ -118,6 +118,74 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame(1, $member->fresh()->poinEntries()->count());
     }
 
+    public function test_group_point_entries_save_all_four_members(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $this->assertNotNull($grup);
+        $this->assertCount(4, $grup->members);
+
+        $scores = $grup->members->values()->map(function (GrupMember $member, int $index) {
+            return [
+                'id' => $member->id,
+                'poin' => [8, -2, -3, -3][$index],
+            ];
+        })->all();
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-group-point-entries.store', $grup), [
+                'scores' => $scores,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $membersPayload = $response->json('data.members');
+        $this->assertCount(4, $membersPayload);
+
+        foreach ($scores as $score) {
+            $member = GrupMember::findOrFail($score['id']);
+            $this->assertSame($score['poin'], (int) $member->poin_didapat);
+            $this->assertSame(1, $member->poinEntries()->count());
+            $this->assertSame($score['poin'], (int) $member->poinEntries()->first()->poin);
+        }
+
+        $response->assertJsonPath('data.members.0.poin_didapat', $scores[0]['poin']);
+    }
+
+    public function test_group_point_entries_reject_incomplete_scores(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $partial = $grup->members->take(3)->map(fn (GrupMember $member) => [
+            'id' => $member->id,
+            'poin' => 1,
+        ])->all();
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-group-point-entries.store', $grup), [
+                'scores' => $partial,
+            ])
+            ->assertStatus(422);
+    }
+
     public function test_reshuffle_carries_summed_ronde_points_into_akumulasi(): void
     {
         $service = app(MahjongMatchmakingService::class);

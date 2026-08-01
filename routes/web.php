@@ -103,6 +103,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/matchmaking/reshuffle-groups', [MatchmakingController::class, 'reshuffleGroups'])->name('matchmaking.reshuffle-groups');
         Route::patch('/matchmaking/grup-member/{member}/points', [MatchmakingController::class, 'updateMahjongPoints'])->name('matchmaking.mahjong-points');
         Route::post('/matchmaking/grup-member/{member}/point-entries', [MatchmakingController::class, 'storeMahjongPointEntry'])->name('matchmaking.mahjong-point-entries.store');
+        Route::post('/matchmaking/grup/{grup}/point-entries', [MatchmakingController::class, 'storeMahjongGroupPointEntries'])->name('matchmaking.mahjong-group-point-entries.store');
         Route::delete('/matchmaking/grup-member/{member}/point-entries/{entry}', [MatchmakingController::class, 'destroyMahjongPointEntry'])->name('matchmaking.mahjong-point-entries.destroy');
         Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament'])->name('matchmaking.complete-tournament');
         Route::post('/matchmaking/friendly-match', [MatchmakingController::class, 'createFriendlyMatch'])->name('matchmaking.friendly-match.store');

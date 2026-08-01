@@ -1167,10 +1167,6 @@ const BornPadelAdmin = (function () {
                     setButtonLoading(confirmBtn, true);
 
                     try {
-                        if (isMahjong) {
-                            await flushPendingMahjongPoints();
-                        }
-
                         const payload = {
                             tournament_id: parseInt(endGroupBtn.dataset.turnamen, 10),
                             id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
@@ -1212,7 +1208,6 @@ const BornPadelAdmin = (function () {
                 setButtonLoading(reshuffleBtn, true);
 
                 try {
-                    await flushPendingMahjongPoints();
                     const data = await apiRequest(reshuffleBtn.dataset.url, 'POST', {
                         id_turnamen: parseInt(reshuffleBtn.dataset.turnamen, 10),
                         mode: 'random',
@@ -1237,7 +1232,6 @@ const BornPadelAdmin = (function () {
             const babakBadge = document.querySelector(`.mahjong-poin-babak[data-member-id="${memberId}"]`);
             const totalBadge = document.querySelector(`.mahjong-total-poin[data-member-id="${memberId}"]`);
             const entriesWrap = document.querySelector(`.mahjong-poin-entries[data-member-id="${memberId}"]`);
-            const input = document.querySelector(`.mahjong-poin-input[data-member-id="${memberId}"]`);
 
             if (babakBadge) {
                 babakBadge.textContent = data.poin_didapat;
@@ -1247,9 +1241,9 @@ const BornPadelAdmin = (function () {
             }
             if (entriesWrap) {
                 const entries = Array.isArray(data.entries) ? data.entries : [];
+                const destroyTemplate = entriesWrap.dataset.destroyUrlTemplate || '';
                 entriesWrap.innerHTML = entries.map((entry) => {
-                    const deleteUrl = (input?.dataset.url || '')
-                        .replace(/\/point-entries\/?$/, `/point-entries/${entry.id}`);
+                    const deleteUrl = destroyTemplate.replace('__ENTRY__', entry.id);
                     return `
                         <span class="badge text-bg-light text-dark border mahjong-poin-entry" data-entry-id="${entry.id}">
                             ${formatMahjongEntryLabel(entry.poin)}
@@ -1267,79 +1261,143 @@ const BornPadelAdmin = (function () {
             }
         }
 
-        async function appendMahjongPoint(memberId) {
-            const input = document.querySelector(`.mahjong-poin-input[data-member-id="${memberId}"]`);
-            if (!input || !input.dataset.url) {
-                return null;
-            }
+        const mahjongGroupPointsModalEl = document.getElementById('mahjongGroupPointsModal');
+        const mahjongGroupPointsFields = document.getElementById('mahjong-group-points-fields');
+        const mahjongGroupPointsHelp = document.getElementById('mahjong-group-points-help');
+        const mahjongGroupPointsTitle = document.getElementById('mahjongGroupPointsModalLabel');
+        const saveMahjongGroupPointsBtn = document.getElementById('btn-save-mahjong-group-points');
+        let mahjongGroupPointsModal = null;
+        let activeMahjongGroupPointsUrl = null;
 
-            if (input.value === '' || input.value === null) {
-                return null;
-            }
-
-            const poin = parseInt(input.value, 10);
-            if (Number.isNaN(poin)) {
-                throw new Error('Poin harus berupa angka.');
-            }
-
-            const data = await apiRequest(input.dataset.url, 'POST', { poin });
-            input.value = '';
-            renderMahjongMemberPoints(memberId, data.data);
-            return data;
+        if (mahjongGroupPointsModalEl && typeof bootstrap !== 'undefined') {
+            mahjongGroupPointsModal = bootstrap.Modal.getOrCreateInstance(mahjongGroupPointsModalEl);
         }
 
-        async function flushPendingMahjongPoints() {
-            const inputs = document.querySelectorAll('.mahjong-poin-input');
+        function openMahjongGroupPointsModal(btn) {
+            if (!mahjongGroupPointsModal || !mahjongGroupPointsFields) {
+                return;
+            }
 
-            for (const input of inputs) {
-                if (input.value === '' || input.value === null) {
-                    continue;
-                }
+            let members = [];
+            try {
+                members = JSON.parse(btn.dataset.members || '[]');
+            } catch (e) {
+                members = [];
+            }
 
-                await appendMahjongPoint(input.dataset.memberId);
+            if (!Array.isArray(members) || members.length === 0) {
+                showToast('Anggota grup tidak ditemukan.', 'error');
+                return;
+            }
+
+            const escapeHtml = (value) => {
+                const div = document.createElement('div');
+                div.textContent = value == null ? '' : String(value);
+                return div.innerHTML;
+            };
+
+            activeMahjongGroupPointsUrl = btn.dataset.url || null;
+            const groupName = btn.dataset.grupName || 'Grup';
+
+            if (mahjongGroupPointsTitle) {
+                mahjongGroupPointsTitle.innerHTML = `<i class="bi bi-pencil-square me-1"></i> Input Poin — ${escapeHtml(groupName)}`;
+            }
+            if (mahjongGroupPointsHelp) {
+                mahjongGroupPointsHelp.textContent = `Isi poin untuk keempat pemain di ${groupName}, lalu simpan sekaligus.`;
+            }
+
+            mahjongGroupPointsFields.innerHTML = members.map((member) => `
+                <div class="row g-2 align-items-center">
+                    <div class="col-7">
+                        <label class="form-label mb-0 fw-semibold" for="mahjong-group-poin-${member.id}">
+                            ${escapeHtml(member.name || 'Pemain')}
+                        </label>
+                    </div>
+                    <div class="col-5">
+                        <input type="number"
+                               class="form-control text-center mahjong-group-poin-input"
+                               id="mahjong-group-poin-${member.id}"
+                               data-member-id="${member.id}"
+                               placeholder="0"
+                               required>
+                    </div>
+                </div>
+            `).join('');
+
+            mahjongGroupPointsModal.show();
+
+            const firstInput = mahjongGroupPointsFields.querySelector('.mahjong-group-poin-input');
+            if (firstInput) {
+                setTimeout(() => firstInput.focus(), 150);
             }
         }
 
-        document.querySelectorAll('.btn-add-mahjong-poin').forEach((btn) => {
-            btn.addEventListener('click', async () => {
-                const memberId = btn.dataset.memberId;
-                const input = document.querySelector(`.mahjong-poin-input[data-member-id="${memberId}"]`);
-
-                if (!input || input.value === '' || input.value === null) {
-                    showToast('Isi poin hand terlebih dahulu.', 'error');
-                    return;
-                }
-
-                const original = btn.innerHTML;
-                setButtonLoading(btn, true);
-
-                try {
-                    const data = await appendMahjongPoint(memberId);
-                    if (data) {
-                        showToast(data.message);
-                    }
-                } catch (e) {
-                    showToast(e.message, 'error');
-                } finally {
-                    setButtonLoading(btn, false, original);
-                }
+        document.querySelectorAll('.btn-mahjong-input-poin').forEach((btn) => {
+            btn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openMahjongGroupPointsModal(btn);
             });
         });
 
-        document.querySelectorAll('.mahjong-poin-input').forEach((input) => {
-            input.addEventListener('keydown', async (event) => {
+        if (saveMahjongGroupPointsBtn) {
+            saveMahjongGroupPointsBtn.addEventListener('click', async () => {
+                if (!activeMahjongGroupPointsUrl || !mahjongGroupPointsFields) {
+                    return;
+                }
+
+                const inputs = Array.from(mahjongGroupPointsFields.querySelectorAll('.mahjong-group-poin-input'));
+                const scores = [];
+
+                for (const input of inputs) {
+                    if (input.value === '' || input.value === null) {
+                        showToast('Isi poin untuk semua pemain.', 'error');
+                        input.focus();
+                        return;
+                    }
+
+                    const poin = parseInt(input.value, 10);
+                    if (Number.isNaN(poin)) {
+                        showToast('Poin harus berupa angka.', 'error');
+                        input.focus();
+                        return;
+                    }
+
+                    scores.push({
+                        id: parseInt(input.dataset.memberId, 10),
+                        poin,
+                    });
+                }
+
+                const original = saveMahjongGroupPointsBtn.innerHTML;
+                setButtonLoading(saveMahjongGroupPointsBtn, true);
+
+                try {
+                    const data = await apiRequest(activeMahjongGroupPointsUrl, 'POST', { scores });
+                    const members = data?.data?.members || [];
+                    members.forEach((member) => {
+                        renderMahjongMemberPoints(member.id, member);
+                    });
+                    mahjongGroupPointsModal?.hide();
+                    showToast(data.message);
+                } catch (e) {
+                    showToast(e.message, 'error');
+                } finally {
+                    setButtonLoading(saveMahjongGroupPointsBtn, false, original);
+                }
+            });
+        }
+
+        if (mahjongGroupPointsFields) {
+            mahjongGroupPointsFields.addEventListener('keydown', (event) => {
                 if (event.key !== 'Enter') {
                     return;
                 }
 
                 event.preventDefault();
-                const memberId = input.dataset.memberId;
-                const btn = document.querySelector(`.btn-add-mahjong-poin[data-member-id="${memberId}"]`);
-                if (btn) {
-                    btn.click();
-                }
+                saveMahjongGroupPointsBtn?.click();
             });
-        });
+        }
 
         document.addEventListener('click', async (event) => {
             const btn = event.target.closest('.btn-delete-mahjong-poin');
