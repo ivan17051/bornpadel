@@ -3,11 +3,6 @@
 @section('title', $pemain->nama)
 
 @section('content')
-@php
-    $phoneService = app(\App\Services\PhoneNumberService::class);
-    $parsedPhone = $phoneService->parse($pemain->no_hp);
-@endphp
-
 <div class="row justify-content-center">
     <div class="col-lg-8">
         <div class="card guest-card mb-4">
@@ -26,11 +21,15 @@
                             <span class="badge text-bg-primary">Rating {{ number_format($pemain->rating, 1) }}</span>
                         </div>
                         <div class="row g-3 small">
-                            <!-- <div class="col-sm-6">
-                                <div class="text-muted text-uppercase">Nomor HP</div>
-                                <strong>{{ $parsedPhone['country_code'] }} {{ $parsedPhone['local_number'] }}</strong>
-                            </div> -->
-                            <div class="col-sm-6">
+                            <div class="col-4 col-sm-3">
+                                <div class="text-muted text-uppercase">Pertandingan</div>
+                                <strong class="fs-5">{{ number_format($careerStats['played'] ?? 0) }}</strong>
+                            </div>
+                            <div class="col-4 col-sm-3">
+                                <div class="text-muted text-uppercase">Menang</div>
+                                <strong class="fs-5">{{ number_format($careerStats['won'] ?? 0) }}</strong>
+                            </div>
+                            <div class="col-4 col-sm-3">
                                 <div class="text-muted text-uppercase">Total Poin</div>
                                 <strong class="text-primary fs-5">{{ number_format($pemain->total_poin ?? 0) }}</strong>
                             </div>

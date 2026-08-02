@@ -31,10 +31,15 @@ class StandingsController extends Controller
             ? $winnersService->getWinners($turnamen)
             : null;
 
+        $postLeagueRanking = $turnamen && $turnamen->usesKnockoutBracket()
+            ? $leaderboardService->getPostLeagueRanking($turnamen->id)
+            : ['sections' => collect(), 'has_bracket' => false, 'is_double' => false];
+
         return view('guest.standings', compact(
             'turnamen',
             'standings',
-            'winners'
+            'winners',
+            'postLeagueRanking'
         ));
     }
 }

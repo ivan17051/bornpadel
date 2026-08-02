@@ -101,6 +101,115 @@ class LeaderboardService
             });
     }
 
+    /**
+     * Cross-group ranking banded by in-group place (1st places, then 2nds, …).
+     * Qualifiers are highlighted only after the knockout bracket exists.
+     *
+     * @return array{sections: Collection, has_bracket: bool, is_double: bool}
+     */
+    public function getPostLeagueRanking(?int $turnamenId = null): array
+    {
+        $turnamen = $turnamenId
+            ? Turnamen::find($turnamenId)
+            : $this->getActiveTournament();
+
+        $empty = [
+            'sections' => collect(),
+            'has_bracket' => false,
+            'is_double' => false,
+        ];
+
+        if (! $turnamen || ! $turnamen->usesKnockoutBracket()) {
+            return $empty;
+        }
+
+        $standings = $this->getStandings($turnamen->id);
+
+        if ($standings->isEmpty()) {
+            return [
+                'sections' => collect(),
+                'has_bracket' => false,
+                'is_double' => $turnamen->playsAsPairs(),
+            ];
+        }
+
+        $knockout = app(KnockoutBracketService::class);
+        $hasBracket = $knockout->hasKnockoutBracket($turnamen);
+        $qualifierPeserta = [];
+        $qualifierPemain = [];
+
+        if ($hasBracket) {
+            $keys = $knockout->getKnockoutParticipantKeys($turnamen);
+            $qualifierPeserta = array_fill_keys($keys['peserta_ids'], true);
+            $qualifierPemain = array_fill_keys($keys['pemain_ids'], true);
+        }
+
+        $byPlace = [];
+
+        foreach ($standings as $grup) {
+            foreach ($grup['standings'] as $row) {
+                $place = (int) ($row['rank'] ?? 0);
+                if ($place < 1) {
+                    continue;
+                }
+
+                $byPlace[$place][] = [
+                    'place' => $place,
+                    'id_grup' => $row['id_grup'] ?? $grup['id'],
+                    'grup' => $grup['nama'],
+                    'id_pemain' => $row['id_pemain'] ?? null,
+                    'id_peserta' => $row['id_peserta'] ?? null,
+                    'pemain_ids' => $row['pemain_ids'] ?? [],
+                    'nama' => $row['nama'],
+                    'poin_didapat' => (int) ($row['poin_didapat'] ?? 0),
+                    'set_menang' => (int) ($row['set_menang'] ?? 0),
+                    'games_menang' => (int) ($row['games_menang'] ?? 0),
+                    'games_diff_label' => $row['games_diff_label']
+                        ?? GrupMember::formatGameDifference((int) ($row['games_menang'] ?? 0)),
+                    'stats_reached_at' => $row['stats_reached_at'] ?? null,
+                    'group_rank' => $place,
+                ];
+            }
+        }
+
+        ksort($byPlace, SORT_NUMERIC);
+
+        $overallRank = 0;
+        $sections = collect();
+
+        foreach ($byPlace as $place => $rows) {
+            $sorted = collect($rows)
+                ->sort(fn (array $a, array $b) => GrupMember::comparePadelStandingRows($a, $b))
+                ->values()
+                ->map(function (array $row) use (&$overallRank, $hasBracket, $qualifierPeserta, $qualifierPemain) {
+                    $overallRank++;
+                    $pesertaId = (int) ($row['id_peserta'] ?? 0);
+                    $pemainId = (int) ($row['id_pemain'] ?? 0);
+                    $advances = $hasBracket && (
+                        ($pesertaId > 0 && isset($qualifierPeserta[$pesertaId]))
+                        || ($pemainId > 0 && isset($qualifierPemain[$pemainId]))
+                    );
+
+                    $row['overall_rank'] = $overallRank;
+                    $row['advances'] = $advances;
+
+                    return $row;
+                });
+
+            $sections->push([
+                'place' => (int) $place,
+                'label' => 'Juara ' . $place,
+                'rows' => $sorted,
+            ]);
+        }
+
+        return [
+            'sections' => $sections,
+            'has_bracket' => $hasBracket,
+            'is_double' => $turnamen->playsAsPairs(),
+        ];
+    }
+
     public function getFriendlyStandings(?int $turnamenId = null): Collection
     {
         $turnamen = $turnamenId

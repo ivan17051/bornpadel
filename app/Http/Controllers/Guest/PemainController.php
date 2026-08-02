@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Guest;
 use App\Http\Controllers\Controller;
 use App\Models\Pemain;
 use App\Models\TurnamenPeserta;
+use App\Services\PemainMatchStatsService;
 
 class PemainController extends Controller
 {
-    public function show(Pemain $pemain)
+    public function show(Pemain $pemain, PemainMatchStatsService $matchStats)
     {
         $pemain->loadMissing([]);
+
+        $careerStats = $matchStats->getCareerStats($pemain);
 
         $tournamentHistory = TurnamenPeserta::query()
             ->where('id_pemain1', $pemain->id)
@@ -27,6 +30,6 @@ class PemainController extends Controller
                 ];
             });
 
-        return view('guest.pemain.show', compact('pemain', 'tournamentHistory'));
+        return view('guest.pemain.show', compact('pemain', 'tournamentHistory', 'careerStats'));
     }
 }

@@ -8,6 +8,7 @@
      @if($refreshable)
          id="live-leaderboard"
          data-refresh-url="{{ route('api.guest.standings', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+         data-profile-base="{{ url('/pemain') }}/"
          data-mahjong="1"
      @endif>
     @if ($turnamen)

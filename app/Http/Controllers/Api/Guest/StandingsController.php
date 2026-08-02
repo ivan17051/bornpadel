@@ -61,13 +61,27 @@ class StandingsController extends Controller
                 'message' => 'Belum ada data klasemen.',
                 'type' => 'group',
                 'data' => [],
+                'post_league' => [
+                    'sections' => [],
+                    'has_bracket' => false,
+                    'is_double' => false,
+                ],
             ]);
         }
+
+        $postLeague = $turnamen && $turnamen->usesKnockoutBracket()
+            ? $leaderboardService->getPostLeagueRanking($turnamen->id)
+            : ['sections' => collect(), 'has_bracket' => false, 'is_double' => false];
 
         return response()->json([
             'success' => true,
             'type' => 'group',
             'data' => $standings,
+            'post_league' => [
+                'sections' => $postLeague['sections']->values(),
+                'has_bracket' => (bool) ($postLeague['has_bracket'] ?? false),
+                'is_double' => (bool) ($postLeague['is_double'] ?? false),
+            ],
         ]);
     }
 }

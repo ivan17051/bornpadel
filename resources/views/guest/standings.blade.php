@@ -54,7 +54,34 @@
                 :refreshable="true"
             />
         @else
-            <x-group-leaderboard :standings="$standings" :turnamen="$turnamen" :refreshable="true" />
+            <div id="live-leaderboard"
+                 data-refresh-url="{{ route('api.guest.standings', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+                 data-profile-base="{{ url('/pemain') }}/"
+                 data-show-group-history="1">
+                <div id="group-standings-panel">
+                    <x-group-leaderboard
+                        :standings="$standings"
+                        :turnamen="$turnamen"
+                        :refreshable="false"
+                        :show-group-history="false"
+                    />
+                </div>
+                <div class="d-flex justify-content-end mt-2 mb-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-refresh-leaderboard">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                    </button>
+                </div>
+                <div id="post-league-ranking-host">
+                    <x-post-league-ranking
+                        :ranking="$postLeagueRanking ?? ['sections' => collect()]"
+                        :turnamen="$turnamen"
+                    />
+                </div>
+                <p class="text-muted small text-end mt-2 mb-0">
+                    <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
+                </p>
+                <x-group-stage-history-modal :history-url="route('api.guest.standings.group-history')" />
+            </div>
         @endif
 
         <div class="text-center mt-4">

@@ -10,6 +10,7 @@
      @if($refreshable)
          id="live-leaderboard"
          data-refresh-url="{{ route('api.guest.standings', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+         data-profile-base="{{ url('/pemain') }}/"
          @if($showHistory) data-show-group-history="1" @endif
      @endif>
     @if ($turnamen)

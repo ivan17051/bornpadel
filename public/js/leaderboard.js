@@ -9,7 +9,7 @@
     const isMahjong = container.dataset.mahjong === '1';
     const isFriendly = container.dataset.friendly === '1';
     const showGroupHistory = container.dataset.showGroupHistory === '1';
-    const profileBase = '/pemain/';
+    const profileBase = container.dataset.profileBase || '/pemain/';
 
     const renderHistoryButton = (row, grupId) => {
         if (!showGroupHistory || !row.id_peserta || !grupId) {
@@ -166,15 +166,10 @@
         bindRefreshButton();
     };
 
-    const renderGroupStandings = (groups) => {
-        if (!groups || groups.length === 0) {
-            renderEmpty('Klasemen Grup');
-            return;
-        }
-
-        const cards = groups.map((grup) => {
+    const renderGroupCardsHtml = (groups) => {
+        return groups.map((grup) => {
             const isMahjongGroup = grup.is_mahjong;
-            const rows = grup.standings.map((row) => {
+            const rows = (grup.standings || []).map((row) => {
                 if (isMahjongGroup) {
                     return `
                         <tr class="${row.rank === 1 ? 'table-success' : ''}">
@@ -242,9 +237,104 @@
                     </div>
                 </div>`;
         }).join('');
+    };
+
+    const renderPostLeagueHtml = (postLeague) => {
+        const sections = postLeague?.sections || [];
+        if (!sections.length) {
+            return '';
+        }
+
+        const hasBracket = !!postLeague.has_bracket;
+        const unitLabel = postLeague.is_double ? 'Pasangan' : 'Pemain';
+        const colSpan = hasBracket ? 7 : 6;
+
+        const body = sections.map((section) => {
+            const header = `
+                <tr class="table-secondary">
+                    <td colspan="${colSpan}" class="fw-semibold text-uppercase small py-2">
+                        ${section.label || ('Juara ' + (section.place || ''))}
+                    </td>
+                </tr>`;
+
+            const rows = (section.rows || []).map((row) => `
+                <tr class="${row.advances ? 'table-success' : ''}">
+                    <td class="text-center fw-bold">${row.overall_rank}</td>
+                    <td class="fw-semibold">${renderNameCell(row)}</td>
+                    <td class="text-muted">${row.grup || '—'}</td>
+                    <td class="text-center"><span class="badge text-bg-primary">${row.poin_didapat ?? 0}</span></td>
+                    <td class="text-center d-none d-sm-table-cell">${row.set_menang ?? 0}</td>
+                    <td class="text-center d-none d-md-table-cell">${formatGameDiff(row.games_diff_label ?? row.games_menang)}</td>
+                    ${hasBracket ? `<td class="text-center">${row.advances ? '<span class="badge text-bg-success">Lolos</span>' : ''}</td>` : ''}
+                </tr>`).join('');
+
+            return header + rows;
+        }).join('');
+
+        return `
+            <div class="post-league-ranking mt-4" id="post-league-ranking">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-list-ol me-2"></i>Peringkat Lintas Grup
+                    </h5>
+                    ${hasBracket ? `<span class="badge text-bg-success"><i class="bi bi-flag-fill me-1"></i> Highlight: lolos knockout</span>` : ''}
+                </div>
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center" style="width:3rem">#</th>
+                                        <th>${unitLabel}</th>
+                                        <th>Grup</th>
+                                        <th class="text-center">Poin</th>
+                                        <th class="text-center d-none d-sm-table-cell">Set</th>
+                                        <th class="text-center d-none d-md-table-cell" title="Selisih game">GD</th>
+                                        ${hasBracket ? '<th class="text-center" style="width:5.5rem"></th>' : ''}
+                                    </tr>
+                                </thead>
+                                <tbody>${body}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>`;
+    };
+
+    const renderGroupStandings = (groups, postLeague = null) => {
+        if (!groups || groups.length === 0) {
+            renderEmpty('Klasemen Grup');
+            return;
+        }
+
+        const cards = renderGroupCardsHtml(groups);
+        const groupPanel = container.querySelector('#group-standings-panel');
+        const postHost = container.querySelector('#post-league-ranking-host');
+
+        if (groupPanel) {
+            groupPanel.innerHTML = `
+                <div class="group-leaderboard">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">
+                            <i class="bi bi-bar-chart-steps me-2"></i>Klasemen Grup
+                        </h5>
+                    </div>
+                    <div class="row g-4">${cards}</div>
+                </div>`;
+
+            if (postHost) {
+                postHost.innerHTML = renderPostLeagueHtml(postLeague);
+            }
+
+            bindRefreshButton();
+            return;
+        }
 
         container.innerHTML = renderHeader('Klasemen Grup') + `
             <div class="row g-4">${cards}</div>
+            ${renderPostLeagueHtml(postLeague)}
             <p class="text-muted small text-end mt-2 mb-0">
                 <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
             </p>`;
@@ -314,7 +404,7 @@
             } else if (json.type === 'friendly' || isFriendly) {
                 renderFriendlyStandings(json.data);
             } else {
-                renderGroupStandings(json.data);
+                renderGroupStandings(json.data, json.post_league || null);
             }
         } catch (e) {
             console.warn('Leaderboard refresh failed:', e);

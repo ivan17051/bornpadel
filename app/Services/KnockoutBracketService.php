@@ -43,17 +43,56 @@ class KnockoutBracketService
 
 
     public function hasKnockoutBracket(Turnamen $turnamen): bool
-
     {
-
         return Pertandingan::where('id_turnamen', $turnamen->id)
-
             ->whereNull('id_grup')
-
             ->whereIn('nama_ronde', ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final'])
-
             ->exists();
+    }
 
+    /**
+     * Participant keys that appear in any knockout fixture (for post-league advance highlight).
+     *
+     * @return array{peserta_ids: array<int, int>, pemain_ids: array<int, int>}
+     */
+    public function getKnockoutParticipantKeys(Turnamen $turnamen): array
+    {
+        $pesertaIds = [];
+        $pemainIds = [];
+
+        $matches = $this->knockoutMatchesQuery($turnamen)
+            ->get([
+                'id_peserta1',
+                'id_peserta2',
+                'id_pemain1',
+                'id_pemain2',
+                'id_pemain1_partner',
+                'id_pemain2_partner',
+            ]);
+
+        foreach ($matches as $match) {
+            foreach ([(int) $match->id_peserta1, (int) $match->id_peserta2] as $pesertaId) {
+                if ($pesertaId > 0) {
+                    $pesertaIds[$pesertaId] = $pesertaId;
+                }
+            }
+
+            foreach ([
+                (int) $match->id_pemain1,
+                (int) $match->id_pemain2,
+                (int) $match->id_pemain1_partner,
+                (int) $match->id_pemain2_partner,
+            ] as $pemainId) {
+                if ($pemainId > 0) {
+                    $pemainIds[$pemainId] = $pemainId;
+                }
+            }
+        }
+
+        return [
+            'peserta_ids' => array_values($pesertaIds),
+            'pemain_ids' => array_values($pemainIds),
+        ];
     }
 
 
