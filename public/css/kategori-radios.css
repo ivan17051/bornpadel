@@ -1,0 +1,123 @@
+/* Category radio pill selector (guest + admin) */
+
+.kategori-radio-block__title {
+    margin: 0 0 0.85rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #1a2433;
+}
+
+.kategori-radio-block--guest .kategori-radio-block__title {
+    color: #334155;
+}
+
+.kategori-radio-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 0.7rem;
+    align-items: center;
+}
+
+.kategori-radio-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0;
+    padding: 0.55rem 1rem 0.55rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid #e2e6ee;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.kategori-radio-pill:hover {
+    border-color: #c7d0dc;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+.kategori-radio-pill:has(input:focus-visible) {
+    outline: 2px solid #cda858;
+    outline-offset: 2px;
+}
+
+.kategori-radio-pill:has(input:checked) {
+    border-color: #cda858;
+    background: #fffdf8;
+    box-shadow: 0 0 0 1px rgba(205, 168, 88, 0.35);
+}
+
+.kategori-radio-pill input[type="radio"] {
+    flex-shrink: 0;
+    width: 1.05rem;
+    height: 1.05rem;
+    margin: 0;
+    accent-color: #1e3a5f;
+    cursor: pointer;
+}
+
+.kategori-radio-pill__text {
+    font-size: 0.92rem;
+    font-weight: 500;
+    line-height: 1.2;
+    color: #1e3a5f;
+    white-space: nowrap;
+}
+
+/* Decorative radio for link-style pills (landing cards) */
+.kategori-radio-pill__radio {
+    flex-shrink: 0;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 50%;
+    border: 1.5px solid #6b7c93;
+    background: #fff;
+    box-shadow: inset 0 0 0 2px #fff;
+}
+
+a.kategori-radio-pill:hover .kategori-radio-pill__radio {
+    border-color: #1e3a5f;
+}
+
+.kategori-radio-block__hint {
+    margin-top: 0.7rem;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+/* Disabled (registration closed) */
+.kategori-radio-pill.is-disabled,
+.kategori-radio-pill:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.55;
+    background: #f1f3f6;
+    border-color: #e2e6ee;
+    box-shadow: none;
+}
+
+.kategori-radio-pill.is-disabled:hover,
+.kategori-radio-pill:has(input:disabled):hover {
+    border-color: #e2e6ee;
+    box-shadow: none;
+}
+
+.kategori-radio-pill.is-disabled .kategori-radio-pill__text,
+.kategori-radio-pill:has(input:disabled) .kategori-radio-pill__text {
+    color: #8a94a6;
+}
+
+.kategori-radio-pill input[type="radio"]:disabled {
+    cursor: not-allowed;
+    accent-color: #9aa3b2;
+}
+
+/* Fallback when :has() is unavailable (older browsers) */
+.kategori-radio-pill.is-selected {
+    border-color: #cda858;
+    background: #fffdf8;
+    box-shadow: 0 0 0 1px rgba(205, 168, 88, 0.35);
+}

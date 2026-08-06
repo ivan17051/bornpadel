@@ -2,20 +2,28 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTurnamenKategori;
 use Illuminate\Database\Eloquent\Model;
 
 class TurnamenGrupPendaftaran extends Model
 {
+    use BelongsToTurnamenKategori;
     protected $table = 'turnamen_grup_pendaftaran';
 
     protected $fillable = [
         'id_turnamen',
+        'id_kategori',
         'nama',
     ];
 
     public function turnamen()
     {
         return $this->belongsTo(Turnamen::class, 'id_turnamen');
+    }
+
+    public function kategori()
+    {
+        return $this->belongsTo(TurnamenKategori::class, 'id_kategori');
     }
 
     public function members()
@@ -37,6 +45,11 @@ class TurnamenGrupPendaftaran extends Model
     public function scopeForTurnamen($query, int $turnamenId)
     {
         return $query->where('id_turnamen', $turnamenId);
+    }
+
+    public function scopeForKategori($query, int $kategoriId)
+    {
+        return $query->where('id_kategori', $kategoriId);
     }
 
     public function isFullyApproved(?Turnamen $turnamen = null): bool

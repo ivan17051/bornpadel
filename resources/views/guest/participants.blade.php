@@ -2,11 +2,22 @@
 
 @section('title', 'Daftar Peserta')
 
+@php
+    $kategori = $kategori ?? null;
+    $kategoriList = $kategoriList ?? collect();
+    $participantsQuery = array_filter([
+        'id_turnamen' => $turnamen->id,
+        'id_kategori' => optional($kategori)->id,
+    ]);
+    $maksPeserta = $kategori ? $kategori->maks_peserta : $turnamen->maks_peserta;
+    $statusLabel = $kategori ? $kategori->status : $turnamen->status;
+@endphp
+
 @section('og')
     @include('guest.partials.og-meta', [
         'ogTurnamen' => $turnamen,
-        'ogUrl' => route('guest.participants', ['id_turnamen' => $turnamen->id]),
-        'ogTitle' => 'Peserta — ' . $turnamen->nama,
+        'ogUrl' => route('guest.participants', $participantsQuery),
+        'ogTitle' => 'Peserta — ' . $turnamen->nama . ($kategori ? ' · ' . $kategori->nama : ''),
     ])
 @endsection
 
@@ -17,7 +28,18 @@
             <h1 class="h3 fw-bold mb-1">Daftar Peserta</h1>
             <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
             <span class="badge text-bg-light text-dark border mt-2">{{ $turnamen->jenis_label }}</span>
+            @if ($kategori && optional($kategoriList)->count() > 1)
+                <span class="badge text-bg-primary mt-2">{{ $kategori->nama }}</span>
+            @endif
         </div>
+
+        @include('guest.partials.kategori-selector', [
+            'turnamen' => $turnamen,
+            'kategori' => $kategori,
+            'kategoriList' => $kategoriList,
+            'filterRoute' => route('guest.participants'),
+            'selectorHint' => 'Daftar peserta difilter per kategori kompetisi.',
+        ])
 
         <div class="card guest-card mb-4">
             <div class="card-body py-3">
@@ -28,11 +50,11 @@
                     </div>
                     <div class="col-md-4">
                         <div class="info-label">Kapasitas Disetujui</div>
-                        <strong>{{ $turnamen->maks_peserta ? number_format($turnamen->maks_peserta) : 'Tidak Terbatas' }}</strong>
+                        <strong>{{ $maksPeserta ? number_format($maksPeserta) : 'Tidak Terbatas' }}</strong>
                     </div>
                     <div class="col-md-4">
-                        <div class="info-label">Status Turnamen</div>
-                        <strong>{{ ucfirst($turnamen->status) }}</strong>
+                        <div class="info-label">Status</div>
+                        <strong>{{ ucfirst($statusLabel) }}</strong>
                     </div>
                 </div>
             </div>

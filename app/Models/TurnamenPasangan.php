@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTurnamenKategori;
 use Illuminate\Database\Eloquent\Model;
 
 class TurnamenPasangan extends Model
 {
+    use BelongsToTurnamenKategori;
     protected $table = 'turnamen_pasangan';
 
     protected $fillable = [
         'id_turnamen',
+        'id_kategori',
         'id_peserta_1',
         'id_peserta_2',
         'paired_at',
@@ -22,6 +25,11 @@ class TurnamenPasangan extends Model
     public function turnamen()
     {
         return $this->belongsTo(Turnamen::class, 'id_turnamen');
+    }
+
+    public function kategori()
+    {
+        return $this->belongsTo(TurnamenKategori::class, 'id_kategori');
     }
 
     public function peserta1()
@@ -37,6 +45,11 @@ class TurnamenPasangan extends Model
     public function scopeForTurnamen($query, int $turnamenId)
     {
         return $query->where('id_turnamen', $turnamenId);
+    }
+
+    public function scopeForKategori($query, int $kategoriId)
+    {
+        return $query->where('id_kategori', $kategoriId);
     }
 
     public function involvesPeserta(int $pesertaId): bool

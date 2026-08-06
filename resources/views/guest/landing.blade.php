@@ -20,6 +20,7 @@
 @endphp
 
 @push('styles')
+<link rel="stylesheet" href="{{ asset('public/css/kategori-radios.css') }}?v={{ @filemtime(base_path('public/css/kategori-radios.css')) }}">
 <style>
     .guest-card-meta {
         display: flex;

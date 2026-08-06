@@ -59,7 +59,7 @@ class FriendlyGroupRegistrationTest extends TestCase
         );
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Nama grup sudah digunakan pada turnamen ini.');
+        $this->expectExceptionMessage('Nama grup sudah digunakan pada kategori ini.');
 
         $service->assertGroupNameAvailable($turnamen, 'night owls');
     }
@@ -81,7 +81,7 @@ class FriendlyGroupRegistrationTest extends TestCase
         ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Nama grup sudah digunakan pada turnamen ini.');
+        $this->expectExceptionMessage('Nama grup sudah digunakan pada kategori ini.');
 
         app(PemainRegistrationService::class)->assertGroupNameAvailable($turnamen, 'smash squad');
     }

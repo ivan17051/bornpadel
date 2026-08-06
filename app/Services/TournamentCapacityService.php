@@ -4,30 +4,40 @@ namespace App\Services;
 
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
+use App\Services\Concerns\ResolvesTurnamenKategori;
 use RuntimeException;
 
 class TournamentCapacityService
 {
-    public function countApprovedParticipants(Turnamen $turnamen): int
+    use ResolvesTurnamenKategori;
+
+    public function countApprovedParticipants(Turnamen $turnamen, $idKategori = null): int
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($kategori->id)
             ->approved()
             ->count();
     }
 
-    public function remainingApprovalSlots(Turnamen $turnamen): ?int
+    public function remainingApprovalSlots(Turnamen $turnamen, $idKategori = null): ?int
     {
-        if ($turnamen->maks_peserta === null) {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $limit = $kategori->maks_peserta;
+
+        if ($limit === null) {
             return null;
         }
 
-        return max(0, (int) $turnamen->maks_peserta - $this->countApprovedParticipants($turnamen));
+        return max(0, (int) $limit - $this->countApprovedParticipants($turnamen, $kategori->id));
     }
 
-    public function canApprove(Turnamen $turnamen, int $additionalApprovals = 1): bool
+    public function canApprove(Turnamen $turnamen, int $additionalApprovals = 1, $idKategori = null): bool
     {
-        if ($turnamen->maks_peserta === null) {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
+        if ($kategori->maks_peserta === null) {
             return true;
         }
 
@@ -35,20 +45,22 @@ class TournamentCapacityService
             return true;
         }
 
-        return $this->countApprovedParticipants($turnamen) + $additionalApprovals <= (int) $turnamen->maks_peserta;
+        return $this->countApprovedParticipants($turnamen, $kategori->id) + $additionalApprovals
+            <= (int) $kategori->maks_peserta;
     }
 
-    public function assertCanApprove(Turnamen $turnamen, int $additionalApprovals = 1): void
+    public function assertCanApprove(Turnamen $turnamen, int $additionalApprovals = 1, $idKategori = null): void
     {
-        if ($this->canApprove($turnamen, $additionalApprovals)) {
+        if ($this->canApprove($turnamen, $additionalApprovals, $idKategori)) {
             return;
         }
 
-        $approved = $this->countApprovedParticipants($turnamen);
-        $limit = (int) $turnamen->maks_peserta;
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $approved = $this->countApprovedParticipants($turnamen, $kategori->id);
+        $limit = (int) $kategori->maks_peserta;
 
         throw new RuntimeException(sprintf(
-            'Kapasitas turnamen penuh. Maksimal %d peserta disetujui. Saat ini %d disetujui, tidak dapat menyetujui %d lagi.',
+            'Kapasitas kategori penuh. Maksimal %d peserta disetujui. Saat ini %d disetujui, tidak dapat menyetujui %d lagi.',
             $limit,
             $approved,
             $additionalApprovals

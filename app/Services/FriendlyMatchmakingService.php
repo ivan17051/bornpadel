@@ -8,65 +8,68 @@ use App\Models\Pertandingan;
 use App\Models\Turnamen;
 use App\Models\TurnamenGrupPendaftaran;
 use App\Models\TurnamenPeserta;
+use App\Services\Concerns\ResolvesTurnamenKategori;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class FriendlyMatchmakingService
 {
+    use ResolvesTurnamenKategori;
+
     /** @deprecated Use Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP / friendlyPlayersPerGroup() */
     public const PLAYERS_PER_GROUP = 4;
 
-    public function playersPerGroup(Turnamen $turnamen): int
+    public function playersPerGroup(Turnamen $turnamen, $idKategori = null): int
     {
-        return $turnamen->friendlyPlayersPerGroup();
+        return $turnamen->resolveKategori($idKategori)->friendlyPlayersPerGroup();
     }
 
-    public function canGenerateGroups(Turnamen $turnamen): bool
+    public function canGenerateGroups(Turnamen $turnamen, $idKategori = null): bool
     {
         return $turnamen->isFriendly()
-            && $turnamen->status === 'ongoing'
-            && ! $turnamen->grup()->exists();
+            && $this->isCompetitionOngoing($turnamen, $idKategori)
+            && ! $turnamen->competitionGrup($idKategori)->exists();
     }
 
-    public function canCreateSkeletonGroups(Turnamen $turnamen): bool
+    public function canCreateSkeletonGroups(Turnamen $turnamen, $idKategori = null): bool
     {
-        return $this->canGenerateGroups($turnamen)
+        return $this->canGenerateGroups($turnamen, $idKategori)
             && $this->previewGroupSplit(
-                $this->getApprovedEntries($turnamen)->count(),
-                $this->playersPerGroup($turnamen)
+                $this->getApprovedEntries($turnamen, $idKategori)->count(),
+                $this->playersPerGroup($turnamen, $idKategori)
             ) !== null;
     }
 
-    public function canRandomizeUnassigned(Turnamen $turnamen): bool
+    public function canRandomizeUnassigned(Turnamen $turnamen, $idKategori = null): bool
     {
-        return $this->canEditGroups($turnamen)
-            && $this->getUnassignedApprovedEntries($turnamen)->isNotEmpty();
+        return $this->canEditGroups($turnamen, $idKategori)
+            && $this->getUnassignedApprovedEntries($turnamen, $idKategori)->isNotEmpty();
     }
 
-    public function canRenameGroup(Turnamen $turnamen): bool
+    public function canRenameGroup(Turnamen $turnamen, $idKategori = null): bool
     {
-        return $this->canEditGroups($turnamen);
+        return $this->canEditGroups($turnamen, $idKategori);
     }
 
-    public function canAssignMember(Turnamen $turnamen): bool
+    public function canAssignMember(Turnamen $turnamen, $idKategori = null): bool
     {
-        return $this->canEditGroups($turnamen);
+        return $this->canEditGroups($turnamen, $idKategori);
     }
 
-    public function canEditGroups(Turnamen $turnamen): bool
+    public function canEditGroups(Turnamen $turnamen, $idKategori = null): bool
     {
         return $turnamen->isFriendly()
-            && $turnamen->status === 'ongoing'
-            && $turnamen->grup()->exists()
-            && ! $this->hasAssignedFriendlyMatches($turnamen);
+            && $this->isCompetitionOngoing($turnamen, $idKategori)
+            && $turnamen->competitionGrup($idKategori)->exists()
+            && ! $this->hasAssignedFriendlyMatches($turnamen, $idKategori);
     }
 
-    public function canAddMatch(Turnamen $turnamen): bool
+    public function canAddMatch(Turnamen $turnamen, $idKategori = null): bool
     {
         return $turnamen->isFriendly()
-            && $turnamen->status === 'ongoing'
-            && $turnamen->grup()->count() >= 2;
+            && $this->isCompetitionOngoing($turnamen, $idKategori)
+            && $turnamen->competitionGrup($idKategori)->count() >= 2;
     }
 
     public function canAssignPairs(Pertandingan $match): bool
@@ -83,29 +86,33 @@ class FriendlyMatchmakingService
             ? $match->turnamen
             : Turnamen::find($match->id_turnamen);
 
-        return $turnamen
-            && $turnamen->isFriendly()
-            && $turnamen->status === 'ongoing'
+        if (! $turnamen || ! $turnamen->isFriendly()) {
+            return false;
+        }
+
+        $kategoriId = $match->id_kategori ?: null;
+
+        return $this->isCompetitionOngoing($turnamen, $kategoriId)
             && $match->id_grup1
             && $match->id_grup2;
     }
 
-    public function canReset(Turnamen $turnamen): bool
+    public function canReset(Turnamen $turnamen, $idKategori = null): bool
     {
-        if (! $turnamen->isFriendly() || $turnamen->status !== 'ongoing') {
+        if (! $turnamen->isFriendly() || ! $this->isCompetitionOngoing($turnamen, $idKategori)) {
             return false;
         }
 
-        if (! $turnamen->grup()->exists() && ! $turnamen->pertandingan()->exists()) {
+        if (! $turnamen->competitionGrup($idKategori)->exists() && ! $turnamen->competitionPertandingan($idKategori)->exists()) {
             return false;
         }
 
-        return ! $this->hasCompletedMatches($turnamen);
+        return ! $this->hasCompletedMatches($turnamen, $idKategori);
     }
 
-    public function hasCompletedMatches(Turnamen $turnamen): bool
+    public function hasCompletedMatches(Turnamen $turnamen, $idKategori = null): bool
     {
-        return $turnamen->pertandingan()
+        return $turnamen->competitionPertandingan($idKategori)
             ->where('nama_ronde', 'Friendly')
             ->where('status', 'completed')
             ->exists();
@@ -115,9 +122,9 @@ class FriendlyMatchmakingService
      * True once any Friendly match has pairs filled (Isi Pasangan / Tambah Tanding).
      * Empty auto-created slots do not lock group member swaps.
      */
-    public function hasAssignedFriendlyMatches(Turnamen $turnamen): bool
+    public function hasAssignedFriendlyMatches(Turnamen $turnamen, $idKategori = null): bool
     {
-        return $turnamen->pertandingan()
+        return $turnamen->competitionPertandingan($idKategori)
             ->where('nama_ronde', 'Friendly')
             ->where(function ($query) {
                 $query->whereNotNull('id_pemain1')
@@ -127,10 +134,10 @@ class FriendlyMatchmakingService
             ->exists();
     }
 
-    public function getApprovedEntries(Turnamen $turnamen): Collection
+    public function getApprovedEntries(Turnamen $turnamen, $idKategori = null): Collection
     {
         return TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($turnamen->resolveKategori($idKategori)->id)
             ->approved()
             ->with('pemain1')
             ->orderBy('id')
@@ -166,9 +173,9 @@ class FriendlyMatchmakingService
         ];
     }
 
-    protected function groupSplitRequirementMessage(Turnamen $turnamen): string
+    protected function groupSplitRequirementMessage(Turnamen $turnamen, $idKategori = null): string
     {
-        $perGroup = $this->playersPerGroup($turnamen);
+        $perGroup = $this->playersPerGroup($turnamen, $idKategori);
         $minPlayers = $perGroup * 2;
 
         return sprintf(
@@ -182,22 +189,23 @@ class FriendlyMatchmakingService
     /**
      * @return array{groups: Collection, mode: string, group_count: int, match_slots: int}
      */
-    public function generateGroups(Turnamen $turnamen, string $mode = 'random'): array
+    public function generateGroups(Turnamen $turnamen, string $mode = 'random', $idKategori = null): array
     {
-        if (! $this->canGenerateGroups($turnamen)) {
-            throw new RuntimeException('Grup Group Match belum dapat dibuat. Pastikan turnamen ongoing dan belum punya grup.');
+        if (! $this->canGenerateGroups($turnamen, $idKategori)) {
+            throw new RuntimeException('Grup Group Match belum dapat dibuat. Pastikan kategori ongoing dan belum punya grup.');
         }
 
-        $entries = $this->getApprovedEntries($turnamen);
-        $perGroup = $this->playersPerGroup($turnamen);
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $entries = $this->getApprovedEntries($turnamen, $kategori->id);
+        $perGroup = $this->playersPerGroup($turnamen, $kategori->id);
         $preview = $this->previewGroupSplit($entries->count(), $perGroup);
 
         if (! $preview) {
-            throw new RuntimeException($this->groupSplitRequirementMessage($turnamen));
+            throw new RuntimeException($this->groupSplitRequirementMessage($turnamen, $kategori->id));
         }
 
-        return DB::transaction(function () use ($turnamen, $entries, $mode, $preview, $perGroup) {
-            $materialized = $this->materializeCompletePreGroups($turnamen);
+        return DB::transaction(function () use ($turnamen, $kategori, $entries, $mode, $preview, $perGroup) {
+            $materialized = $this->materializeCompletePreGroups($turnamen, $kategori->id);
             $groups = $materialized['groups'];
             $assignedPesertaIds = $materialized['peserta_ids'];
 
@@ -214,6 +222,7 @@ class FriendlyMatchmakingService
             foreach ($orderedSolos->chunk($perGroup)->values() as $chunk) {
                 $grup = Grup::create([
                     'id_turnamen' => $turnamen->id,
+                    'id_kategori' => $kategori->id,
                     'nama' => $this->nextAvailableLetterGroupName($usedNames, $letterIndex),
                     'babak' => 1,
                     'ronde' => 1,
@@ -230,7 +239,7 @@ class FriendlyMatchmakingService
                 $groups->push($grup->load(['members.pemain']));
             }
 
-            $slots = $this->createInterGroupSlots($turnamen, $groups);
+            $slots = $this->createInterGroupSlots($turnamen, $groups, $kategori->id);
 
             return [
                 'groups' => $groups,
@@ -247,8 +256,12 @@ class FriendlyMatchmakingService
      * @param  Collection<int, Grup>  $groups
      * @return Collection<int, Pertandingan>
      */
-    public function createInterGroupSlots(Turnamen $turnamen, Collection $groups): Collection
+    public function createInterGroupSlots(Turnamen $turnamen, Collection $groups, $idKategori = null): Collection
     {
+        $kategoriId = $idKategori !== null && $idKategori !== ''
+            ? (int) $turnamen->resolveKategori($idKategori)->id
+            : (int) ($groups->first()->id_kategori ?? $turnamen->resolveKategori()->id);
+
         $list = $groups->sortBy([
             ['nama', 'asc'],
             ['id', 'asc'],
@@ -281,6 +294,7 @@ class FriendlyMatchmakingService
         foreach ($pairs as $pair) {
             $slots->push(Pertandingan::create([
                 'id_turnamen' => $turnamen->id,
+                'id_kategori' => $kategoriId,
                 'id_grup' => null,
                 'id_grup1' => $pair['grup1']->id,
                 'id_grup2' => $pair['grup2']->id,
@@ -298,17 +312,19 @@ class FriendlyMatchmakingService
         return $slots;
     }
 
-    public function getUnassignedApprovedEntries(Turnamen $turnamen): Collection
+    public function getUnassignedApprovedEntries(Turnamen $turnamen, $idKategori = null): Collection
     {
+        $kategoriId = $turnamen->resolveKategori($idKategori)->id;
+
         $assignedPesertaIds = GrupMember::query()
-            ->whereHas('grup', function ($query) use ($turnamen) {
-                $query->where('id_turnamen', $turnamen->id);
+            ->whereHas('grup', function ($query) use ($kategoriId) {
+                $query->where('id_kategori', $kategoriId);
             })
             ->whereNotNull('id_turnamen_peserta')
             ->pluck('id_turnamen_peserta')
             ->all();
 
-        return $this->getApprovedEntries($turnamen)
+        return $this->getApprovedEntries($turnamen, $idKategori)
             ->reject(fn (TurnamenPeserta $peserta) => in_array($peserta->id, $assignedPesertaIds, true))
             ->values();
     }
@@ -319,21 +335,22 @@ class FriendlyMatchmakingService
      *
      * @return array{groups: Collection, group_count: int}
      */
-    public function createSkeletonGroups(Turnamen $turnamen): array
+    public function createSkeletonGroups(Turnamen $turnamen, $idKategori = null): array
     {
-        if (! $this->canCreateSkeletonGroups($turnamen)) {
+        if (! $this->canCreateSkeletonGroups($turnamen, $idKategori)) {
             throw new RuntimeException('Kerangka grup Group Match belum dapat dibuat.');
         }
 
-        $entries = $this->getApprovedEntries($turnamen);
-        $preview = $this->previewGroupSplit($entries->count(), $this->playersPerGroup($turnamen));
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $entries = $this->getApprovedEntries($turnamen, $kategori->id);
+        $preview = $this->previewGroupSplit($entries->count(), $this->playersPerGroup($turnamen, $kategori->id));
 
         if (! $preview) {
-            throw new RuntimeException($this->groupSplitRequirementMessage($turnamen));
+            throw new RuntimeException($this->groupSplitRequirementMessage($turnamen, $kategori->id));
         }
 
-        return DB::transaction(function () use ($turnamen, $preview) {
-            $materialized = $this->materializeCompletePreGroups($turnamen);
+        return DB::transaction(function () use ($turnamen, $kategori, $preview) {
+            $materialized = $this->materializeCompletePreGroups($turnamen, $kategori->id);
             $groups = $materialized['groups'];
             $remainingGroupCount = $preview['group_count'] - $groups->count();
 
@@ -345,11 +362,12 @@ class FriendlyMatchmakingService
             for ($i = 0; $i < $remainingGroupCount; $i++) {
                 $groups->push($this->createEmptyGroupWithName(
                     $turnamen,
-                    $this->nextAvailableLetterGroupName($usedNames, $letterIndex)
+                    $this->nextAvailableLetterGroupName($usedNames, $letterIndex),
+                    $kategori->id
                 ));
             }
 
-            $this->ensureInterGroupSlots($turnamen);
+            $this->ensureInterGroupSlots($turnamen, $kategori->id);
 
             return [
                 'groups' => $groups,
@@ -363,17 +381,18 @@ class FriendlyMatchmakingService
      *
      * @return array{assigned_count: int, match_slots: int, mode: string}
      */
-    public function randomizeUnassigned(Turnamen $turnamen, string $mode = 'random'): array
+    public function randomizeUnassigned(Turnamen $turnamen, string $mode = 'random', $idKategori = null): array
     {
-        if (! $this->canRandomizeUnassigned($turnamen)) {
+        if (! $this->canRandomizeUnassigned($turnamen, $idKategori)) {
             throw new RuntimeException('Tidak ada pemain yang perlu diacak ke grup.');
         }
 
-        $unassigned = $this->orderEntries($this->getUnassignedApprovedEntries($turnamen), $mode);
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $unassigned = $this->orderEntries($this->getUnassignedApprovedEntries($turnamen, $kategori->id), $mode);
 
-        return DB::transaction(function () use ($turnamen, $unassigned, $mode) {
-            $perGroup = $this->playersPerGroup($turnamen);
-            $groups = $turnamen->grup()->withCount('members')->orderBy('id')->get();
+        return DB::transaction(function () use ($turnamen, $kategori, $unassigned, $mode) {
+            $perGroup = $this->playersPerGroup($turnamen, $kategori->id);
+            $groups = $turnamen->competitionGrup($kategori->id)->withCount('members')->orderBy('id')->get();
             $remainingSeats = $groups->sum(fn (Grup $grup) => max(0, $perGroup - (int) $grup->members_count));
 
             if ($unassigned->count() > $remainingSeats) {
@@ -400,7 +419,7 @@ class FriendlyMatchmakingService
                 throw new RuntimeException('Masih ada pemain yang tidak mendapat kursi grup.');
             }
 
-            $slots = $this->ensureInterGroupSlots($turnamen);
+            $slots = $this->ensureInterGroupSlots($turnamen, $kategori->id);
 
             return [
                 'assigned_count' => $assignedCount,
@@ -439,8 +458,9 @@ class FriendlyMatchmakingService
             throw new RuntimeException('Grup tidak ditemukan pada turnamen ini.');
         }
 
+        $kategoriId = (int) $grup->id_kategori;
         $currentCount = $grup->members()->count();
-        $perGroup = $this->playersPerGroup($turnamen);
+        $perGroup = $this->playersPerGroup($turnamen, $kategoriId);
         $slotsRemaining = $perGroup - $currentCount;
 
         if ($slotsRemaining <= 0) {
@@ -452,7 +472,7 @@ class FriendlyMatchmakingService
         }
 
         $pesertaList = TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($kategoriId)
             ->approved()
             ->whereIn('id', $pesertaIds)
             ->get()
@@ -463,13 +483,13 @@ class FriendlyMatchmakingService
         }
 
         foreach ($pesertaIds as $pesertaId) {
-            if ($this->isPesertaAssigned($turnamen, $pesertaId)) {
+            if ($this->isPesertaAssigned($turnamen, $pesertaId, $kategoriId)) {
                 $nama = optional($pesertaList->get($pesertaId)->pemain1)->nama ?? 'Pemain';
                 throw new RuntimeException("{$nama} sudah berada di salah satu grup.");
             }
         }
 
-        return DB::transaction(function () use ($turnamen, $grup, $pesertaIds, $pesertaList) {
+        return DB::transaction(function () use ($turnamen, $grup, $pesertaIds, $pesertaList, $kategoriId) {
             $created = [];
 
             foreach ($pesertaIds as $pesertaId) {
@@ -477,7 +497,7 @@ class FriendlyMatchmakingService
                     ->load(['pemain', 'turnamenPeserta']);
             }
 
-            $this->ensureInterGroupSlots($turnamen);
+            $this->ensureInterGroupSlots($turnamen, $kategoriId);
 
             return $created;
         });
@@ -495,15 +515,17 @@ class FriendlyMatchmakingService
             throw new RuntimeException('Anggota tidak termasuk turnamen ini.');
         }
 
-        if ($this->hasAssignedFriendlyMatches($turnamen)) {
+        $kategoriId = (int) $member->grup->id_kategori;
+
+        if ($this->hasAssignedFriendlyMatches($turnamen, $kategoriId)) {
             throw new RuntimeException('Anggota tidak dapat dilepas setelah pasangan pertandingan diisi.');
         }
 
-        DB::transaction(function () use ($turnamen, $member) {
+        DB::transaction(function () use ($member, $kategoriId) {
             $member->delete();
 
             // Drop empty fixtures so they can be regenerated after groups are complete again.
-            Pertandingan::where('id_turnamen', $turnamen->id)
+            Pertandingan::where('id_kategori', $kategoriId)
                 ->where('nama_ronde', 'Friendly')
                 ->whereNull('id_pemain1')
                 ->delete();
@@ -531,13 +553,13 @@ class FriendlyMatchmakingService
         }
 
         $duplicate = Grup::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $turnamen->resolveKategori()->id)
             ->where('nama', $nama)
             ->where('id', '!=', $grup->id)
             ->exists();
 
         if ($duplicate) {
-            throw new RuntimeException('Nama grup sudah digunakan pada turnamen ini.');
+            throw new RuntimeException('Nama grup sudah digunakan pada kategori ini.');
         }
 
         $grup->update(['nama' => $nama]);
@@ -545,32 +567,32 @@ class FriendlyMatchmakingService
         return $grup->fresh();
     }
 
-    public function areGroupsComplete(Turnamen $turnamen): bool
+    public function areGroupsComplete(Turnamen $turnamen, $idKategori = null): bool
     {
-        $entries = $this->getApprovedEntries($turnamen);
-        $perGroup = $this->playersPerGroup($turnamen);
+        $entries = $this->getApprovedEntries($turnamen, $idKategori);
+        $perGroup = $this->playersPerGroup($turnamen, $idKategori);
         $preview = $this->previewGroupSplit($entries->count(), $perGroup);
 
         if (! $preview) {
             return false;
         }
 
-        $groups = $turnamen->grup()->withCount('members')->get();
+        $groups = $turnamen->competitionGrup($idKategori)->withCount('members')->get();
 
         if ($groups->count() !== $preview['group_count']) {
             return false;
         }
 
-        if ($this->getUnassignedApprovedEntries($turnamen)->isNotEmpty()) {
+        if ($this->getUnassignedApprovedEntries($turnamen, $idKategori)->isNotEmpty()) {
             return false;
         }
 
         return $groups->every(fn (Grup $grup) => (int) $grup->members_count === $perGroup);
     }
 
-    public function hasFriendlyMatchSlots(Turnamen $turnamen): bool
+    public function hasFriendlyMatchSlots(Turnamen $turnamen, $idKategori = null): bool
     {
-        return $turnamen->pertandingan()
+        return $turnamen->competitionPertandingan($idKategori)
             ->where('nama_ronde', 'Friendly')
             ->exists();
     }
@@ -578,30 +600,31 @@ class FriendlyMatchmakingService
     /**
      * @return Collection<int, Pertandingan>
      */
-    public function ensureInterGroupSlots(Turnamen $turnamen): Collection
+    public function ensureInterGroupSlots(Turnamen $turnamen, $idKategori = null): Collection
     {
-        if ($this->hasFriendlyMatchSlots($turnamen)) {
-            return $this->getMatches($turnamen);
+        if ($this->hasFriendlyMatchSlots($turnamen, $idKategori)) {
+            return $this->getMatches($turnamen, $idKategori);
         }
 
-        if (! $this->areGroupsComplete($turnamen)) {
+        if (! $this->areGroupsComplete($turnamen, $idKategori)) {
             return collect();
         }
 
-        $groups = $turnamen->grup()->orderBy('id')->get();
+        $groups = $turnamen->competitionGrup($idKategori)->orderBy('id')->get();
 
-        return $this->createInterGroupSlots($turnamen, $groups);
+        return $this->createInterGroupSlots($turnamen, $groups, $idKategori);
     }
 
-    protected function createEmptyGroup(Turnamen $turnamen, int $index): Grup
+    protected function createEmptyGroup(Turnamen $turnamen, int $index, $idKategori = null): Grup
     {
-        return $this->createEmptyGroupWithName($turnamen, 'Grup ' . chr(65 + $index));
+        return $this->createEmptyGroupWithName($turnamen, 'Grup ' . chr(65 + $index), $idKategori);
     }
 
-    protected function createEmptyGroupWithName(Turnamen $turnamen, string $nama): Grup
+    protected function createEmptyGroupWithName(Turnamen $turnamen, string $nama, $idKategori = null): Grup
     {
         return Grup::create([
             'id_turnamen' => $turnamen->id,
+            'id_kategori' => $turnamen->resolveKategori($idKategori)->id,
             'nama' => $nama,
             'babak' => 1,
             'ronde' => 1,
@@ -618,15 +641,17 @@ class FriendlyMatchmakingService
      *
      * @return array{groups: Collection<int, Grup>, peserta_ids: array<int, int>}
      */
-    public function materializeCompletePreGroups(Turnamen $turnamen): array
+    public function materializeCompletePreGroups(Turnamen $turnamen, $idKategori = null): array
     {
-        $preGroups = $this->getCompletePreGroups($turnamen);
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $preGroups = $this->getCompletePreGroups($turnamen, $kategori->id);
         $groups = collect();
         $pesertaIds = [];
 
         foreach ($preGroups as $preGroup) {
             $grup = Grup::create([
                 'id_turnamen' => $turnamen->id,
+                'id_kategori' => $kategori->id,
                 'nama' => $preGroup->nama,
                 'babak' => 1,
                 'ronde' => 1,
@@ -657,10 +682,10 @@ class FriendlyMatchmakingService
     /**
      * @return Collection<int, TurnamenGrupPendaftaran>
      */
-    public function getCompletePreGroups(Turnamen $turnamen): Collection
+    public function getCompletePreGroups(Turnamen $turnamen, $idKategori = null): Collection
     {
         return TurnamenGrupPendaftaran::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($turnamen->resolveKategori($idKategori)->id)
             ->with(['members.peserta.pemain1'])
             ->orderBy('id')
             ->get()
@@ -673,10 +698,12 @@ class FriendlyMatchmakingService
      *
      * @return Collection<int, array{id: int|null, nama: string, is_solo_bucket: bool, is_complete: bool, members: Collection}>
      */
-    public function getFriendlyRegistrationGroups(Turnamen $turnamen): Collection
+    public function getFriendlyRegistrationGroups(Turnamen $turnamen, $idKategori = null): Collection
     {
+        $kategoriId = $turnamen->resolveKategori($idKategori)->id;
+
         $preGroups = TurnamenGrupPendaftaran::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($kategoriId)
             ->with(['members.peserta.pemain1'])
             ->orderBy('nama')
             ->orderBy('id')
@@ -687,7 +714,7 @@ class FriendlyMatchmakingService
             ->map(fn ($id) => (int) $id)
             ->all();
 
-        $result = $preGroups->map(function (TurnamenGrupPendaftaran $group) {
+        $result = $preGroups->map(function (TurnamenGrupPendaftaran $group) use ($turnamen) {
             return [
                 'id' => $group->id,
                 'nama' => $group->nama,
@@ -700,7 +727,7 @@ class FriendlyMatchmakingService
         });
 
         $solos = TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($kategoriId)
             ->whereNotIn('id', $groupedPesertaIds ?: [0])
             ->with('pemain1')
             ->orderBy('id')
@@ -757,12 +784,12 @@ class FriendlyMatchmakingService
         ]);
     }
 
-    protected function isPesertaAssigned(Turnamen $turnamen, int $pesertaId): bool
+    protected function isPesertaAssigned(Turnamen $turnamen, int $pesertaId, $idKategori = null): bool
     {
         return GrupMember::query()
             ->where('id_turnamen_peserta', $pesertaId)
-            ->whereHas('grup', function ($query) use ($turnamen) {
-                $query->where('id_turnamen', $turnamen->id);
+            ->whereHas('grup', function ($query) use ($turnamen, $idKategori) {
+                $query->where('id_kategori', $turnamen->resolveKategori($idKategori)->id);
             })
             ->exists();
     }
@@ -776,9 +803,10 @@ class FriendlyMatchmakingService
         int $grup1Id,
         int $grup2Id,
         array $side1PemainIds,
-        array $side2PemainIds
+        array $side2PemainIds,
+        $idKategori = null
     ): Pertandingan {
-        if (! $this->canAddMatch($turnamen)) {
+        if (! $this->canAddMatch($turnamen, $idKategori)) {
             throw new RuntimeException('Pertandingan Friendly belum dapat ditambahkan.');
         }
 
@@ -786,8 +814,9 @@ class FriendlyMatchmakingService
             throw new RuntimeException('Pilih dua grup yang berbeda.');
         }
 
-        $grup1 = Grup::where('id_turnamen', $turnamen->id)->where('id', $grup1Id)->first();
-        $grup2 = Grup::where('id_turnamen', $turnamen->id)->where('id', $grup2Id)->first();
+        $kategoriId = $turnamen->resolveKategori($idKategori)->id;
+        $grup1 = Grup::where('id_kategori', $kategoriId)->where('id', $grup1Id)->first();
+        $grup2 = Grup::where('id_kategori', $kategoriId)->where('id', $grup2Id)->first();
 
         if (! $grup1 || ! $grup2) {
             throw new RuntimeException('Grup tidak ditemukan pada turnamen ini.');
@@ -797,6 +826,7 @@ class FriendlyMatchmakingService
 
         return Pertandingan::create(array_merge([
             'id_turnamen' => $turnamen->id,
+            'id_kategori' => $kategoriId,
             'id_grup' => null,
             'id_grup1' => $grup1->id,
             'id_grup2' => $grup2->id,
@@ -820,8 +850,11 @@ class FriendlyMatchmakingService
             throw new RuntimeException('Pasangan pada pertandingan ini tidak dapat diubah.');
         }
 
-        $grup1 = Grup::where('id_turnamen', $match->id_turnamen)->where('id', $match->id_grup1)->first();
-        $grup2 = Grup::where('id_turnamen', $match->id_turnamen)->where('id', $match->id_grup2)->first();
+        $kategoriId = $match->id_kategori
+            ?: Turnamen::findOrFail($match->id_turnamen)->resolveKategori()->id;
+
+        $grup1 = Grup::where('id_kategori', $kategoriId)->where('id', $match->id_grup1)->first();
+        $grup2 = Grup::where('id_kategori', $kategoriId)->where('id', $match->id_grup2)->first();
 
         if (! $grup1 || ! $grup2) {
             throw new RuntimeException('Grup pertandingan tidak ditemukan.');
@@ -854,16 +887,17 @@ class FriendlyMatchmakingService
         $match->delete();
     }
 
-    public function resetGroupsAndMatches(Turnamen $turnamen): void
+    public function resetGroupsAndMatches(Turnamen $turnamen, $idKategori = null): void
     {
-        if (! $this->canReset($turnamen)) {
+        if (! $this->canReset($turnamen, $idKategori)) {
             throw new RuntimeException('Grup Friendly tidak dapat di-reset karena sudah ada pertandingan selesai.');
         }
 
-        DB::transaction(function () use ($turnamen) {
-            $grupIds = $turnamen->grup()->pluck('id');
+        DB::transaction(function () use ($turnamen, $idKategori) {
+            $kategori = $turnamen->resolveKategori($idKategori);
+            $grupIds = $kategori->grup()->pluck('id');
 
-            Pertandingan::where('id_turnamen', $turnamen->id)
+            Pertandingan::where('id_kategori', $kategori->id)
                 ->where('nama_ronde', 'Friendly')
                 ->delete();
 
@@ -874,10 +908,10 @@ class FriendlyMatchmakingService
         });
     }
 
-    public function getMatches(Turnamen $turnamen): Collection
+    public function getMatches(Turnamen $turnamen, $idKategori = null): Collection
     {
         $matches = Pertandingan::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $turnamen->resolveKategori($idKategori)->id)
             ->where('nama_ronde', 'Friendly')
             ->with([
                 'pemain1',
@@ -947,7 +981,7 @@ class FriendlyMatchmakingService
     protected function resolveOrderedGroupIdsForSchedule(Collection $matches, ?Turnamen $turnamen): array
     {
         if ($turnamen) {
-            $ids = $turnamen->grup()->orderBy('nama')->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $ids = $turnamen->competitionGrup()->orderBy('nama')->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
 
             if ($ids !== []) {
                 return $ids;
@@ -1116,11 +1150,11 @@ class FriendlyMatchmakingService
         }
 
         $peserta1 = TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($turnamen->resolveKategori()->id)
             ->where('id_pemain1', $side1[0])
             ->first();
         $peserta2 = TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($turnamen->resolveKategori()->id)
             ->where('id_pemain1', $side2[0])
             ->first();
 

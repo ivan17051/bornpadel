@@ -217,6 +217,99 @@ class Turnamen extends Model
         return $this->hasMany(TurnamenPeserta::class, 'id_turnamen');
     }
 
+    public function kategori()
+    {
+        return $this->hasMany(TurnamenKategori::class, 'id_turnamen')->orderBy('urutan')->orderBy('id');
+    }
+
+    public function defaultKategori(): ?TurnamenKategori
+    {
+        if ($this->relationLoaded('kategori')) {
+            $default = $this->kategori->firstWhere('is_default', true);
+
+            if ($default) {
+                return $default;
+            }
+
+            return $this->kategori
+                ->sortBy(function (TurnamenKategori $kategori) {
+                    return sprintf('%08d-%08d', (int) $kategori->urutan, (int) $kategori->id);
+                })
+                ->first();
+        }
+
+        $default = $this->kategori()->where('is_default', true)->first();
+
+        if ($default) {
+            return $default;
+        }
+
+        return $this->kategori()->orderBy('urutan')->orderBy('id')->first();
+    }
+
+    /**
+     * Ensure a default category exists for this event (Phase 0 silent default).
+     */
+    public function ensureDefaultKategori(): TurnamenKategori
+    {
+        $existing = $this->defaultKategori();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return $this->kategori()->create([
+            'nama' => 'Umum',
+            'is_default' => true,
+            'urutan' => 1,
+            'harga' => $this->harga ?? 0,
+            'maks_peserta' => $this->maks_peserta,
+            'status' => in_array($this->status, ['draft', 'open', 'ongoing', 'completed'], true)
+                ? $this->status
+                : 'draft',
+            'registration_paired_at' => $this->registration_paired_at,
+            'group_matches_generated_at' => $this->group_matches_generated_at,
+            'mahjong_is_final' => (bool) $this->mahjong_is_final,
+            'players_per_group' => $this->players_per_group,
+        ]);
+    }
+
+    /**
+     * Resolve a category for this event. Null id uses the default category.
+     *
+     * @param  int|string|null  $idKategori
+     */
+    public function resolveKategori($idKategori = null): TurnamenKategori
+    {
+        if ($idKategori === null || $idKategori === '') {
+            return $this->ensureDefaultKategori();
+        }
+
+        $kategori = $this->kategori()->whereKey($idKategori)->first();
+
+        if (! $kategori) {
+            throw new \RuntimeException('Kategori tidak ditemukan untuk turnamen ini.');
+        }
+
+        return $kategori;
+    }
+
+    public function hasMultipleKategori(): bool
+    {
+        if ($this->relationLoaded('kategori')) {
+            return $this->kategori->count() > 1;
+        }
+
+        return $this->kategori()->count() > 1;
+    }
+
+    protected static function booted()
+    {
+        static::created(function (Turnamen $turnamen) {
+            $turnamen->ensureDefaultKategori();
+        });
+    }
+
     public function pasangan()
     {
         return $this->hasMany(TurnamenPasangan::class, 'id_turnamen');
@@ -234,9 +327,64 @@ class Turnamen extends Model
         return $this->hasMany(Grup::class, 'id_turnamen');
     }
 
+    /**
+     * Groups for one competition category (default when $idKategori is null).
+     */
+    public function competitionGrup($idKategori = null)
+    {
+        return $this->resolveKategori($idKategori)->grup();
+    }
+
+    public function competitionActiveGrup($idKategori = null)
+    {
+        return $this->resolveKategori($idKategori)->activeGrup();
+    }
+
+    public function competitionPertandingan($idKategori = null)
+    {
+        return $this->resolveKategori($idKategori)->pertandingan();
+    }
+
+    public function competitionPemenang($idKategori = null)
+    {
+        return $this->resolveKategori($idKategori)->pemenang();
+    }
+
+    public function competitionPeserta($idKategori = null)
+    {
+        return $this->resolveKategori($idKategori)->peserta();
+    }
+
+    public function categoryMahjongIsFinal($idKategori = null): bool
+    {
+        return (bool) $this->resolveKategori($idKategori)->mahjong_is_final;
+    }
+
+    public function categoryGroupMatchesGeneratedAt($idKategori = null)
+    {
+        return $this->resolveKategori($idKategori)->group_matches_generated_at;
+    }
+
+    public function categoryMaksPeserta($idKategori = null): ?int
+    {
+        $value = $this->resolveKategori($idKategori)->maks_peserta;
+
+        return $value === null ? null : (int) $value;
+    }
+
+    public function categoryHarga($idKategori = null)
+    {
+        return $this->resolveKategori($idKategori)->harga;
+    }
+
     public function grupPendaftaran()
     {
         return $this->hasMany(TurnamenGrupPendaftaran::class, 'id_turnamen');
+    }
+
+    public function competitionGrupPendaftaran($idKategori = null)
+    {
+        return $this->resolveKategori($idKategori)->grupPendaftaran();
     }
 
     public function pertandingan()

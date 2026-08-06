@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTurnamenKategori;
 use Illuminate\Database\Eloquent\Model;
 
 class Pertandingan extends Model
 {
+    use BelongsToTurnamenKategori;
     protected $table = 'pertandingan';
 
     protected $fillable = [
         'id_turnamen',
+        'id_kategori',
         'id_grup',
         'id_grup1',
         'id_grup2',
@@ -30,6 +33,11 @@ class Pertandingan extends Model
     public function turnamen()
     {
         return $this->belongsTo(Turnamen::class, 'id_turnamen');
+    }
+
+    public function kategori()
+    {
+        return $this->belongsTo(TurnamenKategori::class, 'id_kategori');
     }
 
     public function grup()

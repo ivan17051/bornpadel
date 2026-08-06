@@ -24,6 +24,7 @@ class UploadPaymentReceiptRequest extends FormRequest
         return [
             'peserta_id' => ['nullable', 'integer', 'exists:turnamen_peserta,id', 'required_without_all:id_turnamen,no_hp'],
             'id_turnamen' => ['nullable', 'integer', 'exists:m_turnamen,id', 'required_without:peserta_id'],
+            'id_kategori' => ['nullable', 'integer', 'exists:turnamen_kategori,id'],
             'no_hp' => ['nullable', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/', 'required_without:peserta_id'],
             'bukti_bayar' => ['required', 'file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:5120'],
         ];

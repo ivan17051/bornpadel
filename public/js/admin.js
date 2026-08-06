@@ -46,6 +46,24 @@ const BornPadelAdmin = (function () {
         toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
     };
 
+    const resolveWorkspaceKategoriId = (el = null) => {
+        const fromEl = el && el.dataset ? el.dataset.kategori : null;
+        if (fromEl) {
+            const parsed = parseInt(fromEl, 10);
+            if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+        }
+        const root = document.querySelector('[data-workspace-kategori]');
+        if (root && root.dataset.workspaceKategori) {
+            const parsed = parseInt(root.dataset.workspaceKategori, 10);
+            if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+        }
+        const select = document.getElementById('id_kategori');
+        if (select && select.value) {
+            const parsed = parseInt(select.value, 10);
+            if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+        }
+        return null;
+    };
     const apiRequest = async (url, method = 'POST', body = null) => {
         const options = {
             method,
@@ -59,6 +77,10 @@ const BornPadelAdmin = (function () {
 
         if (body) {
             options.headers['Content-Type'] = 'application/json';
+            if (body.id_turnamen && !body.id_kategori) {
+                const kategoriId = resolveWorkspaceKategoriId();
+                if (kategoriId) body.id_kategori = kategoriId;
+            }
             options.body = JSON.stringify(body);
         }
 
@@ -2359,6 +2381,22 @@ const BornPadelAdmin = (function () {
         });
     };
 
+    /**
+     * Submit tournament filter without carrying an old id_kategori to a different turnamen.
+     */
+    const submitTurnamenFilter = (form) => {
+        if (!form) {
+            return;
+        }
+
+        form.querySelectorAll('input[name="id_kategori"]').forEach((el) => {
+            el.disabled = true;
+        });
+
+        showPageLoader();
+        form.submit();
+    };
+
     const initTurnamenFilterSelect = () => {
         const select = document.getElementById('id_turnamen');
 
@@ -2398,10 +2436,7 @@ const BornPadelAdmin = (function () {
         });
 
         $select.on('change', function () {
-            if (form) {
-                showPageLoader();
-                form.submit();
-            }
+            submitTurnamenFilter(form);
         });
     };
 
@@ -2412,6 +2447,7 @@ const BornPadelAdmin = (function () {
         initScoreModal,
         initPasswordModal,
         initTurnamenFilterSelect,
+        submitTurnamenFilter,
         showToast,
         showAlert,
         apiRequest,

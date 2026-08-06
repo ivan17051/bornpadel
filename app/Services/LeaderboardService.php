@@ -24,7 +24,7 @@ class LeaderboardService
             ->first();
     }
 
-    public function getStandings(?int $turnamenId = null): Collection
+    public function getStandings(?int $turnamenId = null, $idKategori = null): Collection
     {
         $turnamen = $turnamenId
             ? Turnamen::find($turnamenId)
@@ -35,12 +35,12 @@ class LeaderboardService
         }
 
         if ($turnamen->isFriendly()) {
-            return $this->getFriendlyStandings($turnamen->id);
+            return $this->getFriendlyStandings($turnamen->id, $idKategori);
         }
 
         $grupQuery = $turnamen->isMahjong()
-            ? $turnamen->activeGrup()
-            : $turnamen->grup();
+            ? $turnamen->competitionActiveGrup($idKategori)
+            : $turnamen->competitionGrup($idKategori);
 
         return $grupQuery
             ->with(['members' => function ($query) use ($turnamen) {
@@ -107,7 +107,7 @@ class LeaderboardService
      *
      * @return array{sections: Collection, has_bracket: bool, is_double: bool}
      */
-    public function getPostLeagueRanking(?int $turnamenId = null): array
+    public function getPostLeagueRanking(?int $turnamenId = null, $idKategori = null): array
     {
         $turnamen = $turnamenId
             ? Turnamen::find($turnamenId)
@@ -123,7 +123,7 @@ class LeaderboardService
             return $empty;
         }
 
-        $standings = $this->getStandings($turnamen->id);
+        $standings = $this->getStandings($turnamen->id, $idKategori);
 
         if ($standings->isEmpty()) {
             return [
@@ -134,12 +134,12 @@ class LeaderboardService
         }
 
         $knockout = app(KnockoutBracketService::class);
-        $hasBracket = $knockout->hasKnockoutBracket($turnamen);
+        $hasBracket = $knockout->hasKnockoutBracket($turnamen, $idKategori);
         $qualifierPeserta = [];
         $qualifierPemain = [];
 
         if ($hasBracket) {
-            $keys = $knockout->getKnockoutParticipantKeys($turnamen);
+            $keys = $knockout->getKnockoutParticipantKeys($turnamen, $idKategori);
             $qualifierPeserta = array_fill_keys($keys['peserta_ids'], true);
             $qualifierPemain = array_fill_keys($keys['pemain_ids'], true);
         }
@@ -210,7 +210,7 @@ class LeaderboardService
         ];
     }
 
-    public function getFriendlyStandings(?int $turnamenId = null): Collection
+    public function getFriendlyStandings(?int $turnamenId = null, $idKategori = null): Collection
     {
         $turnamen = $turnamenId
             ? Turnamen::find($turnamenId)
@@ -220,7 +220,7 @@ class LeaderboardService
             return collect();
         }
 
-        return $turnamen->grup()
+        return $turnamen->competitionGrup($idKategori)
             ->with(['members.pemain'])
             ->get()
             ->map(function (Grup $grup) {
@@ -273,7 +273,7 @@ class LeaderboardService
         }
 
         return TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($turnamen->resolveKategori()->id)
             ->approved()
             ->with('pemain1')
             ->orderBy('id')
@@ -295,7 +295,7 @@ class LeaderboardService
             });
     }
 
-    public function getMahjongStandingsByBabak(?int $turnamenId = null): array
+    public function getMahjongStandingsByBabak(?int $turnamenId = null, $idKategori = null): array
     {
         $turnamen = $turnamenId
             ? Turnamen::find($turnamenId)
@@ -310,14 +310,14 @@ class LeaderboardService
         }
 
         $babakNumbers = Grup::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $turnamen->resolveKategori($idKategori)->id)
             ->distinct()
             ->orderByDesc('babak')
             ->pluck('babak');
 
-        $sections = $babakNumbers->map(function ($babak) use ($turnamen) {
-            $table = $this->buildMahjongBabakTable($turnamen, (int) $babak);
-            $groups = $this->resolveMahjongGrupBatchForBabak($turnamen, (int) $babak);
+        $sections = $babakNumbers->map(function ($babak) use ($turnamen, $idKategori) {
+            $table = $this->buildMahjongBabakTable($turnamen, (int) $babak, $idKategori);
+            $groups = $this->resolveMahjongGrupBatchForBabak($turnamen, (int) $babak, $idKategori);
 
             return [
                 'babak' => (int) $babak,
@@ -345,9 +345,9 @@ class LeaderboardService
         ];
     }
 
-    public function buildMahjongBabakTable(Turnamen $turnamen, int $babak): array
+    public function buildMahjongBabakTable(Turnamen $turnamen, int $babak, $idKategori = null): array
     {
-        $roundBatches = $this->getMahjongRoundBatchesForBabak($turnamen, $babak);
+        $roundBatches = $this->getMahjongRoundBatchesForBabak($turnamen, $babak, $idKategori);
 
         if ($roundBatches->isEmpty()) {
             return [
@@ -447,10 +447,12 @@ class LeaderboardService
             });
     }
 
-    protected function getMahjongRoundBatchesForBabak(Turnamen $turnamen, int $babak): Collection
+    protected function getMahjongRoundBatchesForBabak(Turnamen $turnamen, int $babak, $idKategori = null): Collection
     {
+        $kategoriId = $turnamen->resolveKategori($idKategori)->id;
+
         $groups = Grup::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $kategoriId)
             ->where('babak', $babak)
             ->with(array_merge(
                 ['members.pemain', 'members.turnamenPeserta.pemain1'],
@@ -534,15 +536,16 @@ class LeaderboardService
         return 0;
     }
 
-    protected function resolveMahjongGrupBatchForBabak(Turnamen $turnamen, int $babak): Collection
+    protected function resolveMahjongGrupBatchForBabak(Turnamen $turnamen, int $babak, $idKategori = null): Collection
     {
+        $kategoriId = $turnamen->resolveKategori($idKategori)->id;
         $relations = array_merge(
             ['members.pemain', 'members.turnamenPeserta.pemain1'],
             TurnamenPeserta::partnerPemainEagerLoadsFor('members.turnamenPeserta')
         );
 
         $active = Grup::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $kategoriId)
             ->where('babak', $babak)
             ->where('is_aktif', true)
             ->with($relations)
@@ -554,7 +557,7 @@ class LeaderboardService
         }
 
         $latestCreatedAt = Grup::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $kategoriId)
             ->where('babak', $babak)
             ->where('is_aktif', false)
             ->max('created_at');
@@ -564,7 +567,7 @@ class LeaderboardService
         }
 
         return Grup::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $kategoriId)
             ->where('babak', $babak)
             ->where('is_aktif', false)
             ->where('created_at', $latestCreatedAt)
@@ -588,9 +591,11 @@ class LeaderboardService
 
     protected function collectMahjongStandingMembers(Turnamen $turnamen): Collection
     {
+        $kategoriId = $turnamen->resolveKategori()->id;
+
         $activeMembers = GrupMember::query()
-            ->whereHas('grup', function ($query) use ($turnamen) {
-                $query->where('id_turnamen', $turnamen->id)->where('is_aktif', true);
+            ->whereHas('grup', function ($query) use ($kategoriId) {
+                $query->where('id_kategori', $kategoriId)->where('is_aktif', true);
             })
             ->with(array_merge(
                 ['pemain', 'turnamenPeserta.pemain1', 'grup'],
@@ -602,15 +607,15 @@ class LeaderboardService
             return $activeMembers;
         }
 
-        $latestBabak = $turnamen->grup()->max('babak');
+        $latestBabak = $turnamen->competitionGrup()->max('babak');
 
         if (! $latestBabak) {
             return collect();
         }
 
         return GrupMember::query()
-            ->whereHas('grup', function ($query) use ($turnamen, $latestBabak) {
-                $query->where('id_turnamen', $turnamen->id)->where('babak', $latestBabak);
+            ->whereHas('grup', function ($query) use ($kategoriId, $latestBabak) {
+                $query->where('id_kategori', $kategoriId)->where('babak', $latestBabak);
             })
             ->with(array_merge(
                 ['pemain', 'turnamenPeserta.pemain1', 'grup'],

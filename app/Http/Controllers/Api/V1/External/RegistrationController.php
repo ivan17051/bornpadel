@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\External;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ResolvesPublicKategori;
 use App\Http\Requests\Api\External\CheckRegistrationRequest;
 use App\Http\Requests\Api\External\RegisterPlayerRequest;
 use App\Http\Requests\Api\External\UploadPaymentReceiptRequest;
@@ -15,6 +16,8 @@ use RuntimeException;
 
 class RegistrationController extends Controller
 {
+    use ResolvesPublicKategori;
+
     protected $registrationService;
 
     public function __construct(PemainRegistrationService $registrationService)
@@ -27,10 +30,19 @@ class RegistrationController extends Controller
         $data = $request->validated();
         $turnamen = Turnamen::findOrFail($data['id_turnamen']);
 
-        if (! $turnamen->isRegistrationOpen()) {
+        try {
+            $kategori = $this->resolveApiKategori($turnamen, $data['id_kategori'] ?? null);
+        } catch (RuntimeException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Pendaftaran turnamen tidak dibuka.',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        if (! $kategori->isRegistrationOpen()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pendaftaran kategori tidak dibuka.',
             ], 422);
         }
 
@@ -40,7 +52,9 @@ class RegistrationController extends Controller
                 $data,
                 $request->file('foto'),
                 null,
-                TurnamenPeserta::SUMBER_EXTERNAL
+                TurnamenPeserta::SUMBER_EXTERNAL,
+                true,
+                $kategori->id
             );
         } catch (RuntimeException $e) {
             return response()->json([
@@ -50,7 +64,7 @@ class RegistrationController extends Controller
         }
 
         if ($request->filled('status') && $request->status !== 'pending') {
-            $peserta = $pemain->pesertaForTurnamen($turnamen);
+            $peserta = $pemain->pesertaForTurnamen($turnamen, $kategori->id);
 
             if ($peserta) {
                 $peserta->update([
@@ -64,11 +78,12 @@ class RegistrationController extends Controller
             'message' => 'Pemain berhasil didaftarkan.',
             'data' => [
                 'turnamen_id' => $turnamen->id,
+                'kategori_id' => $kategori->id,
                 'pemain_id' => $pemain->id,
                 'nama' => $pemain->nama,
                 'no_hp' => $pemain->no_hp,
                 'foto_url' => $pemain->foto_url,
-                'status' => optional($pemain->pesertaForTurnamen($turnamen))->status,
+                'status' => optional($pemain->pesertaForTurnamen($turnamen, $kategori->id))->status,
             ],
         ], 201);
     }
@@ -77,6 +92,16 @@ class RegistrationController extends Controller
     {
         $data = $request->validated();
         $turnamen = Turnamen::findOrFail($data['id_turnamen']);
+
+        try {
+            $kategori = $this->resolveApiKategori($turnamen, $data['id_kategori'] ?? null);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
         $pemain = $this->registrationService->findPemainByPhone($data['no_hp']);
 
         if (! $pemain) {
@@ -85,6 +110,7 @@ class RegistrationController extends Controller
                 'data' => [
                     'registered' => false,
                     'turnamen_id' => $turnamen->id,
+                    'kategori_id' => $kategori->id,
                     'no_hp' => $data['no_hp'],
                     'pemain_exists' => false,
                     'pemain' => null,
@@ -93,13 +119,14 @@ class RegistrationController extends Controller
             ]);
         }
 
-        $peserta = $pemain->pesertaForTurnamen($turnamen);
+        $peserta = $pemain->pesertaForTurnamen($turnamen, $kategori->id);
 
         return response()->json([
             'success' => true,
             'data' => [
                 'registered' => $peserta !== null,
                 'turnamen_id' => $turnamen->id,
+                'kategori_id' => $kategori->id,
                 'no_hp' => $pemain->no_hp,
                 'pemain_exists' => true,
                 'pemain' => [
@@ -152,6 +179,7 @@ class RegistrationController extends Controller
             'data' => [
                 'peserta_id' => $peserta->id,
                 'turnamen_id' => $peserta->id_turnamen,
+                'kategori_id' => $peserta->id_kategori,
                 'pemain_id' => $peserta->id_pemain1,
                 'nama' => $peserta->display_name,
                 'status' => $peserta->status,
@@ -173,8 +201,19 @@ class RegistrationController extends Controller
             return null;
         }
 
+        $turnamen = Turnamen::find((int) $request->id_turnamen);
+        if (! $turnamen) {
+            return null;
+        }
+
+        try {
+            $kategori = $this->resolveApiKategori($turnamen, $request->input('id_kategori'));
+        } catch (RuntimeException $e) {
+            return null;
+        }
+
         return TurnamenPeserta::query()
-            ->forTurnamen((int) $request->id_turnamen)
+            ->forKategori($kategori->id)
             ->involvingPemain($pemain->id)
             ->first();
     }

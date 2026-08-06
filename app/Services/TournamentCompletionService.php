@@ -18,37 +18,39 @@ class TournamentCompletionService
         $this->pointRewardService = $pointRewardService;
     }
 
-    public function canComplete(Turnamen $turnamen): bool
+    public function canComplete(Turnamen $turnamen, $idKategori = null): bool
     {
         if ($turnamen->status === 'completed') {
             return false;
         }
 
         if ($turnamen->isMahjong()) {
-            return app(MahjongMatchmakingService::class)->canComplete($turnamen);
+            return app(MahjongMatchmakingService::class)->canComplete($turnamen, $idKategori);
         }
 
         if ($turnamen->isFriendly()) {
-            return $turnamen->status === 'ongoing'
-                && $turnamen->grup()->exists()
-                && $turnamen->pertandingan()
+            $kategori = $turnamen->resolveKategori($idKategori);
+
+            return $kategori->status === 'ongoing'
+                && $turnamen->competitionGrup($kategori->id)->exists()
+                && $turnamen->competitionPertandingan($kategori->id)
                     ->where('nama_ronde', 'Friendly')
                     ->where('status', 'completed')
                     ->exists();
         }
 
-        $final = $this->getFinalMatch($turnamen);
+        $final = $this->getFinalMatch($turnamen, $idKategori);
 
         return $final && $final->status === 'completed';
     }
 
-    public function hasPendingThirdPlacePlayoff(Turnamen $turnamen): bool
+    public function hasPendingThirdPlacePlayoff(Turnamen $turnamen, $idKategori = null): bool
     {
         if ($turnamen->isMahjong() || $turnamen->isFriendly()) {
             return false;
         }
 
-        $thirdPlace = $this->getThirdPlaceMatch($turnamen);
+        $thirdPlace = $this->getThirdPlaceMatch($turnamen, $idKategori);
 
         return $thirdPlace
             && $thirdPlace->status !== 'completed'
@@ -56,23 +58,23 @@ class TournamentCompletionService
             && $thirdPlace->isReadyForScoring();
     }
 
-    public function complete(Turnamen $turnamen): array
+    public function complete(Turnamen $turnamen, $idKategori = null): array
     {
         if ($turnamen->isMahjong()) {
-            return $this->completeMahjong($turnamen);
+            return $this->completeMahjong($turnamen, $idKategori);
         }
 
         if ($turnamen->isFriendly()) {
-            return $this->completeFriendly($turnamen);
+            return $this->completeFriendly($turnamen, $idKategori);
         }
 
-        if (! $this->canComplete($turnamen)) {
+        if (! $this->canComplete($turnamen, $idKategori)) {
             throw new RuntimeException('Turnamen belum dapat diselesaikan. Pastikan pertandingan Final sudah selesai.');
         }
 
-        return DB::transaction(function () use ($turnamen) {
-            $cancelledThirdPlace = $this->cancelUnfinishedThirdPlacePlayoff($turnamen);
-            $placements = $this->resolvePlacements($turnamen);
+        return DB::transaction(function () use ($turnamen, $idKategori) {
+            $cancelledThirdPlace = $this->cancelUnfinishedThirdPlacePlayoff($turnamen, $idKategori);
+            $placements = $this->resolvePlacements($turnamen, $idKategori);
             $placementConfig = config('tournament.points.placement', []);
             $awards = [];
 
@@ -92,10 +94,17 @@ class TournamentCompletionService
 
             $this->pointRewardService->awardPlacementPoints($awards);
 
-            $turnamen->update(['status' => 'completed']);
+            $kategori = $turnamen->resolveKategori($idKategori);
+            $kategori->update(['status' => 'completed']);
+
+            if ($turnamen->kategori()->count() <= 1
+                || ! $turnamen->kategori()->where('status', '!=', 'completed')->exists()) {
+                $turnamen->update(['status' => 'completed']);
+            }
 
             return [
                 'turnamen' => $turnamen->fresh(),
+                'kategori' => $kategori->fresh(),
                 'placements' => $placements,
                 'awards' => $awards,
                 'cancelled_third_place' => $cancelledThirdPlace,
@@ -103,9 +112,9 @@ class TournamentCompletionService
         });
     }
 
-    protected function cancelUnfinishedThirdPlacePlayoff(Turnamen $turnamen): bool
+    protected function cancelUnfinishedThirdPlacePlayoff(Turnamen $turnamen, $idKategori = null): bool
     {
-        $thirdPlace = $this->getThirdPlaceMatch($turnamen);
+        $thirdPlace = $this->getThirdPlaceMatch($turnamen, $idKategori);
 
         if (! $thirdPlace || in_array($thirdPlace->status, ['completed', 'cancelled'], true)) {
             return false;
@@ -116,37 +125,44 @@ class TournamentCompletionService
         return true;
     }
 
-    protected function completeFriendly(Turnamen $turnamen): array
+    protected function completeFriendly(Turnamen $turnamen, $idKategori = null): array
     {
-        if (! $this->canComplete($turnamen)) {
+        if (! $this->canComplete($turnamen, $idKategori)) {
             throw new RuntimeException('Turnamen Friendly belum dapat diselesaikan. Minimal satu pertandingan selesai diperlukan.');
         }
 
-        return DB::transaction(function () use ($turnamen) {
-            $standings = app(LeaderboardService::class)->getFriendlyStandings($turnamen->id);
+        return DB::transaction(function () use ($turnamen, $idKategori) {
+            $kategori = $turnamen->resolveKategori($idKategori);
+            $standings = app(LeaderboardService::class)->getFriendlyStandings($turnamen->id, $kategori->id);
 
-            $turnamen->update(['status' => 'completed']);
+            $kategori->update(['status' => 'completed']);
+
+            if ($turnamen->kategori()->count() <= 1
+                || ! $turnamen->kategori()->where('status', '!=', 'completed')->exists()) {
+                $turnamen->update(['status' => 'completed']);
+            }
 
             return [
                 'turnamen' => $turnamen->fresh(),
+                'kategori' => $kategori->fresh(),
                 'placements' => $standings->take(3)->values(),
                 'awards' => [],
             ];
         });
     }
 
-    protected function getFinalMatch(Turnamen $turnamen): ?Pertandingan
+    protected function getFinalMatch(Turnamen $turnamen, $idKategori = null): ?Pertandingan
     {
-        return Pertandingan::where('id_turnamen', $turnamen->id)
+        return Pertandingan::where('id_kategori', $turnamen->resolveKategori($idKategori)->id)
             ->whereNull('id_grup')
             ->where('nama_ronde', 'Final')
             ->orderByDesc('id')
             ->first();
     }
 
-    protected function getThirdPlaceMatch(Turnamen $turnamen): ?Pertandingan
+    protected function getThirdPlaceMatch(Turnamen $turnamen, $idKategori = null): ?Pertandingan
     {
-        return Pertandingan::where('id_turnamen', $turnamen->id)
+        return Pertandingan::where('id_kategori', $turnamen->resolveKategori($idKategori)->id)
             ->whereNull('id_grup')
             ->where('nama_ronde', 'Perebutan Juara 3')
             ->orderByDesc('id')
@@ -156,9 +172,9 @@ class TournamentCompletionService
     /**
      * @return array<int, int[]>
      */
-    protected function resolvePlacements(Turnamen $turnamen): array
+    protected function resolvePlacements(Turnamen $turnamen, $idKategori = null): array
     {
-        $final = $this->getFinalMatch($turnamen);
+        $final = $this->getFinalMatch($turnamen, $idKategori);
 
         if (! $final || $final->status !== 'completed') {
             throw new RuntimeException('Pertandingan Final belum selesai.');
@@ -166,7 +182,7 @@ class TournamentCompletionService
 
         $firstIds = $this->pointRewardService->resolveWinnerPemainIds($final);
         $secondIds = $this->resolveLoserIds($final);
-        $thirdIds = $this->resolveThirdPlaceIds($turnamen, $final, $secondIds);
+        $thirdIds = $this->resolveThirdPlaceIds($turnamen, $final, $secondIds, $idKategori);
 
         return [
             1 => $firstIds,
@@ -194,10 +210,10 @@ class TournamentCompletionService
         return [];
     }
 
-    protected function resolveThirdPlaceIds(Turnamen $turnamen, Pertandingan $final, array $secondPlaceIds): array
+    protected function resolveThirdPlaceIds(Turnamen $turnamen, Pertandingan $final, array $secondPlaceIds, $idKategori = null): array
     {
         // Prefer the explicit third-place playoff winner when it has been played.
-        $thirdPlace = $this->getThirdPlaceMatch($turnamen);
+        $thirdPlace = $this->getThirdPlaceMatch($turnamen, $idKategori);
 
         if ($thirdPlace && $thirdPlace->status === 'completed') {
             $winnerIds = $this->pointRewardService->resolveWinnerPemainIds($thirdPlace);
@@ -207,7 +223,7 @@ class TournamentCompletionService
             }
         }
 
-        $semifinals = Pertandingan::where('id_turnamen', $turnamen->id)
+        $semifinals = Pertandingan::where('id_kategori', $turnamen->resolveKategori()->id)
             ->whereNull('id_grup')
             ->where('nama_ronde', 'Semifinal')
             ->where('status', 'completed')
@@ -275,21 +291,22 @@ class TournamentCompletionService
         return $member ? (int) $member->poin_didapat : 0;
     }
 
-    protected function completeMahjong(Turnamen $turnamen): array
+    protected function completeMahjong(Turnamen $turnamen, $idKategori = null): array
     {
         $mahjongService = app(MahjongMatchmakingService::class);
 
-        if (! $mahjongService->canComplete($turnamen)) {
+        if (! $mahjongService->canComplete($turnamen, $idKategori)) {
             throw new RuntimeException('Turnamen Mahjong belum dapat diselesaikan. Pastikan grup final berisi 4 pemain.');
         }
 
-        return DB::transaction(function () use ($turnamen, $mahjongService) {
-            $mahjongService->commitCurrentRoundPoints($turnamen);
-            $placements = $mahjongService->resolveFinalPlacements($turnamen);
+        return DB::transaction(function () use ($turnamen, $mahjongService, $idKategori) {
+            $kategori = $turnamen->resolveKategori($idKategori);
+            $mahjongService->commitCurrentRoundPoints($turnamen, $kategori->id);
+            $placements = $mahjongService->resolveFinalPlacements($turnamen, $kategori->id);
             $placementConfig = config('tournament.points.placement', []);
             $awards = [];
 
-            TurnamenPemenang::where('id_turnamen', $turnamen->id)->delete();
+            TurnamenPemenang::where('id_kategori', $kategori->id)->delete();
 
             foreach ([1, 2, 3] as $place) {
                 $placement = $placements[$place] ?? null;
@@ -300,6 +317,7 @@ class TournamentCompletionService
 
                 TurnamenPemenang::create([
                     'id_turnamen' => $turnamen->id,
+                    'id_kategori' => $kategori->id,
                     'peringkat' => $place,
                     'id_pemain' => $placement['pemain_ids'][0],
                     'id_turnamen_peserta' => $placement['peserta_id'],
@@ -314,11 +332,17 @@ class TournamentCompletionService
             }
 
             $this->pointRewardService->awardPlacementPoints($awards);
-            $turnamen->update(['status' => 'completed']);
-            $turnamen->activeGrup()->update(['is_aktif' => false]);
+            $kategori->update(['status' => 'completed', 'mahjong_is_final' => true]);
+            $turnamen->competitionActiveGrup($kategori->id)->update(['is_aktif' => false]);
+
+            if ($turnamen->kategori()->count() <= 1
+                || ! $turnamen->kategori()->where('status', '!=', 'completed')->exists()) {
+                $turnamen->update(['status' => 'completed']);
+            }
 
             return [
                 'turnamen' => $turnamen->fresh(),
+                'kategori' => $kategori->fresh(),
                 'placements' => $placements,
                 'awards' => $awards,
             ];

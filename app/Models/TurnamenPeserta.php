@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTurnamenKategori;
 use App\Services\PaymentReceiptService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class TurnamenPeserta extends Model
 {
+    use BelongsToTurnamenKategori;
     const SUMBER_INTERNAL = 'internal';
     const SUMBER_EXTERNAL = 'external';
 
@@ -15,6 +17,7 @@ class TurnamenPeserta extends Model
 
     protected $fillable = [
         'id_turnamen',
+        'id_kategori',
         'id_pemain1',
         'status',
         'sumber',
@@ -24,6 +27,11 @@ class TurnamenPeserta extends Model
     public function turnamen()
     {
         return $this->belongsTo(Turnamen::class, 'id_turnamen');
+    }
+
+    public function kategori()
+    {
+        return $this->belongsTo(TurnamenKategori::class, 'id_kategori');
     }
 
     public function pemain1()
@@ -177,6 +185,11 @@ class TurnamenPeserta extends Model
     public function scopeForTurnamen($query, int $turnamenId)
     {
         return $query->where('id_turnamen', $turnamenId);
+    }
+
+    public function scopeForKategori($query, int $kategoriId)
+    {
+        return $query->where('id_kategori', $kategoriId);
     }
 
     public function scopeCompletePairs($query)

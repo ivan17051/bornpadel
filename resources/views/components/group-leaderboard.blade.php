@@ -1,4 +1,4 @@
-@props(['standings', 'turnamen' => null, 'refreshable' => false, 'showGroupHistory' => true])
+@props(['standings', 'turnamen' => null, 'kategori' => null, 'refreshable' => false, 'showGroupHistory' => true])
 
 @php
     $isDouble = optional($turnamen)->playsAsPairs();
@@ -9,7 +9,10 @@
 <div class="group-leaderboard"
      @if($refreshable)
          id="live-leaderboard"
-         data-refresh-url="{{ route('api.guest.standings', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+         data-refresh-url="{{ route('api.guest.standings', array_filter([
+             'id_turnamen' => optional($turnamen)->id,
+             'id_kategori' => optional($kategori)->id,
+         ])) }}"
          data-profile-base="{{ url('/pemain') }}/"
          @if($showHistory) data-show-group-history="1" @endif
      @endif>

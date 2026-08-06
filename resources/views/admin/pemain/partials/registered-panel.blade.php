@@ -101,9 +101,19 @@
                         {{ $pemain->total() }} pemain
                     @endif
                 </span>
-                @if ($turnamen && $turnamen->maks_peserta)
+                @php
+                    $capacityMaks = isset($kategori) && $kategori
+                        ? $kategori->maks_peserta
+                        : optional($turnamen)->maks_peserta;
+                    $availableQuery = array_filter([
+                        'id_turnamen' => optional($turnamen)->id,
+                        'id_kategori' => optional($kategori ?? null)->id
+                            ?? request('id_kategori'),
+                    ]);
+                @endphp
+                @if ($turnamen && $capacityMaks)
                     <span class="badge text-bg-light text-dark border">
-                        Maks. {{ $turnamen->maks_peserta }} disetujui
+                        Maks. {{ $capacityMaks }} disetujui
                     </span>
                 @endif
                 @if ($showBulkActions)
@@ -115,7 +125,7 @@
                     </button>
                 @endif
                 @if ($turnamen)
-                    <a href="{{ route('admin.pemain.available', request()->only('id_turnamen')) }}" class="btn btn-outline-primary btn-sm">
+                    <a href="{{ route('admin.pemain.available', $availableQuery) }}" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-person-plus me-1"></i> Tambah Pemain
                     </a>
                 @endif

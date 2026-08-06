@@ -42,7 +42,7 @@ class Pemain extends Model
         return app(\App\Services\PemainPhotoService::class)->url($this->foto);
     }
 
-    public function pesertaForTurnamen(?Turnamen $turnamen): ?TurnamenPeserta
+    public function pesertaForTurnamen(?Turnamen $turnamen, $idKategori = null): ?TurnamenPeserta
     {
         if (! $turnamen) {
             return null;
@@ -50,7 +50,7 @@ class Pemain extends Model
 
         return TurnamenPeserta::query()
             ->involvingPemain($this->id)
-            ->where('id_turnamen', $turnamen->id)
+            ->forKategori($turnamen->resolveKategori($idKategori)->id)
             ->first();
     }
 

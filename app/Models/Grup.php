@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTurnamenKategori;
 use Illuminate\Database\Eloquent\Model;
 
 class Grup extends Model
 {
+    use BelongsToTurnamenKategori;
     protected $table = 'grup';
 
     protected $fillable = [
         'id_turnamen',
+        'id_kategori',
         'nama',
         'babak',
         'ronde',
@@ -28,6 +31,11 @@ class Grup extends Model
     public function turnamen()
     {
         return $this->belongsTo(Turnamen::class, 'id_turnamen');
+    }
+
+    public function kategori()
+    {
+        return $this->belongsTo(TurnamenKategori::class, 'id_kategori');
     }
 
     public function members()

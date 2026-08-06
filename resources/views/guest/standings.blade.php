@@ -2,14 +2,23 @@
 
 @section('title', 'Klasemen')
 
+@php
+    $kategori = $kategori ?? null;
+    $kategoriList = $kategoriList ?? collect();
+    $standingsQuery = array_filter([
+        'id_turnamen' => optional($turnamen)->id,
+        'id_kategori' => optional($kategori)->id,
+    ]);
+@endphp
+
 @section('og')
     @include('guest.partials.og-meta', [
         'ogTurnamen' => $turnamen ?? null,
         'ogUrl' => isset($turnamen) && $turnamen
-            ? route('guest.standings', ['id_turnamen' => $turnamen->id])
+            ? route('guest.standings', $standingsQuery)
             : route('guest.standings'),
         'ogTitle' => isset($turnamen) && $turnamen
-            ? 'Klasemen — ' . $turnamen->nama
+            ? 'Klasemen — ' . $turnamen->nama . ($kategori ? ' · ' . $kategori->nama : '')
             : 'Klasemen — Born Padel',
     ])
 @endsection
@@ -29,8 +38,21 @@
             </h1>
             @if ($turnamen)
                 <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
+                @if ($kategori && optional($kategoriList)->count() > 1)
+                    <span class="badge text-bg-primary mt-2">{{ $kategori->nama }}</span>
+                @endif
             @endif
         </div>
+
+        @if ($turnamen)
+            @include('guest.partials.kategori-selector', [
+                'turnamen' => $turnamen,
+                'kategori' => $kategori,
+                'kategoriList' => $kategoriList,
+                'filterRoute' => route('guest.standings'),
+                'selectorHint' => 'Klasemen ditampilkan per kategori kompetisi.',
+            ])
+        @endif
 
         @if ($turnamen && $turnamen->isMahjong())
             @if (! empty($winners) && ! empty($winners['has_winners']))
@@ -45,17 +67,22 @@
             <x-mahjong-leaderboard
                 :standings="$standings"
                 :turnamen="$turnamen"
+                :kategori="$kategori"
                 :refreshable="true"
             />
         @elseif ($turnamen && $turnamen->isFriendly())
             <x-friendly-leaderboard
                 :standings="$standings"
                 :turnamen="$turnamen"
+                :kategori="$kategori"
                 :refreshable="true"
             />
         @else
             <div id="live-leaderboard"
-                 data-refresh-url="{{ route('api.guest.standings', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+                 data-refresh-url="{{ route('api.guest.standings', array_filter([
+                     'id_turnamen' => optional($turnamen)->id,
+                     'id_kategori' => optional($kategori)->id,
+                 ])) }}"
                  data-profile-base="{{ url('/pemain') }}/"
                  data-show-group-history="1">
                 <div id="group-standings-panel">

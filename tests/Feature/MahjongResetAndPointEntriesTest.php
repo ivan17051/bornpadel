@@ -57,7 +57,11 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame('ongoing', $turnamen->status);
         $this->assertFalse((bool) $turnamen->mahjong_is_final);
         $this->assertSame(0, Grup::where('id_turnamen', $turnamen->id)->count());
-        $this->assertSame(0, MahjongPoinEntry::count());
+        $this->assertSame(0, MahjongPoinEntry::query()
+            ->whereHas('grupMember.grup', function ($query) use ($turnamen) {
+                $query->where('id_turnamen', $turnamen->id);
+            })
+            ->count());
     }
 
     public function test_reset_rejected_when_completed(): void

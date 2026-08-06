@@ -1,11 +1,21 @@
-@extends('layouts.guest')
+﻿@extends('layouts.guest')
 
 @section('title', 'Pendaftaran')
+
+@php
+    $kategori = $kategori ?? null;
+    $kategoriList = $kategoriList ?? collect();
+    $needsKategoriSelection = $needsKategoriSelection ?? false;
+    $registerQuery = array_filter([
+        'id_turnamen' => $turnamen->id,
+        'id_kategori' => optional($kategori)->id,
+    ]);
+@endphp
 
 @section('og')
     @include('guest.partials.og-meta', [
         'ogTurnamen' => $turnamen,
-        'ogUrl' => route('guest.register', ['id_turnamen' => $turnamen->id]),
+        'ogUrl' => route('guest.register', $registerQuery),
         'ogDescription' => trim(sprintf(
             'Daftar %s%s. %s',
             $turnamen->jenis_label,
@@ -19,14 +29,17 @@
 @php
     $isDouble = $turnamen->requiresPairRegistration();
     $allowsGroup = $turnamen->allowsGroupRegistration();
-    $groupSize = $allowsGroup ? $turnamen->friendlyPlayersPerGroup() : 4;
+    $groupSize = $allowsGroup
+        ? ($kategori ? $kategori->friendlyPlayersPerGroup() : $turnamen->friendlyPlayersPerGroup())
+        : 4;
     $registrationMode = old('registration_mode', 'single');
     $isPairMode = $isDouble && $registrationMode === 'pair';
     $isGroupMode = $allowsGroup && $registrationMode === 'group';
-    $capacityLabel = $turnamen->maks_peserta
-        ? number_format($turnamen->maks_peserta)
+    $maksPeserta = $kategori ? $kategori->maks_peserta : $turnamen->maks_peserta;
+    $capacityLabel = $maksPeserta
+        ? number_format($maksPeserta)
         : 'Tidak Terbatas';
-    $hargaSatuan = (float) $turnamen->harga;
+    $hargaSatuan = (float) ($kategori ? $kategori->harga : $turnamen->harga);
     $hargaMultiplier = $isGroupMode ? $groupSize : ($isPairMode ? 2 : 1);
     $hargaTampil = $hargaSatuan * $hargaMultiplier;
 @endphp
@@ -38,6 +51,26 @@
             <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
         </div>
 
+        @include('guest.partials.kategori-selector', [
+            'turnamen' => $turnamen,
+            'kategori' => $kategori,
+            'kategoriList' => $kategoriList,
+            'filterRoute' => route('guest.register'),
+            'disableWhenNotOpen' => true,
+            'selectorHint' => 'Pilih kategori kompetisi sebelum mendaftar. Satu nomor HP boleh mendaftar di beberapa kategori.',
+        ])
+
+        @if ($needsKategoriSelection)
+            <div class="alert alert-info guest-card">
+                <i class="bi bi-info-circle me-2"></i>
+                Pilih kategori kompetisi di atas untuk melanjutkan pendaftaran.
+            </div>
+            <div class="text-center">
+                <a href="{{ route('guest.landing') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i> Kembali
+                </a>
+            </div>
+        @else
         <div class="card guest-card mb-4">
             <div class="card-body py-3 px-4">
                 <div class="row text-center g-3">
@@ -95,6 +128,9 @@
                       data-group-size="{{ $groupSize }}">
                     @csrf
                     <input type="hidden" name="id_turnamen" value="{{ $turnamen->id }}">
+                    @if ($kategori)
+                        <input type="hidden" name="id_kategori" value="{{ $kategori->id }}">
+                    @endif
 
                     @if ($isDouble || $allowsGroup)
                         <div class="mb-4">
@@ -194,11 +230,12 @@
                 </form>
             </div>
         </div>
+        @endif
     </div>
 </div>
 @endsection
 
-@if ($isDouble || $allowsGroup)
+@if (! ($needsKategoriSelection ?? false) && ($isDouble || $allowsGroup))
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {

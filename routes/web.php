@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\PemainController;
 use App\Http\Controllers\Admin\PertandinganController;
 use App\Http\Controllers\Admin\StandingsController as AdminStandingsController;
 use App\Http\Controllers\Admin\TurnamenController;
+use App\Http\Controllers\Admin\TurnamenKategoriController;
 use App\Http\Controllers\Admin\TurnamenOperasiController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Guest\BracketController;
@@ -51,6 +52,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/turnamen/{turnamen}/edit', [TurnamenController::class, 'edit'])->name('turnamen.edit');
             Route::put('/turnamen/{turnamen}', [TurnamenController::class, 'update'])->name('turnamen.update');
             Route::delete('/turnamen/{turnamen}', [TurnamenController::class, 'destroy'])->name('turnamen.destroy');
+
+            Route::post('/turnamen/{turnamen}/kategori', [TurnamenKategoriController::class, 'store'])
+                ->name('turnamen.kategori.store');
+            Route::put('/turnamen/{turnamen}/kategori/{kategori}', [TurnamenKategoriController::class, 'update'])
+                ->name('turnamen.kategori.update');
+            Route::post('/turnamen/{turnamen}/kategori/{kategori}/status', [TurnamenKategoriController::class, 'updateStatus'])
+                ->name('turnamen.kategori.status');
+            Route::delete('/turnamen/{turnamen}/kategori/{kategori}', [TurnamenKategoriController::class, 'destroy'])
+                ->name('turnamen.kategori.destroy');
 
             Route::get('/pengguna', [UserController::class, 'index'])->name('pengguna.index');
             Route::get('/pengguna/create', [UserController::class, 'create'])->name('pengguna.create');

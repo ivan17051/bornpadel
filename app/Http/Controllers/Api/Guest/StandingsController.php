@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api\Guest;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ResolvesPublicKategori;
 use App\Services\LeaderboardService;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class StandingsController extends Controller
 {
+    use ResolvesPublicKategori;
+
     public function index(Request $request, LeaderboardService $leaderboardService)
     {
         $turnamenId = $request->input('id_turnamen');
@@ -15,8 +19,28 @@ class StandingsController extends Controller
             ? \App\Models\Turnamen::find($turnamenId)
             : $leaderboardService->getActiveTournament();
 
+        $kategoriId = null;
+        if ($turnamen) {
+            try {
+                if ($turnamen->hasMultipleKategori() && ! $request->filled('id_kategori')) {
+                    $kategoriId = optional($turnamen->defaultKategori())->id;
+                } else {
+                    $kategoriId = $this->resolveApiKategori(
+                        $turnamen,
+                        $request->input('id_kategori')
+                    )->id;
+                }
+            } catch (RuntimeException $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                    'data' => [],
+                ], 422);
+            }
+        }
+
         if ($turnamen && $turnamen->isMahjong()) {
-            $mahjongStandings = $leaderboardService->getMahjongStandingsByBabak($turnamen->id);
+            $mahjongStandings = $leaderboardService->getMahjongStandingsByBabak($turnamen->id, $kategoriId);
 
             if ($mahjongStandings['sections']->isEmpty() && $mahjongStandings['recap']->isEmpty()) {
                 return response()->json([
@@ -35,7 +59,7 @@ class StandingsController extends Controller
         }
 
         if ($turnamen && $turnamen->isFriendly()) {
-            $standings = $leaderboardService->getFriendlyStandings($turnamen->id);
+            $standings = $leaderboardService->getFriendlyStandings($turnamen->id, $kategoriId);
 
             if ($standings->isEmpty()) {
                 return response()->json([
@@ -53,7 +77,7 @@ class StandingsController extends Controller
             ]);
         }
 
-        $standings = $leaderboardService->getStandings($turnamenId);
+        $standings = $leaderboardService->getStandings($turnamen ? $turnamen->id : $turnamenId, $kategoriId);
 
         if ($standings->isEmpty()) {
             return response()->json([
@@ -70,7 +94,7 @@ class StandingsController extends Controller
         }
 
         $postLeague = $turnamen && $turnamen->usesKnockoutBracket()
-            ? $leaderboardService->getPostLeagueRanking($turnamen->id)
+            ? $leaderboardService->getPostLeagueRanking($turnamen->id, $kategoriId)
             : ['sections' => collect(), 'has_bracket' => false, 'is_double' => false];
 
         return response()->json([

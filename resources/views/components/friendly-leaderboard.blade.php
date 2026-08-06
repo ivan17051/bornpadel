@@ -1,9 +1,12 @@
-@props(['standings', 'turnamen' => null, 'refreshable' => false])
+@props(['standings', 'turnamen' => null, 'kategori' => null, 'refreshable' => false])
 
 <div class="friendly-leaderboard"
      @if($refreshable)
          id="live-leaderboard"
-         data-refresh-url="{{ route('api.guest.standings', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+         data-refresh-url="{{ route('api.guest.standings', array_filter([
+             'id_turnamen' => optional($turnamen)->id,
+             'id_kategori' => optional($kategori)->id,
+         ])) }}"
          data-profile-base="{{ url('/pemain') }}/"
          data-friendly="1"
      @endif>

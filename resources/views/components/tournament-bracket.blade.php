@@ -1,4 +1,4 @@
-@props(['bracket', 'turnamen' => null, 'refreshable' => false, 'editable' => false])
+@props(['bracket', 'turnamen' => null, 'kategori' => null, 'refreshable' => false, 'editable' => false])
 
 @php
     $leafCount = 1;
@@ -16,7 +16,10 @@
      data-profile-base="{{ url('/pemain') }}/"
      @if($refreshable || $editable)
          id="live-bracket"
-         data-refresh-url="{{ route('api.guest.bracket', array_filter(['id_turnamen' => optional($turnamen)->id])) }}"
+         data-refresh-url="{{ route('api.guest.bracket', array_filter([
+             'id_turnamen' => optional($turnamen)->id,
+             'id_kategori' => optional($kategori)->id,
+         ])) }}"
          data-leaf-count="{{ $leafCount }}"
          data-has-third="{{ $hasThirdPlace ? '1' : '0' }}"
          data-photo-placeholder="{{ app(\App\Services\PemainPhotoService::class)->placeholderUrl() }}"

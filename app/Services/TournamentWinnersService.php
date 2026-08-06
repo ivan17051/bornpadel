@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenKategori;
 
 class TournamentWinnersService
 {
@@ -16,17 +17,19 @@ class TournamentWinnersService
         $this->photoService = $photoService;
     }
 
-    public function getWinners(Turnamen $turnamen): array
+    public function getWinners(Turnamen $turnamen, $idKategori = null): array
     {
-        if ($turnamen->status !== 'completed') {
+        $kategori = $turnamen->resolveKategori($idKategori);
+
+        if ($kategori->status !== 'completed' && $turnamen->status !== 'completed') {
             return $this->emptyPayload();
         }
 
         if ($turnamen->isMahjong()) {
-            return $this->fromMahjong($turnamen);
+            return $this->fromMahjong($turnamen, $kategori);
         }
 
-        return $this->fromKnockout($turnamen);
+        return $this->fromKnockout($turnamen, $kategori);
     }
 
     protected function emptyPayload(): array
@@ -39,11 +42,9 @@ class TournamentWinnersService
         ];
     }
 
-    protected function fromMahjong(Turnamen $turnamen): array
+    protected function fromMahjong(Turnamen $turnamen, TurnamenKategori $kategori): array
     {
-        $rows = $turnamen->relationLoaded('pemenang')
-            ? $turnamen->pemenang
-            : $turnamen->pemenang()->with('pemain')->orderBy('peringkat')->get();
+        $rows = $kategori->pemenang()->with('pemain')->orderBy('peringkat')->get();
 
         if ($rows->isEmpty()) {
             return $this->emptyPayload();
@@ -66,9 +67,9 @@ class TournamentWinnersService
         return $payload;
     }
 
-    protected function fromKnockout(Turnamen $turnamen): array
+    protected function fromKnockout(Turnamen $turnamen, TurnamenKategori $kategori): array
     {
-        $bracket = $this->knockoutBracketService->getBracketTree($turnamen);
+        $bracket = $this->knockoutBracketService->getBracketTree($turnamen, $kategori->id);
 
         if ($bracket === []) {
             return $this->emptyPayload();

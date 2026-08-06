@@ -7,16 +7,23 @@
         $isFriendly = $isFriendly ?? $turnamen->isFriendly();
         $groupingUnitCount = $groupingUnitCount ?? $approvedCount;
         $pairingSummary = $pairingSummary ?? null;
-        $isPairingOpen = $turnamen->playsAsPairs() && $turnamen->isRegistrationOpen();
+        $kategori = $kategori ?? ($turnamen->resolveKategori($kategoriId ?? null));
+        $kategoriId = $kategoriId ?? ($kategori ? (int) $kategori->id : null);
+        $registrationOpen = $registrationOpen ?? ($kategori ? $kategori->isRegistrationOpen() : $turnamen->isRegistrationOpen());
+        $isPairingOpen = $turnamen->playsAsPairs() && $registrationOpen;
         $randomizesPartners = $turnamen->randomizesPartners();
         $requiresPairRegistration = $turnamen->requiresPairRegistration();
-        $bracketUrl = $bracketUrl ?? route('admin.bracket.index', ['id_turnamen' => $turnamen->id]);
+        $bracketUrl = $bracketUrl ?? route('admin.bracket.index', array_filter([
+            'id_turnamen' => $turnamen->id,
+            'id_kategori' => $kategoriId,
+        ]));
         $isKnockoutPhase = ! $isMahjong && ! $isFriendly && ($hasKnockoutBracket ?? false);
         $expandGroupsByDefault = $isMahjong || $isFriendly || ! $isKnockoutPhase;
         $expandKnockoutByDefault = $isKnockoutPhase;
         $groupsEditable = ! $isMahjong && ($canEditGroups ?? false);
+        $statusSource = $kategori ?? $turnamen;
     @endphp
-    <div class="card mb-4">
+    <div class="card mb-4" data-workspace-kategori="{{ $kategoriId }}">
         <div class="card-header d-flex justify-content-between align-items-center row">
             <div class="col-md-6">
                 <h5 class="card-title mb-0">{{ $turnamen->nama }}</h5>
@@ -29,8 +36,8 @@
             <div class="row g-3 align-items-center">
                 <div class="col-md-8">
                     <div class="d-flex flex-wrap gap-2 mb-2">
-                        <span class="badge bg-{{ $turnamen->status === 'open' ? 'success' : 'primary' }} fs-6">
-                            Status: {{ strtoupper($turnamen->status) }}
+                        <span class="badge bg-{{ $statusSource->status === 'open' ? 'success' : 'primary' }} fs-6">
+                            Status: {{ strtoupper($statusSource->status) }}
                         </span>
                         <span class="badge text-bg-secondary fs-6">
                             @if ($isPairingOpen)
@@ -44,7 +51,7 @@
                         @endif
                     </div>
                     <p class="text-muted mb-0 small">
-                        @if ($turnamen->isRegistrationOpen())
+                        @if ($registrationOpen)
                             @if ($isPairingOpen && $randomizesPartners && ($pairingSummary['odd_player_warning'] ?? false))
                                 Pendaftaran masih dibuka. <strong class="text-danger">Jumlah pemain approved ganjil ({{ $pairingSummary['approved_solos'] ?? 0 }}).</strong>
                                 Tolak satu pemain atau tambahkan pemain baru sebelum menutup pendaftaran.
@@ -146,12 +153,13 @@
                         </div>
                     @endif
                     <div class="d-grid gap-2">
-                        @if ($turnamen->isRegistrationOpen())
+                        @if ($registrationOpen)
                         <button type="button"
                                 id="btn-close-registration"
                                 class="btn btn-warning"
                                 data-url="{{ route('admin.matchmaking.close-registration') }}"
                                 data-turnamen="{{ $turnamen->id }}"
+                                data-kategori="{{ $kategoriId }}"
                                 data-randomize-partners="{{ $randomizesPartners ? '1' : '0' }}"
                                 data-pairs-preview="{{ $pairingSummary['pairs_preview'] ?? 0 }}"
                                 @if (! $canCloseRegistration) disabled @endif>
@@ -172,7 +180,7 @@
                                 <button type="button"
                                         class="btn btn-outline-primary btn-friendly-skeleton"
                                         data-url="{{ route('admin.matchmaking.friendly.skeleton') }}"
-                                        data-turnamen="{{ $turnamen->id }}">
+                                        data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}">
                                     <i class="bi bi-grid-3x3-gap me-1"></i> Buat Kerangka Grup
                                 </button>
                             @endif
@@ -180,7 +188,7 @@
                                 <button type="button"
                                         class="btn btn-primary btn-matchmaking-grup"
                                         data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                         data-mode="random"
                                         data-mahjong="{{ $isMahjong ? '1' : '0' }}"
                                         data-friendly="{{ $isFriendly ? '1' : '0' }}">
@@ -189,7 +197,7 @@
                                 <button type="button"
                                         class="btn btn-secondary btn-matchmaking-grup"
                                         data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                         data-mode="by_rating"
                                         data-mahjong="{{ $isMahjong ? '1' : '0' }}"
                                         data-friendly="{{ $isFriendly ? '1' : '0' }}">
@@ -199,7 +207,7 @@
                                 <button type="button"
                                         class="btn btn-primary btn-matchmaking-grup"
                                         data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                         data-mode="random"
                                         data-mahjong="0"
                                         data-friendly="1">
@@ -208,7 +216,7 @@
                                 <button type="button"
                                         class="btn btn-secondary btn-matchmaking-grup"
                                         data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                         data-mode="by_rating"
                                         data-mahjong="0"
                                         data-friendly="1">
@@ -221,7 +229,7 @@
                                     id="btn-generate-group-matches"
                                     class="btn btn-success"
                                     data-url="{{ route('admin.matchmaking.generate-group-matches') }}"
-                                    data-turnamen="{{ $turnamen->id }}">
+                                    data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}">
                                 <i class="bi bi-calendar2-check me-1"></i> Buat Matchmaking
                             </button>
                         @endif
@@ -230,7 +238,7 @@
                                     id="btn-reset-groups"
                                     class="btn btn-outline-danger"
                                     data-url="{{ route('admin.matchmaking.reset-groups') }}"
-                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                     data-mahjong="{{ $isMahjong ? '1' : '0' }}"
                                     data-friendly="{{ $isFriendly ? '1' : '0' }}">
                                 <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Grup & Matchmaking
@@ -241,7 +249,7 @@
                                     id="btn-reshuffle-groups"
                                     class="btn btn-outline-primary"
                                     data-url="{{ route('admin.matchmaking.reshuffle-groups') }}"
-                                    data-turnamen="{{ $turnamen->id }}">
+                                    data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}">
                                 <i class="bi bi-arrow-repeat me-1"></i> Reshuffle Groups
                             </button>
                         @endif
@@ -250,7 +258,7 @@
                                 id="btn-end-group-stage"
                                 class="btn btn-success {{ $canEndGroupStage ? '' : 'd-none' }}"
                                 data-url="{{ route('admin.matchmaking.end-group-stage') }}"
-                                data-turnamen="{{ $turnamen->id }}"
+                                data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                 data-bracket-url="{{ $bracketUrl }}"
                                 data-jenis="{{ $turnamen->jenis }}"
                                 data-mahjong="{{ $isMahjong ? '1' : '0' }}"
@@ -266,7 +274,7 @@
                                     id="btn-complete-tournament"
                                     class="btn btn-dark"
                                     data-url="{{ route('admin.matchmaking.complete-tournament') }}"
-                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                     data-pending-third-place="{{ ($hasPendingThirdPlacePlayoff ?? false) ? '1' : '0' }}">
                                 <i class="bi bi-trophy me-1"></i> Selesaikan Turnamen
                             </button>
@@ -281,7 +289,7 @@
                                     id="btn-reset-bracket"
                                     class="btn btn-outline-danger"
                                     data-url="{{ route('admin.matchmaking.reset-bracket') }}"
-                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                     data-has-scores="{{ ($hasKnockoutScores ?? false) ? '1' : '0' }}">
                                 <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Bracket
                             </button>
@@ -294,7 +302,7 @@
 
     @php
         $showFriendlyRegistrationPanel = $isFriendly
-            && ($turnamen->isRegistrationOpen() || $grup->isEmpty())
+            && (($registrationOpen ?? $turnamen->isRegistrationOpen()) || $grup->isEmpty())
             && isset($friendlyRegistrationGroups);
         $canBulkApproveFriendly = auth()->user()->isAdmin();
         $turnamenOngoing = $turnamen->status === 'ongoing';
@@ -302,7 +310,7 @@
 
     @if ($showFriendlyRegistrationPanel)
         <div class="card mb-4 pemain-table-card"
-             data-turnamen-id="{{ $turnamen->id }}"
+             data-turnamen-id="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
              data-bulk-approve-url="{{ route('admin.peserta.bulk-approve') }}">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="card-title mb-0">
@@ -438,7 +446,7 @@
              @if ($groupsEditable)
                  data-group-swap="1"
                  data-swap-url="{{ route('admin.matchmaking.swap-group-members') }}"
-                 data-turnamen="{{ $turnamen->id }}"
+                 data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                  data-unit-label="{{ $unitLabel }}"
                  @if ($isFriendly)
                      data-friendly-edit="1"
@@ -1003,7 +1011,7 @@
                             <button type="button"
                                     class="btn btn-primary btn-matchmaking-grup"
                                     data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                     data-mode="random"
                                     data-mahjong="0">
                                 <i class="bi bi-shuffle me-1"></i> Random Grup
@@ -1011,7 +1019,7 @@
                             <button type="button"
                                     class="btn btn-secondary btn-matchmaking-grup"
                                     data-url="{{ route('admin.matchmaking.random-grup') }}"
-                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-turnamen="{{ $turnamen->id }}" data-kategori="{{ $kategoriId }}"
                                     data-mode="by_rating"
                                     data-mahjong="0">
                                 <i class="bi bi-bar-chart-steps me-1"></i> Grup by Rating

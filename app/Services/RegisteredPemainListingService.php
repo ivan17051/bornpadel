@@ -10,9 +10,12 @@ use Illuminate\Http\Request;
 
 class RegisteredPemainListingService
 {
-    public function paginate(Request $request, ?Turnamen $turnamen): array
+    public function paginate(Request $request, ?Turnamen $turnamen, $idKategori = null): array
     {
         $isDoubleView = $turnamen && $turnamen->playsAsPairs() && $turnamen->isRegistrationClosed();
+        $kategoriId = $turnamen
+            ? (int) $turnamen->resolveKategori($idKategori ?? ($request->filled('id_kategori') ? (int) $request->id_kategori : null))->id
+            : null;
 
         if (! $turnamen) {
             return [
@@ -25,7 +28,7 @@ class RegisteredPemainListingService
 
         if ($isDoubleView) {
             $pesertaQuery = TurnamenPeserta::query()
-                ->forTurnamen($turnamen->id)
+                ->forKategori($kategoriId)
                 ->whereHas('pasanganAsPeserta1')
                 ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1']);
 
@@ -58,9 +61,9 @@ class RegisteredPemainListingService
 
         $query = Pemain::query();
 
-        $query->where(function ($builder) use ($turnamen, $request) {
-            $builder->whereHas('turnamenPesertaAsPemain1', function ($q) use ($turnamen, $request) {
-                $q->where('id_turnamen', $turnamen->id);
+        $query->where(function ($builder) use ($kategoriId, $request) {
+            $builder->whereHas('turnamenPesertaAsPemain1', function ($q) use ($kategoriId, $request) {
+                $q->where('id_kategori', $kategoriId);
                 if ($request->filled('status')) {
                     $q->where('status', $request->status);
                 }
@@ -76,8 +79,8 @@ class RegisteredPemainListingService
         }
 
         $query->with([
-            'turnamenPesertaAsPemain1' => function ($q) use ($turnamen, $request) {
-                $q->where('id_turnamen', $turnamen->id);
+            'turnamenPesertaAsPemain1' => function ($q) use ($kategoriId, $request, $turnamen) {
+                $q->where('id_kategori', $kategoriId);
 
                 if ($request->filled('status')) {
                     $q->where('status', $request->status);
@@ -93,13 +96,13 @@ class RegisteredPemainListingService
             },
         ]);
 
-        $this->applyPemainSort($query, $request, $turnamen);
+        $this->applyPemainSort($query, $request, $turnamen, $kategoriId);
 
         return [
             'pemain' => $query->paginate(15)->withQueryString(),
             'peserta' => null,
             'isDoubleView' => false,
-            'soloPesertaOptions' => $this->resolveSoloPesertaOptions($turnamen),
+            'soloPesertaOptions' => $this->resolveSoloPesertaOptions($turnamen, $kategoriId),
         ];
     }
 
@@ -108,10 +111,13 @@ class RegisteredPemainListingService
         return strtolower((string) $request->query('dir', 'asc')) === 'desc' ? 'desc' : 'asc';
     }
 
-    protected function applyPemainSort(Builder $query, Request $request, Turnamen $turnamen): void
+    protected function applyPemainSort(Builder $query, Request $request, Turnamen $turnamen, $kategoriId = null): void
     {
         $sort = (string) $request->query('sort', '');
         $dir = $this->sortDirection($request);
+        $kategoriId = $kategoriId
+            ? (int) $kategoriId
+            : (int) $turnamen->resolveKategori()->id;
 
         $allowed = ['nama', 'no_hp', 'gender', 'rating', 'status'];
 
@@ -121,7 +127,7 @@ class RegisteredPemainListingService
 
         if (! in_array($sort, $allowed, true)) {
             if ($turnamen->allowsGroupRegistration()) {
-                $this->applyFriendlyGroupDefaultSort($query, $turnamen);
+                $this->applyFriendlyGroupDefaultSort($query, $turnamen, $kategoriId);
             } else {
                 $query->latest();
             }
@@ -131,9 +137,9 @@ class RegisteredPemainListingService
 
         if ($sort === 'status') {
             $query->select('m_pemain.*')
-                ->join('turnamen_peserta as tp_sort', function ($join) use ($turnamen) {
+                ->join('turnamen_peserta as tp_sort', function ($join) use ($kategoriId) {
                     $join->on('m_pemain.id', '=', 'tp_sort.id_pemain1')
-                        ->where('tp_sort.id_turnamen', '=', $turnamen->id);
+                        ->where('tp_sort.id_kategori', '=', $kategoriId);
                 })
                 ->orderBy('tp_sort.status', $dir);
 
@@ -142,9 +148,9 @@ class RegisteredPemainListingService
 
         if ($sort === 'partner') {
             $query->select('m_pemain.*')
-                ->join('turnamen_peserta as tp_partner', function ($join) use ($turnamen) {
+                ->join('turnamen_peserta as tp_partner', function ($join) use ($kategoriId) {
                     $join->on('m_pemain.id', '=', 'tp_partner.id_pemain1')
-                        ->where('tp_partner.id_turnamen', '=', $turnamen->id);
+                        ->where('tp_partner.id_kategori', '=', $kategoriId);
                 })
                 ->leftJoin('turnamen_pasangan as tp_pair', 'tp_pair.id_peserta_1', '=', 'tp_partner.id')
                 ->leftJoin('turnamen_peserta as tp_partner_row', 'tp_partner_row.id', '=', 'tp_pair.id_peserta_2')
@@ -157,12 +163,16 @@ class RegisteredPemainListingService
         $query->orderBy($sort, $dir);
     }
 
-    protected function applyFriendlyGroupDefaultSort(Builder $query, Turnamen $turnamen): void
+    protected function applyFriendlyGroupDefaultSort(Builder $query, Turnamen $turnamen, $kategoriId = null): void
     {
+        $kategoriId = $kategoriId
+            ? (int) $kategoriId
+            : (int) $turnamen->resolveKategori()->id;
+
         $query->select('m_pemain.*')
-            ->join('turnamen_peserta as tp_fg', function ($join) use ($turnamen) {
+            ->join('turnamen_peserta as tp_fg', function ($join) use ($kategoriId) {
                 $join->on('m_pemain.id', '=', 'tp_fg.id_pemain1')
-                    ->where('tp_fg.id_turnamen', '=', $turnamen->id);
+                    ->where('tp_fg.id_kategori', '=', $kategoriId);
             })
             ->leftJoin('turnamen_grup_pendaftaran_member as tgm', 'tgm.id_peserta', '=', 'tp_fg.id')
             ->leftJoin('turnamen_grup_pendaftaran as tgp', 'tgp.id', '=', 'tgm.id_grup_pendaftaran')
@@ -216,12 +226,12 @@ class RegisteredPemainListingService
         $query->orderBy('turnamen_peserta.status', $dir);
     }
 
-    protected function resolveSoloPesertaOptions(Turnamen $turnamen)
+    protected function resolveSoloPesertaOptions(Turnamen $turnamen, $idKategori = null)
     {
         if (! $turnamen->requiresPairRegistration() || $turnamen->isRegistrationClosed()) {
             return collect();
         }
 
-        return app(PemainRegistrationService::class)->getSoloPesertaOptions($turnamen);
+        return app(PemainRegistrationService::class)->getSoloPesertaOptions($turnamen, $idKategori);
     }
 }

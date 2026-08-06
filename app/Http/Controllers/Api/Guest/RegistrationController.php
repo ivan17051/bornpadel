@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Api\Guest;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ResolvesPublicKategori;
 use App\Http\Requests\StorePemainRegistrationRequest;
 use App\Models\TurnamenPeserta;
 use App\Services\PemainRegistrationService;
 use Illuminate\Http\JsonResponse;
+use RuntimeException;
 
 class RegistrationController extends Controller
 {
+    use ResolvesPublicKategori;
+
     protected $registrationService;
 
     public function __construct(PemainRegistrationService $registrationService)
@@ -30,7 +34,27 @@ class RegistrationController extends Controller
             ], 422);
         }
 
+        try {
+            $kategori = $this->resolveApiKategori(
+                $turnamen,
+                $request->filled('id_kategori') ? $request->input('id_kategori') : null
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        if (! $kategori->isRegistrationOpen()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pendaftaran untuk kategori ini sudah ditutup.',
+            ], 422);
+        }
+
         $buktiBayar = $request->file('bukti_bayar');
+        $kategoriId = $kategori->id;
 
         try {
             if ($turnamen->allowsGroupRegistration() && $request->isGroupRegistration()) {
@@ -41,7 +65,10 @@ class RegistrationController extends Controller
                     $request->groupFotosPayload(),
                     $buktiBayar,
                     TurnamenPeserta::SUMBER_INTERNAL,
-                    false
+                    false,
+                    null,
+                    null,
+                    $kategoriId
                 );
 
                 $players = $result['players'];
@@ -59,13 +86,16 @@ class RegistrationController extends Controller
                     $request->file('foto_2'),
                     $buktiBayar,
                     TurnamenPeserta::SUMBER_INTERNAL,
-                    false
+                    false,
+                    null,
+                    null,
+                    $kategoriId
                 );
 
                 $pemain = $pair['pemain'];
                 $partner = $pair['partner'];
                 $peserta = TurnamenPeserta::query()
-                    ->forTurnamen($turnamen->id)
+                    ->forKategori($kategoriId)
                     ->where('id_pemain1', $pemain->id)
                     ->first();
                 $pasangan = optional($peserta)->pasangan;
@@ -79,7 +109,8 @@ class RegistrationController extends Controller
                     $request->file('foto'),
                     $buktiBayar,
                     TurnamenPeserta::SUMBER_INTERNAL,
-                    false
+                    false,
+                    $kategoriId
                 );
                 $partner = null;
                 $pasangan = null;
@@ -113,20 +144,20 @@ class RegistrationController extends Controller
                     'id' => $pemain->id,
                     'nama' => $pemain->nama,
                     'no_hp' => $pemain->no_hp,
-                    'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
+                    'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen, $kategoriId),
                 ],
                 'partner' => $partner ? [
                     'id' => $partner->id,
                     'nama' => $partner->nama,
                     'no_hp' => $partner->no_hp,
-                    'status' => $this->registrationService->getRegistrationStatus($partner, $turnamen),
+                    'status' => $this->registrationService->getRegistrationStatus($partner, $turnamen, $kategoriId),
                 ] : null,
-                'players' => $players->map(function ($player) use ($turnamen) {
+                'players' => $players->map(function ($player) use ($turnamen, $kategoriId) {
                     return [
                         'id' => $player->id,
                         'nama' => $player->nama,
                         'no_hp' => $player->no_hp,
-                        'status' => $this->registrationService->getRegistrationStatus($player, $turnamen),
+                        'status' => $this->registrationService->getRegistrationStatus($player, $turnamen, $kategoriId),
                     ];
                 })->values()->all(),
                 'pasangan_id' => optional($pasangan)->id,
@@ -134,6 +165,10 @@ class RegistrationController extends Controller
                     'id' => $turnamen->id,
                     'nama' => $turnamen->nama,
                     'jenis' => $turnamen->jenis,
+                ],
+                'kategori' => [
+                    'id' => $kategori->id,
+                    'nama' => $kategori->nama,
                 ],
             ],
         ], 201);

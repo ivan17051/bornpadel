@@ -68,7 +68,9 @@ class TurnamenController extends Controller
 
     public function edit(Turnamen $turnamen)
     {
-        return view('admin.turnamen.edit', compact('turnamen'));
+        $kategoriList = $turnamen->kategori()->ordered()->get();
+
+        return view('admin.turnamen.edit', compact('turnamen', 'kategoriList'));
     }
 
     public function update(UpdateTurnamenRequest $request, Turnamen $turnamen)
@@ -100,6 +102,19 @@ class TurnamenController extends Controller
         }
 
         $turnamen->update($data);
+
+        // Keep default category in sync when the event is still single-competition.
+        if ($turnamen->kategori()->count() <= 1) {
+            $default = $turnamen->ensureDefaultKategori();
+            $default->fill([
+                'harga' => $turnamen->harga,
+                'maks_peserta' => $turnamen->maks_peserta,
+                'status' => in_array($turnamen->status, ['draft', 'open', 'ongoing', 'completed'], true)
+                    ? $turnamen->status
+                    : $default->status,
+                'players_per_group' => $turnamen->players_per_group,
+            ])->save();
+        }
 
         return redirect()
             ->route('admin.turnamen.index')

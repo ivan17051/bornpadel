@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\ResolvesRequestKategori;
 use App\Http\Controllers\Controller;
 use App\Models\Grup;
 use App\Models\GrupMember;
@@ -12,6 +13,7 @@ use App\Services\FriendlyMatchmakingService;
 use App\Services\GroupMatchmakingService;
 use App\Services\KnockoutBracketService;
 use App\Services\MahjongMatchmakingService;
+use App\Services\MatchmakingPageService;
 use App\Services\MatchScoringService;
 use App\Services\TournamentAccessService;
 use App\Services\TournamentCompletionService;
@@ -22,6 +24,8 @@ use RuntimeException;
 
 class MatchmakingController extends Controller
 {
+    use ResolvesRequestKategori;
+
     protected $matchmakingService;
     protected $mahjongService;
     protected $friendlyService;
@@ -48,170 +52,22 @@ class MatchmakingController extends Controller
         $this->scoringService = $scoringService;
     }
 
-    public function index(Request $request)
+    public function index(Request $request, MatchmakingPageService $matchmakingPageService)
     {
         $turnamenList = $this->matchmakingService->listForFilter();
-        $turnamen = $this->matchmakingService->resolveTournament(
-            $request->filled('id_turnamen') ? (int) $request->id_turnamen : null,
-            false
-        );
-        $approvedCount = $turnamen
-            ? $this->matchmakingService->countApprovedPlayers($turnamen)
-            : 0;
-        $pairingSummary = $turnamen
-            ? $this->matchmakingService->getDoublePairingSummary($turnamen)
-            : null;
-        $groupingUnitCount = $turnamen && $turnamen->playsAsPairs()
-            ? ($turnamen->isRegistrationOpen()
-                ? (int) ($pairingSummary['pairs_preview'] ?? 0)
-                : $this->matchmakingService->countApprovedPairs($turnamen))
-            : $approvedCount;
+        $data = $matchmakingPageService->getIndexData($request);
 
-        $grup = collect();
-        $groupSplitPreview = null;
-        $isMahjong = $turnamen ? $turnamen->isMahjong() : false;
-        $isFriendly = $turnamen ? $turnamen->isFriendly() : false;
-        $friendlyMatches = collect();
-        $friendlyUnassigned = collect();
-        $friendlyRegistrationGroups = collect();
-        $canCreateFriendlySkeleton = false;
-        $canRandomizeFriendlyUnassigned = false;
-
-        if ($turnamen) {
-            $grupQuery = $isMahjong ? $turnamen->activeGrup() : $turnamen->grup();
-
-            $grup = $grupQuery
-                ->with(array_merge([
-                    'members.turnamenPeserta.pemain1',
-                    'members.pemain',
-                    'pertandingan.peserta1.pemain1',
-                    'pertandingan.peserta2.pemain1',
-                    'pertandingan.pemain1',
-                    'pertandingan.pemain2',
-                    'pertandingan.skor',
-                    'pertandingan.pemenang',
-                    'pertandingan.pesertaPemenang.pemain1',
-                ], TurnamenPeserta::partnerPemainEagerLoadsFor('members.turnamenPeserta'), [
-                    ...TurnamenPeserta::partnerPemainEagerLoadsFor('pertandingan.peserta1'),
-                    ...TurnamenPeserta::partnerPemainEagerLoadsFor('pertandingan.peserta2'),
-                    ...TurnamenPeserta::partnerPemainEagerLoadsFor('pertandingan.pesertaPemenang'),
-                ]))
-                ->orderBy('nama')
-                ->get();
-
-            if ($isMahjong) {
-                $mahjongGroupCount = $approvedCount >= 4 ? intdiv($approvedCount, 4) : 0;
-                $groupSplitPreview = $mahjongGroupCount > 0
-                    ? [
-                        'group_count' => $mahjongGroupCount,
-                        'sizes' => array_fill(0, $mahjongGroupCount, 4),
-                        'label' => implode(' + ', array_fill(0, $mahjongGroupCount, 4)),
-                    ]
-                    : null;
-            } elseif ($isFriendly) {
-                $groupSplitPreview = $this->friendlyService->previewGroupSplit($approvedCount);
-                $friendlyMatches = $this->friendlyService->getMatches($turnamen)
-                    ->map(function ($match) {
-                        $match->setAttribute(
-                            'can_edit_score',
-                            $this->scoringService->canEditScore($match)
-                        );
-
-                        return $match;
-                    });
-                $friendlyUnassigned = $this->friendlyService->getUnassignedApprovedEntries($turnamen);
-                $canCreateFriendlySkeleton = $this->friendlyService->canCreateSkeletonGroups($turnamen);
-                $canRandomizeFriendlyUnassigned = $this->friendlyService->canRandomizeUnassigned($turnamen);
-
-                if ($turnamen->isRegistrationOpen() || $grup->isEmpty()) {
-                    $friendlyRegistrationGroups = $this->friendlyService->getFriendlyRegistrationGroups($turnamen);
-                }
-            } else {
-                $groupSplitPreview = $this->matchmakingService->previewGroupSplit(
-                    $groupingUnitCount,
-                    $this->matchmakingService->getDefaultMinPerGroup(),
-                    $this->matchmakingService->getDefaultMaxPerGroup()
-                );
-            }
-        }
-
-        $canEndGroupStage = false;
-        if ($turnamen && ! $isFriendly) {
-            $canEndGroupStage = $isMahjong
-                ? $this->mahjongService->canAdvanceRound($turnamen)
-                : $this->knockoutBracketService->canEndGroupStage($turnamen);
-        }
-
-        $hasKnockoutBracket = $turnamen && ! $isMahjong && ! $isFriendly
-            ? $this->knockoutBracketService->hasKnockoutBracket($turnamen)
-            : false;
-
-        $knockoutRounds = $hasKnockoutBracket
-            ? $this->knockoutBracketService->getKnockoutRoundsWithMatches($turnamen)
-                ->map(function (array $round) {
-                    $round['matches'] = $round['matches']->map(function ($match) {
-                        $match->setAttribute(
-                            'can_edit_score',
-                            $this->scoringService->canEditKnockoutScore($match)
-                        );
-
-                        return $match;
-                    });
-
-                    return $round;
-                })
-            : collect();
-
-        return view('admin.matchmaking.index', [
-            'turnamen' => $turnamen,
+        return view('admin.matchmaking.index', array_merge($data, [
             'turnamenList' => $turnamenList,
-            'approvedCount' => $approvedCount,
-            'groupingUnitCount' => $groupingUnitCount,
-            'pairingSummary' => $pairingSummary,
-            'isMahjong' => $isMahjong,
-            'isFriendly' => $isFriendly,
-            'friendlyMatches' => $friendlyMatches,
-            'friendlyUnassigned' => $friendlyUnassigned,
-            'friendlyRegistrationGroups' => $friendlyRegistrationGroups,
-            'canCreateFriendlySkeleton' => $canCreateFriendlySkeleton,
-            'canRandomizeFriendlyUnassigned' => $canRandomizeFriendlyUnassigned,
-            'canAddFriendlyMatch' => $turnamen && $isFriendly
-                ? $this->friendlyService->canAddMatch($turnamen)
-                : false,
-            'unitLabel' => $turnamen ? $this->matchmakingService->unitLabel($turnamen) : 'pemain',
-            'grup' => $grup,
-            'groupSplitPreview' => $groupSplitPreview,
-            'defaultMinPerGroup' => $this->matchmakingService->getDefaultMinPerGroup(),
-            'defaultMaxPerGroup' => $this->matchmakingService->getDefaultMaxPerGroup(),
-            'canCloseRegistration' => $turnamen ? $this->matchmakingService->canCloseRegistration($turnamen) : false,
-            'canRandomGrup' => $turnamen ? $this->matchmakingService->canGenerateRandomGroups($turnamen) : false,
-            'canEditGroups' => $turnamen ? $this->matchmakingService->canEditGroups($turnamen) : false,
-            'canGenerateGroupMatches' => $turnamen ? $this->matchmakingService->canGenerateGroupMatches($turnamen) : false,
-            'canResetGroupsAndMatches' => $turnamen ? $this->matchmakingService->canResetGroupsAndMatches($turnamen) : false,
-            'canReshuffle' => $turnamen && $isMahjong ? $this->mahjongService->canReshuffle($turnamen) : false,
-            'canEndGroupStage' => $canEndGroupStage,
-            'hasKnockoutBracket' => $hasKnockoutBracket,
-            'canResetKnockoutBracket' => $turnamen && ! $isMahjong
-                ? $this->knockoutBracketService->canResetKnockoutBracket($turnamen)
-                : false,
-            'hasKnockoutScores' => $turnamen && ! $isMahjong
-                ? $this->knockoutBracketService->hasKnockoutScores($turnamen)
-                : false,
-            'canEditGroupScores' => $turnamen && ! $isMahjong && ! $hasKnockoutBracket,
-            'knockoutRounds' => $knockoutRounds,
-            'canCompleteTournament' => $turnamen ? $this->tournamentCompletionService->canComplete($turnamen) : false,
-            'hasPendingThirdPlacePlayoff' => $turnamen
-                ? $this->tournamentCompletionService->hasPendingThirdPlacePlayoff($turnamen)
-                : false,
-            'mahjongIsFinal' => $turnamen && $isMahjong ? (bool) $turnamen->mahjong_is_final : false,
-            'activePlayerCount' => $isMahjong && $turnamen ? $this->mahjongService->getGlobalRankings($turnamen)->count() : $approvedCount,
-        ]);
+            'filterRoute' => route('admin.matchmaking.index'),
+        ]));
     }
 
     public function endGroupStage(Request $request)
     {
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -226,7 +82,7 @@ class MatchmakingController extends Controller
 
             try {
                 $jumlahLolos = (int) $request->input('jumlah_lolos');
-                $result = $this->mahjongService->advanceRound($turnamen, $jumlahLolos);
+                $result = $this->mahjongService->advanceRound($turnamen, $jumlahLolos, $kategoriId);
             } catch (RuntimeException $e) {
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
             }
@@ -260,7 +116,7 @@ class MatchmakingController extends Controller
         $jumlahLolos = (int) $request->input('jumlah_lolos');
 
         try {
-            $result = $this->knockoutBracketService->generateKnockoutBracket($turnamen, $jumlahLolos, $mode);
+            $result = $this->knockoutBracketService->generateKnockoutBracket($turnamen, $jumlahLolos, $mode, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -282,7 +138,10 @@ class MatchmakingController extends Controller
                 $byeMessage,
                 $qualificationNote
             ),
-            'redirect_url' => route('admin.bracket.index', ['id_turnamen' => $turnamen->id]),
+            'redirect_url' => route('admin.bracket.index', array_filter([
+                'id_turnamen' => $turnamen->id,
+                'id_kategori' => $kategoriId,
+            ])),
             'data' => $result,
         ]);
     }
@@ -295,8 +154,9 @@ class MatchmakingController extends Controller
 
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
             $mode = $request->input('mode', 'random');
-            $result = $this->mahjongService->reshuffleGroups($turnamen, $mode);
+            $result = $this->mahjongService->reshuffleGroups($turnamen, $mode, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -430,7 +290,8 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
-            $result = $this->tournamentCompletionService->complete($turnamen);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $result = $this->tournamentCompletionService->complete($turnamen, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -450,7 +311,8 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
-            $result = $this->matchmakingService->closeRegistration($turnamen);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $result = $this->matchmakingService->closeRegistration($turnamen, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -480,6 +342,7 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -488,7 +351,7 @@ class MatchmakingController extends Controller
 
         if ($turnamen->isMahjong()) {
             try {
-                $result = $this->mahjongService->generateGroups($turnamen, $mode);
+                $result = $this->mahjongService->generateGroups($turnamen, $mode, $kategoriId);
             } catch (RuntimeException $e) {
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
             }
@@ -508,8 +371,8 @@ class MatchmakingController extends Controller
 
         if ($turnamen->isFriendly()) {
             try {
-                if ($turnamen->grup()->exists()) {
-                    $result = $this->friendlyService->randomizeUnassigned($turnamen, $mode);
+                if ($turnamen->competitionGrup($kategoriId)->exists()) {
+                    $result = $this->friendlyService->randomizeUnassigned($turnamen, $mode, $kategoriId);
                     $modeLabel = $mode === 'by_rating' ? 'berdasarkan rating' : 'secara acak';
 
                     return response()->json([
@@ -523,7 +386,7 @@ class MatchmakingController extends Controller
                     ]);
                 }
 
-                $result = $this->friendlyService->generateGroups($turnamen, $mode);
+                $result = $this->friendlyService->generateGroups($turnamen, $mode, $kategoriId);
             } catch (RuntimeException $e) {
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
             }
@@ -556,12 +419,7 @@ class MatchmakingController extends Controller
         $maxPerGroup = (int) $request->input('max_pemain_grup');
 
         try {
-            $result = $this->matchmakingService->generateRandomGroups(
-                $turnamen,
-                $minPerGroup,
-                $maxPerGroup,
-                $mode
-            );
+            $result = $this->matchmakingService->generateRandomGroups($turnamen, $minPerGroup, $maxPerGroup, $mode, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -588,7 +446,8 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
-            $result = $this->matchmakingService->generateGroupMatches($turnamen);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $result = $this->matchmakingService->generateGroupMatches($turnamen, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -614,9 +473,10 @@ class MatchmakingController extends Controller
 
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
             $first = GrupMember::findOrFail($data['first_member_id']);
             $second = GrupMember::findOrFail($data['second_member_id']);
-            $this->matchmakingService->swapGroupMembers($turnamen, $first, $second);
+            $this->matchmakingService->swapGroupMembers($turnamen, $first, $second, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -631,7 +491,8 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
-            $this->matchmakingService->resetGroupsAndMatches($turnamen);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $this->matchmakingService->resetGroupsAndMatches($turnamen, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -646,7 +507,8 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
-            $hasScores = $this->knockoutBracketService->hasKnockoutScores($turnamen);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $hasScores = $this->knockoutBracketService->hasKnockoutScores($turnamen, $kategoriId);
 
             if ($hasScores) {
                 $request->validate([
@@ -665,7 +527,7 @@ class MatchmakingController extends Controller
                 }
             }
 
-            $result = $this->knockoutBracketService->resetKnockoutBracket($turnamen);
+            $result = $this->knockoutBracketService->resetKnockoutBracket($turnamen, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -711,6 +573,7 @@ class MatchmakingController extends Controller
 
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
             $match = $this->friendlyService->createMatch(
                 $turnamen,
                 (int) $request->input('id_grup1'),
@@ -743,6 +606,7 @@ class MatchmakingController extends Controller
 
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
 
             if ((int) $pertandingan->id_turnamen !== (int) $turnamen->id) {
                 throw new RuntimeException('Pertandingan tidak termasuk turnamen ini.');
@@ -768,6 +632,7 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
 
             if ((int) $pertandingan->id_turnamen !== (int) $turnamen->id) {
                 throw new RuntimeException('Pertandingan tidak termasuk turnamen ini.');
@@ -788,7 +653,8 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
-            $result = $this->friendlyService->createSkeletonGroups($turnamen);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $result = $this->friendlyService->createSkeletonGroups($turnamen, $kategoriId);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -823,6 +689,7 @@ class MatchmakingController extends Controller
 
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
             $members = $this->friendlyService->assignMembersToGroup(
                 $turnamen,
                 (int) $request->input('id_grup'),
@@ -850,6 +717,7 @@ class MatchmakingController extends Controller
     {
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
             $this->friendlyService->unassignMember($turnamen, $member);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -869,6 +737,7 @@ class MatchmakingController extends Controller
 
         try {
             $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
 
             if (! $turnamen->isFriendly()) {
                 throw new RuntimeException('Rename grup saat ini hanya untuk Group Match.');

@@ -198,7 +198,8 @@ document.addEventListener('DOMContentLoaded', function () {
             </option>
         @endforeach
     </select>
-    <div class="form-text">Beberapa turnamen dapat berstatus <strong>open</strong> secara bersamaan.</div>
+    <div class="form-text">Beberapa turnamen dapat berstatus <strong>open</strong> secara bersamaan.
+        Setelah disimpan, Anda dapat menambah kategori kompetisi (kapasitas & biaya terpisah) di halaman edit.</div>
     @error('status')
         <div class="invalid-feedback">{{ $message }}</div>
     @enderror

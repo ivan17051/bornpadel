@@ -22,8 +22,9 @@ class LookupPemainRegistrationRequest extends FormRequest
     {
         $fields = ['no_hp'];
         $turnamen = $this->resolveTurnamen();
+        $kategori = $this->resolveKategori($turnamen);
         $size = $turnamen && $turnamen->allowsGroupRegistration()
-            ? $turnamen->friendlyPlayersPerGroup()
+            ? ($kategori ? $kategori->friendlyPlayersPerGroup() : $turnamen->friendlyPlayersPerGroup())
             : 4;
 
         for ($n = 2; $n <= max(4, $size); $n++) {
@@ -38,6 +39,7 @@ class LookupPemainRegistrationRequest extends FormRequest
         $rules = [
             'no_hp' => ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
             'id_turnamen' => ['nullable', 'integer', 'exists:m_turnamen,id'],
+            'id_kategori' => ['nullable', 'integer', 'exists:turnamen_kategori,id'],
             'registration_mode' => ['nullable', 'in:single,pair,group'],
         ];
 
@@ -48,7 +50,11 @@ class LookupPemainRegistrationRequest extends FormRequest
             if ($openCount > 1) {
                 $rules['id_turnamen'] = ['required', 'integer', 'exists:m_turnamen,id'];
             }
+        } elseif ($turnamen->hasMultipleKategori()) {
+            $rules['id_kategori'] = ['required', 'integer', 'exists:turnamen_kategori,id'];
         }
+
+        $kategori = $this->resolveKategori($turnamen);
 
         if ($turnamen && $turnamen->requiresPairRegistration()) {
             $rules['registration_mode'] = ['required', 'in:single,pair'];
@@ -61,7 +67,9 @@ class LookupPemainRegistrationRequest extends FormRequest
 
             if ($this->input('registration_mode') === 'group') {
                 $rules['nama_grup'] = ['required', 'string', 'max:255'];
-                $size = $turnamen->friendlyPlayersPerGroup();
+                $size = $kategori
+                    ? $kategori->friendlyPlayersPerGroup()
+                    : $turnamen->friendlyPlayersPerGroup();
                 $previous = ['no_hp'];
 
                 for ($n = 2; $n <= $size; $n++) {
@@ -90,6 +98,18 @@ class LookupPemainRegistrationRequest extends FormRequest
                 return;
             }
 
+            $kategori = $this->resolveKategori($turnamen);
+
+            if ($turnamen->hasMultipleKategori() && ! $kategori) {
+                $validator->errors()->add('id_kategori', 'Pilih kategori kompetisi terlebih dahulu.');
+
+                return;
+            }
+
+            if ($this->filled('id_kategori') && $kategori && (int) $kategori->id_turnamen !== (int) $turnamen->id) {
+                $validator->errors()->add('id_kategori', 'Kategori tidak valid untuk turnamen ini.');
+            }
+
             if ($this->input('registration_mode') === 'pair' && ! $turnamen->requiresPairRegistration()) {
                 $validator->errors()->add(
                     'registration_mode',
@@ -107,11 +127,13 @@ class LookupPemainRegistrationRequest extends FormRequest
             if ($turnamen->allowsGroupRegistration()
                 && $this->input('registration_mode') === 'group'
                 && $this->filled('nama_grup')
+                && $kategori
             ) {
                 try {
                     app(PemainRegistrationService::class)->assertGroupNameAvailable(
                         $turnamen,
-                        (string) $this->input('nama_grup')
+                        (string) $this->input('nama_grup'),
+                        $kategori->id
                     );
                 } catch (\RuntimeException $e) {
                     $validator->errors()->add('nama_grup', $e->getMessage());
@@ -127,12 +149,32 @@ class LookupPemainRegistrationRequest extends FormRequest
         );
     }
 
+    protected function resolveKategori(?Turnamen $turnamen): ?\App\Models\TurnamenKategori
+    {
+        if (! $turnamen) {
+            return null;
+        }
+
+        try {
+            if ($turnamen->hasMultipleKategori() && ! $this->filled('id_kategori')) {
+                return null;
+            }
+
+            return $turnamen->resolveKategori(
+                $this->filled('id_kategori') ? (int) $this->input('id_kategori') : null
+            );
+        } catch (\RuntimeException $e) {
+            return null;
+        }
+    }
+
     public function messages()
     {
         $messages = [
             'no_hp.required' => 'Nomor HP pemain 1 wajib diisi.',
             'no_hp.regex' => 'Format nomor HP pemain 1 tidak valid.',
             'nama_grup.required' => 'Nama grup wajib diisi.',
+            'id_kategori.required' => 'Pilih kategori kompetisi terlebih dahulu.',
         ];
 
         for ($n = 2; $n <= 32; $n++) {

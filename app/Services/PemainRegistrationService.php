@@ -107,14 +107,18 @@ class PemainRegistrationService
 
     protected function publicTournamentQuery()
     {
-        return Turnamen::query()->withCount([
-            'turnamenPeserta as registered_count' => function ($query) {
-                $query->where('status', '!=', 'rejected');
-            },
-            'turnamenPeserta as approved_count' => function ($query) {
-                $query->where('status', 'approved');
-            },
-        ]);
+        return Turnamen::query()
+            ->with(['kategori' => function ($query) {
+                $query->ordered();
+            }])
+            ->withCount([
+                'turnamenPeserta as registered_count' => function ($query) {
+                    $query->where('status', '!=', 'rejected');
+                },
+                'turnamenPeserta as approved_count' => function ($query) {
+                    $query->where('status', 'approved');
+                },
+            ]);
     }
 
     protected function getPublicCompletedYearOptions(): array
@@ -184,24 +188,24 @@ class PemainRegistrationService
         return Pemain::where('no_hp', $trimmed)->first();
     }
 
-    public function isRegisteredForTournament(Pemain $pemain, Turnamen $turnamen): bool
+    public function isRegisteredForTournament(Pemain $pemain, Turnamen $turnamen, $idKategori = null): bool
     {
         return TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($turnamen->resolveKategori($idKategori)->id)
             ->involvingPemain($pemain->id)
             ->exists();
     }
 
     /**
-     * Pemain master who are not yet registered on this tournament.
+     * Pemain master who are not yet registered on this tournament (default category).
      */
-    public function availablePemainQuery(Turnamen $turnamen)
+    public function availablePemainQuery(Turnamen $turnamen, $idKategori = null)
     {
         return Pemain::query()
-            ->whereNotIn('id', function ($query) use ($turnamen) {
+            ->whereNotIn('id', function ($query) use ($turnamen, $idKategori) {
                 $query->select('id_pemain1')
                     ->from('turnamen_peserta')
-                    ->where('id_turnamen', $turnamen->id);
+                    ->where('id_kategori', $turnamen->resolveKategori($idKategori)->id);
             });
     }
 
@@ -316,11 +320,14 @@ class PemainRegistrationService
     /**
      * @return array{type: string, items: Collection}
      */
-    public function getPublicParticipantList(Turnamen $turnamen): array
+    public function getPublicParticipantList(Turnamen $turnamen, $idKategori = null): array
     {
-        if ($turnamen->playsAsPairs() && $turnamen->isRegistrationClosed()) {
+        $kategoriId = $turnamen->resolveKategori($idKategori)->id;
+        $kategori = $turnamen->resolveKategori($idKategori);
+
+        if ($turnamen->playsAsPairs() && $kategori->isRegistrationClosed()) {
             $items = TurnamenPeserta::query()
-                ->forTurnamen($turnamen->id)
+                ->forKategori($kategoriId)
                 ->whereHas('pasanganAsPeserta1')
                 ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1'])
                 ->orderBy('id')
@@ -340,7 +347,7 @@ class PemainRegistrationService
         }
 
         $items = TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($kategoriId)
             ->where('status', '!=', 'rejected')
             ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1'])
             ->orderBy('id')
@@ -366,14 +373,14 @@ class PemainRegistrationService
         ];
     }
 
-    public function getSoloPesertaOptions(Turnamen $turnamen): Collection
+    public function getSoloPesertaOptions(Turnamen $turnamen, $idKategori = null): Collection
     {
         if (! $turnamen->requiresPairRegistration()) {
             return collect();
         }
 
         return TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($turnamen->resolveKategori($idKategori)->id)
             ->soloEntries()
             ->with('pemain1')
             ->orderBy('id')
@@ -386,18 +393,21 @@ class PemainRegistrationService
         ?UploadedFile $foto = null,
         ?UploadedFile $buktiBayar = null,
         string $sumber = TurnamenPeserta::SUMBER_INTERNAL,
-        bool $updateExistingProfile = true
+        bool $updateExistingProfile = true,
+        $idKategori = null
     ): Pemain {
+        $kategori = $turnamen->resolveKategori($idKategori);
         $pemain = $this->upsertPemain($data, $foto, $updateExistingProfile);
 
-        if ($this->isRegisteredForTournament($pemain, $turnamen)) {
-            throw new RuntimeException('Nomor HP sudah terdaftar pada turnamen ini.');
+        if ($this->isRegisteredForTournament($pemain, $turnamen, $kategori->id)) {
+            throw new RuntimeException('Nomor HP sudah terdaftar pada kategori ini.');
         }
 
         $buktiPath = $this->storeBuktiBayar($buktiBayar);
 
         TurnamenPeserta::create([
             'id_turnamen' => $turnamen->id,
+            'id_kategori' => $kategori->id,
             'id_pemain1' => $pemain->id,
             'status' => $this->resolveRegistrationStatusFromBukti($buktiPath),
             'bukti_bayar' => $buktiPath,
@@ -420,11 +430,14 @@ class PemainRegistrationService
         string $sumber = TurnamenPeserta::SUMBER_INTERNAL,
         bool $updateExistingProfile = true,
         ?string $statusOverride = null,
-        ?TournamentCapacityService $capacityService = null
+        ?TournamentCapacityService $capacityService = null,
+        $idKategori = null
     ): array {
         if (! $turnamen->requiresPairRegistration()) {
             throw new RuntimeException('Pendaftaran berpasangan hanya tersedia untuk turnamen double.');
         }
+
+        $kategori = $turnamen->resolveKategori($idKategori);
 
         if (trim($player1['no_hp']) === trim($player2['no_hp'])) {
             throw new RuntimeException('Nomor HP pemain 1 dan pemain 2 tidak boleh sama.');
@@ -433,23 +446,24 @@ class PemainRegistrationService
         $existingPlayer1 = $this->findPemainByPhone($player1['no_hp']);
         $existingPlayer2 = $this->findPemainByPhone($player2['no_hp']);
 
-        if ($existingPlayer1 && $this->isRegisteredForTournament($existingPlayer1, $turnamen)) {
-            throw new RuntimeException('Nomor HP pemain 1 sudah terdaftar pada turnamen ini.');
+        if ($existingPlayer1 && $this->isRegisteredForTournament($existingPlayer1, $turnamen, $kategori->id)) {
+            throw new RuntimeException('Nomor HP pemain 1 sudah terdaftar pada kategori ini.');
         }
 
-        if ($existingPlayer2 && $this->isRegisteredForTournament($existingPlayer2, $turnamen)) {
-            throw new RuntimeException('Nomor HP pemain 2 sudah terdaftar pada turnamen ini.');
+        if ($existingPlayer2 && $this->isRegisteredForTournament($existingPlayer2, $turnamen, $kategori->id)) {
+            throw new RuntimeException('Nomor HP pemain 2 sudah terdaftar pada kategori ini.');
         }
 
         $status = $statusOverride ?: $this->resolveRegistrationStatusFromBukti(null, $buktiBayar);
         $capacityService = $capacityService ?? app(TournamentCapacityService::class);
 
         if ($status === 'approved') {
-            $capacityService->assertCanApprove($turnamen, 2);
+            $capacityService->assertCanApprove($turnamen, 2, $kategori->id);
         }
 
         return DB::transaction(function () use (
             $turnamen,
+            $kategori,
             $player1,
             $foto1,
             $player2,
@@ -465,6 +479,7 @@ class PemainRegistrationService
 
             $peserta1 = TurnamenPeserta::create([
                 'id_turnamen' => $turnamen->id,
+                'id_kategori' => $kategori->id,
                 'id_pemain1' => $pemain->id,
                 'status' => $status,
                 'bukti_bayar' => $buktiPath,
@@ -473,13 +488,14 @@ class PemainRegistrationService
 
             $peserta2 = TurnamenPeserta::create([
                 'id_turnamen' => $turnamen->id,
+                'id_kategori' => $kategori->id,
                 'id_pemain1' => $partner->id,
                 'status' => $status,
                 'bukti_bayar' => $buktiPath,
                 'sumber' => $sumber,
             ]);
 
-            app(DoublePairingService::class)->createPair($turnamen, $peserta1, $peserta2);
+            app(DoublePairingService::class)->createPair($turnamen, $peserta1, $peserta2, $kategori->id);
 
             return [
                 'pemain' => $pemain,
@@ -504,13 +520,15 @@ class PemainRegistrationService
         string $sumber = TurnamenPeserta::SUMBER_INTERNAL,
         bool $updateExistingProfile = true,
         ?string $statusOverride = null,
-        ?TournamentCapacityService $capacityService = null
+        ?TournamentCapacityService $capacityService = null,
+        $idKategori = null
     ): array {
         if (! $turnamen->allowsGroupRegistration()) {
             throw new RuntimeException('Pendaftaran satu grup hanya tersedia untuk Group Match.');
         }
 
-        $expectedSize = $turnamen->friendlyPlayersPerGroup();
+        $kategori = $turnamen->resolveKategori($idKategori);
+        $expectedSize = $kategori->friendlyPlayersPerGroup();
 
         if (count($players) !== $expectedSize) {
             throw new RuntimeException(
@@ -532,22 +550,23 @@ class PemainRegistrationService
 
         foreach ($phones as $index => $phone) {
             $existing = $this->findPemainByPhone($phone);
-            if ($existing && $this->isRegisteredForTournament($existing, $turnamen)) {
-                throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' sudah terdaftar pada turnamen ini.');
+            if ($existing && $this->isRegisteredForTournament($existing, $turnamen, $kategori->id)) {
+                throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' sudah terdaftar pada kategori ini.');
             }
         }
 
-        $this->assertGroupNameAvailable($turnamen, $namaGrup);
+        $this->assertGroupNameAvailable($turnamen, $namaGrup, $kategori->id);
 
         $status = $statusOverride ?: $this->resolveRegistrationStatusFromBukti(null, $buktiBayar);
         $capacityService = $capacityService ?? app(TournamentCapacityService::class);
 
         if ($status === 'approved') {
-            $capacityService->assertCanApprove($turnamen, $expectedSize);
+            $capacityService->assertCanApprove($turnamen, $expectedSize, $kategori->id);
         }
 
         return DB::transaction(function () use (
             $turnamen,
+            $kategori,
             $namaGrup,
             $players,
             $fotos,
@@ -556,7 +575,7 @@ class PemainRegistrationService
             $updateExistingProfile,
             $status
         ) {
-            $this->assertGroupNameAvailable($turnamen, $namaGrup);
+            $this->assertGroupNameAvailable($turnamen, $namaGrup, $kategori->id);
 
             $buktiPath = $this->storeBuktiBayar($buktiBayar);
             $createdPlayers = collect();
@@ -566,12 +585,13 @@ class PemainRegistrationService
                 $foto = $fotos[$index] ?? null;
                 $pemain = $this->upsertPemain($playerData, $foto instanceof UploadedFile ? $foto : null, $updateExistingProfile);
 
-                if ($this->isRegisteredForTournament($pemain, $turnamen)) {
-                    throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' sudah terdaftar pada turnamen ini.');
+                if ($this->isRegisteredForTournament($pemain, $turnamen, $kategori->id)) {
+                    throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' sudah terdaftar pada kategori ini.');
                 }
 
                 $peserta = TurnamenPeserta::create([
                     'id_turnamen' => $turnamen->id,
+                    'id_kategori' => $kategori->id,
                     'id_pemain1' => $pemain->id,
                     'status' => $status,
                     'bukti_bayar' => $buktiPath,
@@ -584,6 +604,7 @@ class PemainRegistrationService
 
             $grupPendaftaran = TurnamenGrupPendaftaran::create([
                 'id_turnamen' => $turnamen->id,
+                'id_kategori' => $kategori->id,
                 'nama' => trim($namaGrup),
             ]);
 
@@ -602,7 +623,7 @@ class PemainRegistrationService
         });
     }
 
-    public function assertGroupNameAvailable(Turnamen $turnamen, string $nama): void
+    public function assertGroupNameAvailable(Turnamen $turnamen, string $nama, $idKategori = null): void
     {
         $nama = trim($nama);
 
@@ -615,19 +636,20 @@ class PemainRegistrationService
         }
 
         $lower = mb_strtolower($nama);
+        $kategoriId = $turnamen->resolveKategori($idKategori)->id;
 
         $existsPendaftaran = TurnamenGrupPendaftaran::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($kategoriId)
             ->whereRaw('LOWER(nama) = ?', [$lower])
             ->exists();
 
         $existsGrup = Grup::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $kategoriId)
             ->whereRaw('LOWER(nama) = ?', [$lower])
             ->exists();
 
         if ($existsPendaftaran || $existsGrup) {
-            throw new RuntimeException('Nama grup sudah digunakan pada turnamen ini.');
+            throw new RuntimeException('Nama grup sudah digunakan pada kategori ini.');
         }
     }
 
@@ -684,9 +706,9 @@ class PemainRegistrationService
         ];
     }
 
-    public function getRegistrationStatus(Pemain $pemain, Turnamen $turnamen): ?string
+    public function getRegistrationStatus(Pemain $pemain, Turnamen $turnamen, $idKategori = null): ?string
     {
-        return optional($pemain->pesertaForTurnamen($turnamen))->status;
+        return optional($pemain->pesertaForTurnamen($turnamen, $idKategori))->status;
     }
 
     public function detachPemainFromPeserta(TurnamenPeserta $peserta, int $pemainId): void

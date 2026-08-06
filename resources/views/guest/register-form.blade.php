@@ -2,10 +2,18 @@
 
 @section('title', 'Pendaftaran')
 
+@php
+    $kategori = $kategori ?? null;
+    $registerQuery = array_filter([
+        'id_turnamen' => $turnamen->id,
+        'id_kategori' => optional($kategori)->id,
+    ]);
+@endphp
+
 @section('og')
     @include('guest.partials.og-meta', [
         'ogTurnamen' => $turnamen,
-        'ogUrl' => route('guest.register', ['id_turnamen' => $turnamen->id]),
+        'ogUrl' => route('guest.register', $registerQuery),
     ])
 @endsection
 
@@ -14,7 +22,9 @@
     $isDouble = $turnamen->requiresPairRegistration();
     $isPairMode = $isDouble && ($registrationMode ?? 'single') === 'pair';
     $isGroupMode = $turnamen->allowsGroupRegistration() && ($registrationMode ?? 'single') === 'group';
-    $groupSize = $groupSize ?? ($isGroupMode ? $turnamen->friendlyPlayersPerGroup() : 4);
+    $groupSize = $groupSize ?? ($isGroupMode
+        ? ($kategori ? $kategori->friendlyPlayersPerGroup() : $turnamen->friendlyPlayersPerGroup())
+        : 4);
     $phones = $phones ?? array_filter([
         $noHp ?? '',
         $noHp2 ?? null,
@@ -27,10 +37,11 @@
         $existingPemain3 ?? null,
         $existingPemain4 ?? null,
     ];
-    $capacityLabel = $turnamen->maks_peserta
-        ? number_format($turnamen->maks_peserta)
+    $maksPeserta = $kategori ? $kategori->maks_peserta : $turnamen->maks_peserta;
+    $capacityLabel = $maksPeserta
+        ? number_format($maksPeserta)
         : 'Tidak Terbatas';
-    $hargaSatuan = (float) $turnamen->harga;
+    $hargaSatuan = (float) ($kategori ? $kategori->harga : $turnamen->harga);
     $hargaMultiplier = $isGroupMode ? $groupSize : ($isPairMode ? 2 : 1);
     $hargaTampil = $hargaSatuan * $hargaMultiplier;
     $playerCount = $isGroupMode ? $groupSize : ($isPairMode ? 2 : 1);
@@ -48,6 +59,9 @@
             <h1 class="h3 fw-bold mb-1">Form Pendaftaran</h1>
             <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
             <span class="badge text-bg-light text-dark border mt-2">{{ $turnamen->jenis_label }}</span>
+            @if ($kategori)
+                <span class="badge text-bg-primary mt-2">{{ $kategori->nama }}</span>
+            @endif
             @if ($isPairMode)
                 <span class="badge text-bg-primary mt-2">Pendaftaran Berpasangan</span>
             @endif
@@ -108,6 +122,9 @@
                 <form action="{{ route('guest.register.store') }}" method="POST" enctype="multipart/form-data" novalidate id="guest-registration-form">
                     @csrf
                     <input type="hidden" name="id_turnamen" value="{{ old('id_turnamen', $turnamen->id) }}">
+                    @if ($kategori)
+                        <input type="hidden" name="id_kategori" value="{{ old('id_kategori', $kategori->id) }}">
+                    @endif
                     <input type="hidden" name="registration_mode" value="{{ $registrationMode ?? 'single' }}">
                     @if ($isGroupMode)
                         <input type="hidden" name="nama_grup" value="{{ old('nama_grup', $namaGrup) }}">

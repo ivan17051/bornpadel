@@ -2,14 +2,23 @@
 
 @section('title', 'Bracket Knockout')
 
+@php
+    $kategori = $kategori ?? null;
+    $kategoriList = $kategoriList ?? collect();
+    $bracketQuery = array_filter([
+        'id_turnamen' => optional($turnamen)->id,
+        'id_kategori' => optional($kategori)->id,
+    ]);
+@endphp
+
 @section('og')
     @include('guest.partials.og-meta', [
         'ogTurnamen' => $turnamen ?? null,
         'ogUrl' => isset($turnamen) && $turnamen
-            ? route('guest.bracket', ['id_turnamen' => $turnamen->id])
+            ? route('guest.bracket', $bracketQuery)
             : route('guest.bracket'),
         'ogTitle' => isset($turnamen) && $turnamen
-            ? 'Bracket — ' . $turnamen->nama
+            ? 'Bracket — ' . $turnamen->nama . ($kategori ? ' · ' . $kategori->nama : '')
             : 'Bracket — Born Padel',
     ])
 @endsection
@@ -21,14 +30,27 @@
             <h1 class="h3 fw-bold">Bracket Knockout</h1>
             @if ($turnamen)
                 <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
+                @if ($kategori && optional($kategoriList)->count() > 1)
+                    <span class="badge text-bg-primary mt-2">{{ $kategori->nama }}</span>
+                @endif
             @endif
         </div>
 
-        <x-tournament-bracket :bracket="$bracket" :turnamen="$turnamen" :refreshable="true" />
+        @if ($turnamen)
+            @include('guest.partials.kategori-selector', [
+                'turnamen' => $turnamen,
+                'kategori' => $kategori,
+                'kategoriList' => $kategoriList,
+                'filterRoute' => route('guest.bracket'),
+                'selectorHint' => 'Bracket ditampilkan per kategori kompetisi.',
+            ])
+        @endif
+
+        <x-tournament-bracket :bracket="$bracket" :turnamen="$turnamen" :kategori="$kategori" :refreshable="true" />
 
         <div class="text-center mt-4 d-flex flex-wrap justify-content-center gap-2">
             @if ($turnamen)
-                <a href="{{ route('guest.standings', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-outline-primary">
+                <a href="{{ route('guest.standings', $bracketQuery) }}" class="btn btn-outline-primary">
                     <i class="bi bi-bar-chart-steps me-1"></i> Klasemen Grup
                 </a>
             @endif

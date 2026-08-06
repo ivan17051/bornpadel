@@ -3,15 +3,20 @@
 namespace App\Http\Controllers\Guest;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ResolvesPublicKategori;
 use App\Http\Requests\LookupPemainRegistrationRequest;
 use App\Http\Requests\StorePemainRegistrationRequest;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenKategori;
 use App\Models\TurnamenPeserta;
 use App\Services\PemainRegistrationService;
+use RuntimeException;
 
 class RegistrationController extends Controller
 {
+    use ResolvesPublicKategori;
+
     protected $registrationService;
 
     public function __construct(PemainRegistrationService $registrationService)
@@ -34,7 +39,31 @@ class RegistrationController extends Controller
             return view('guest.register-select', compact('openTournaments'));
         }
 
-        return view('guest.register', compact('turnamen', 'openTournaments'));
+        $turnamen->loadMissing('kategori');
+        $kategori = $this->resolveRegistrationKategori($turnamen, false);
+
+        if ($turnamen->hasMultipleKategori() && ! $kategori) {
+            return view('guest.register', [
+                'turnamen' => $turnamen,
+                'openTournaments' => $openTournaments,
+                'kategori' => null,
+                'kategoriList' => $this->openKategoriList($turnamen),
+                'needsKategoriSelection' => true,
+            ]);
+        }
+
+        if ($kategori && ! $kategori->isRegistrationOpen()) {
+            return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+                ->with('warning', 'Pendaftaran untuk kategori ini sudah ditutup.');
+        }
+
+        return view('guest.register', [
+            'turnamen' => $turnamen,
+            'openTournaments' => $openTournaments,
+            'kategori' => $kategori,
+            'kategoriList' => $this->openKategoriList($turnamen),
+            'needsKategoriSelection' => false,
+        ]);
     }
 
     public function lookup(LookupPemainRegistrationRequest $request)
@@ -46,12 +75,25 @@ class RegistrationController extends Controller
                 ->with('warning', 'Pendaftaran ditutup. Tidak ada turnamen aktif.');
         }
 
+        try {
+            $kategori = $this->resolveRegistrationKategori($turnamen, true);
+        } catch (RuntimeException $e) {
+            return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+                ->withInput()
+                ->withErrors(['id_kategori' => $e->getMessage()]);
+        }
+
+        if (! $kategori->isRegistrationOpen()) {
+            return redirect()->route('guest.register', $this->publicTurnamenQuery($turnamen, $kategori))
+                ->with('warning', 'Pendaftaran untuk kategori ini sudah ditutup.');
+        }
+
         $validated = $request->validated();
         $noHp = trim($validated['no_hp']);
         $registrationMode = $validated['registration_mode'] ?? 'single';
         $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
         $isGroupMode = $turnamen->allowsGroupRegistration() && $registrationMode === 'group';
-        $groupSize = $isGroupMode ? $turnamen->friendlyPlayersPerGroup() : 0;
+        $groupSize = $isGroupMode ? $kategori->friendlyPlayersPerGroup() : 0;
         $namaGrup = $isGroupMode ? trim($validated['nama_grup'] ?? '') : null;
 
         $phones = ['no_hp' => $noHp];
@@ -70,24 +112,21 @@ class RegistrationController extends Controller
 
         foreach ($phones as $field => $phone) {
             $existing = $this->registrationService->findPemainByPhone($phone);
-            if ($existing && $this->registrationService->isRegisteredForTournament($existing, $turnamen)) {
+            if ($existing && $this->registrationService->isRegisteredForTournament($existing, $turnamen, $kategori->id)) {
                 $label = $field === 'no_hp' ? 'pemain 1' : 'pemain ' . substr($field, 6);
 
                 return back()
                     ->withInput()
-                    ->withErrors([$field => 'Nomor HP ' . $label . ' sudah terdaftar pada turnamen ini.']);
+                    ->withErrors([$field => 'Nomor HP ' . $label . ' sudah terdaftar pada kategori ini.']);
             }
         }
 
-        $formParams = [
+        $formParams = array_merge([
             'no_hp' => $noHp,
             'id_turnamen' => $turnamen->id,
+            'id_kategori' => $kategori->id,
             'registration_mode' => $isGroupMode ? 'group' : ($isPairMode ? 'pair' : 'single'),
-        ];
-
-        if ($isPairMode || $isGroupMode) {
-            $formParams['no_hp_2'] = $phones['no_hp_2'] ?? '';
-        }
+        ], $isPairMode || $isGroupMode ? ['no_hp_2' => $phones['no_hp_2'] ?? ''] : []);
 
         if ($isGroupMode) {
             for ($n = 3; $n <= $groupSize; $n++) {
@@ -108,12 +147,20 @@ class RegistrationController extends Controller
                 ->with('warning', 'Pilih turnamen terlebih dahulu.');
         }
 
+        try {
+            $kategori = $this->resolveRegistrationKategori($turnamen, true);
+        } catch (RuntimeException $e) {
+            return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+                ->withErrors(['id_kategori' => $e->getMessage()]);
+        }
+
         $noHp = trim((string) request('no_hp', old('no_hp', '')));
         $registrationMode = request('registration_mode', old('registration_mode', 'single'));
         $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
         $isGroupMode = $turnamen->allowsGroupRegistration() && $registrationMode === 'group';
-        $groupSize = $isGroupMode ? $turnamen->friendlyPlayersPerGroup() : 0;
+        $groupSize = $isGroupMode ? $kategori->friendlyPlayersPerGroup() : 0;
         $namaGrup = $isGroupMode ? trim((string) request('nama_grup', old('nama_grup', ''))) : '';
+        $queryBase = $this->publicTurnamenQuery($turnamen, $kategori);
 
         $phones = [$noHp];
         if ($isPairMode || $isGroupMode) {
@@ -129,18 +176,18 @@ class RegistrationController extends Controller
         }
 
         if ($noHp === '') {
-            return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id]);
+            return redirect()->route('guest.register', $queryBase);
         }
 
         if ($isPairMode && ($phones[1] ?? '') === '') {
-            return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+            return redirect()->route('guest.register', $queryBase)
                 ->withErrors(['no_hp_2' => 'Nomor HP pemain 2 wajib diisi untuk pendaftaran berpasangan.']);
         }
 
         if ($isGroupMode) {
             $missingPhone = collect($phones)->contains(fn ($phone) => $phone === '');
             if ($missingPhone || $namaGrup === '') {
-                return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+                return redirect()->route('guest.register', $queryBase)
                     ->withErrors([
                         'no_hp' => "Lengkapi {$groupSize} nomor HP dan nama grup untuk pendaftaran satu grup.",
                     ]);
@@ -167,9 +214,9 @@ class RegistrationController extends Controller
 
         foreach ($phoneChecks as $check) {
             $existing = $this->registrationService->findPemainByPhone($check['phone']);
-            if ($existing && $this->registrationService->isRegisteredForTournament($existing, $turnamen)) {
-                return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
-                    ->withErrors([$check['field'] => 'Nomor HP ' . $check['label'] . ' sudah terdaftar pada turnamen ini.']);
+            if ($existing && $this->registrationService->isRegisteredForTournament($existing, $turnamen, $kategori->id)) {
+                return redirect()->route('guest.register', $queryBase)
+                    ->withErrors([$check['field'] => 'Nomor HP ' . $check['label'] . ' sudah terdaftar pada kategori ini.']);
             }
         }
 
@@ -182,11 +229,12 @@ class RegistrationController extends Controller
 
         return view('guest.register-form', [
             'turnamen' => $turnamen,
+            'kategori' => $kategori,
             'phones' => $phones,
             'noHp' => $noHp,
             'noHp2' => $phones[1] ?? '',
             'namaGrup' => $namaGrup,
-            'groupSize' => $groupSize ?: $turnamen->friendlyPlayersPerGroup(),
+            'groupSize' => $groupSize ?: $kategori->friendlyPlayersPerGroup(),
             'existingPlayers' => $existingPlayers,
             'existingPemain' => $existingPlayers[0] ?? null,
             'isExisting' => (bool) ($existingPlayers[0] ?? null),
@@ -203,8 +251,22 @@ class RegistrationController extends Controller
                 ->with('warning', 'Pendaftaran ditutup. Tidak ada turnamen aktif.');
         }
 
+        try {
+            $kategori = $this->resolveRegistrationKategori($turnamen, true);
+        } catch (RuntimeException $e) {
+            return redirect()->route('guest.register', ['id_turnamen' => $turnamen->id])
+                ->withInput()
+                ->withErrors(['id_kategori' => $e->getMessage()]);
+        }
+
+        if (! $kategori->isRegistrationOpen()) {
+            return redirect()->route('guest.register', $this->publicTurnamenQuery($turnamen, $kategori))
+                ->with('warning', 'Pendaftaran untuk kategori ini sudah ditutup.');
+        }
+
         $buktiBayar = $request->file('bukti_bayar');
         $namaGrup = null;
+        $kategoriId = $kategori->id;
 
         try {
             $registerAsGroup = $turnamen->allowsGroupRegistration() && $request->isGroupRegistration();
@@ -218,7 +280,10 @@ class RegistrationController extends Controller
                     $request->groupFotosPayload(),
                     $buktiBayar,
                     TurnamenPeserta::SUMBER_INTERNAL,
-                    false
+                    false,
+                    null,
+                    null,
+                    $kategoriId
                 );
 
                 $players = $result['players'];
@@ -235,7 +300,10 @@ class RegistrationController extends Controller
                     $request->file('foto_2'),
                     $buktiBayar,
                     TurnamenPeserta::SUMBER_INTERNAL,
-                    false
+                    false,
+                    null,
+                    null,
+                    $kategoriId
                 );
 
                 $pemain = $pair['pemain'];
@@ -248,7 +316,8 @@ class RegistrationController extends Controller
                     $request->file('foto'),
                     $buktiBayar,
                     TurnamenPeserta::SUMBER_INTERNAL,
-                    false
+                    false,
+                    $kategoriId
                 );
                 $partner = null;
                 $extraPlayers = collect();
@@ -268,21 +337,22 @@ class RegistrationController extends Controller
                     'nama_grup' => $request->input('nama_grup'),
                     'registration_mode' => $request->input('registration_mode'),
                     'id_turnamen' => $turnamen->id,
-                ], collect(range(2, $turnamen->friendlyPlayersPerGroup()))
+                    'id_kategori' => $kategoriId,
+                ], collect(range(2, $kategori->friendlyPlayersPerGroup()))
                     ->mapWithKeys(fn ($n) => ['no_hp_' . $n => $request->input('player_' . $n . '.no_hp')])
                     ->all())))
                 ->withInput()
                 ->withErrors([$field => $e->getMessage()]);
         }
 
-        $playerPayloads = [$this->playerPayload($pemain, $turnamen)];
+        $playerPayloads = [$this->playerPayload($pemain, $turnamen, $kategoriId)];
 
         if ($partner) {
-            $playerPayloads[] = $this->playerPayload($partner, $turnamen);
+            $playerPayloads[] = $this->playerPayload($partner, $turnamen, $kategoriId);
         }
 
         foreach ($extraPlayers ?? collect() as $extra) {
-            $playerPayloads[] = $this->playerPayload($extra, $turnamen);
+            $playerPayloads[] = $this->playerPayload($extra, $turnamen, $kategoriId);
         }
 
         return redirect()
@@ -294,6 +364,7 @@ class RegistrationController extends Controller
                 'individual_registration' => false,
                 'paired_registration' => (bool) $partner,
                 'turnamen_id' => $turnamen->id,
+                'kategori_id' => $kategoriId,
                 'players' => $playerPayloads,
             ]);
     }
@@ -310,6 +381,10 @@ class RegistrationController extends Controller
         $turnamen = ! empty($registration['turnamen_id'])
             ? Turnamen::find($registration['turnamen_id'])
             : $this->resolveRegistrationTurnamen();
+        $kategori = null;
+        if ($turnamen && ! empty($registration['kategori_id'])) {
+            $kategori = $turnamen->kategori()->find($registration['kategori_id']);
+        }
         $playerModels = collect($players)
             ->map(function (array $player) {
                 return Pemain::find($player['id'] ?? null);
@@ -323,18 +398,19 @@ class RegistrationController extends Controller
             'players',
             'playerModels',
             'turnamen',
+            'kategori',
             'namaGrup',
             'isGroupRegistration'
         ));
     }
 
-    protected function playerPayload(Pemain $pemain, $turnamen): array
+    protected function playerPayload(Pemain $pemain, $turnamen, $idKategori = null): array
     {
         return [
             'id' => $pemain->id,
             'nama' => $pemain->nama,
             'no_hp' => $pemain->no_hp,
-            'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen),
+            'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen, $idKategori),
         ];
     }
 
@@ -377,5 +453,39 @@ class RegistrationController extends Controller
         $openTournaments = $this->registrationService->getOpenTournaments();
 
         return $openTournaments->count() === 1 ? $openTournaments->first() : null;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, TurnamenKategori>
+     */
+    protected function openKategoriList(Turnamen $turnamen)
+    {
+        $turnamen->loadMissing('kategori');
+
+        return $turnamen->kategori
+            ->sortBy([['urutan', 'asc'], ['id', 'asc']])
+            ->values();
+    }
+
+    protected function resolveRegistrationKategori(Turnamen $turnamen, bool $requireWhenMultiple): ?TurnamenKategori
+    {
+        $id = $this->requestKategoriId(request())
+            ?? (old('id_kategori') ? (int) old('id_kategori') : null);
+
+        if ($turnamen->hasMultipleKategori() && $id === null) {
+            if ($requireWhenMultiple) {
+                throw new RuntimeException('Pilih kategori kompetisi terlebih dahulu.');
+            }
+
+            return null;
+        }
+
+        $kategori = $turnamen->resolveKategori($id);
+
+        if ($turnamen->hasMultipleKategori() && $id !== null && (int) $kategori->id_turnamen !== (int) $turnamen->id) {
+            throw new RuntimeException('Kategori tidak valid untuk turnamen ini.');
+        }
+
+        return $kategori;
     }
 }

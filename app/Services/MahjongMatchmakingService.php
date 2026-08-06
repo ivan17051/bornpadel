@@ -7,13 +7,17 @@ use App\Models\GrupMember;
 use App\Models\MahjongPoinEntry;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenKategori;
 use App\Models\TurnamenPeserta;
+use App\Services\Concerns\ResolvesTurnamenKategori;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class MahjongMatchmakingService
 {
+    use ResolvesTurnamenKategori;
+
     const PLAYERS_PER_GROUP = 4;
 
     protected $leaderboardService;
@@ -25,99 +29,115 @@ class MahjongMatchmakingService
         $this->mahjongRanker = $mahjongRanker;
     }
 
-    public function canGenerateGroups(Turnamen $turnamen): bool
+    public function canGenerateGroups(Turnamen $turnamen, $idKategori = null): bool
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return $turnamen->isMahjong()
-            && $turnamen->status === 'ongoing'
-            && ! $turnamen->activeGrup()->exists();
+            && $this->isCompetitionOngoing($turnamen, $kategori->id)
+            && ! $kategori->activeGrup()->exists();
     }
 
-    public function canReshuffle(Turnamen $turnamen): bool
+    public function canReshuffle(Turnamen $turnamen, $idKategori = null): bool
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return $turnamen->isMahjong()
-            && $turnamen->status === 'ongoing'
-            && $turnamen->activeGrup()->exists()
-            && ! $turnamen->mahjong_is_final;
+            && $this->isCompetitionOngoing($turnamen, $kategori->id)
+            && $kategori->activeGrup()->exists()
+            && ! $kategori->mahjong_is_final;
     }
 
-    public function canAdvanceRound(Turnamen $turnamen): bool
+    public function canAdvanceRound(Turnamen $turnamen, $idKategori = null): bool
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return $turnamen->isMahjong()
-            && $turnamen->status === 'ongoing'
-            && $turnamen->activeGrup()->exists()
-            && ! $turnamen->mahjong_is_final;
+            && $this->isCompetitionOngoing($turnamen, $kategori->id)
+            && $kategori->activeGrup()->exists()
+            && ! $kategori->mahjong_is_final;
     }
 
-    public function canComplete(Turnamen $turnamen): bool
+    public function canComplete(Turnamen $turnamen, $idKategori = null): bool
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return $turnamen->isMahjong()
-            && $turnamen->status === 'ongoing'
-            && $turnamen->mahjong_is_final
-            && $turnamen->activeGrup()->count() === 1
-            && $turnamen->activeGrup()->first()->members()->count() === self::PLAYERS_PER_GROUP;
+            && $this->isCompetitionOngoing($turnamen, $kategori->id)
+            && $kategori->mahjong_is_final
+            && $kategori->activeGrup()->count() === 1
+            && $kategori->activeGrup()->first()->members()->count() === self::PLAYERS_PER_GROUP;
     }
 
-    public function canReset(Turnamen $turnamen): bool
+    public function canReset(Turnamen $turnamen, $idKategori = null): bool
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return $turnamen->isMahjong()
-            && $turnamen->status === 'ongoing'
-            && $turnamen->grup()->exists();
+            && $this->isCompetitionOngoing($turnamen, $kategori->id)
+            && $kategori->grup()->exists();
     }
 
-    public function resetGroupsAndMatches(Turnamen $turnamen): void
+    public function resetGroupsAndMatches(Turnamen $turnamen, $idKategori = null): void
     {
-        if (! $this->canReset($turnamen)) {
+        if (! $this->canReset($turnamen, $idKategori)) {
             throw new RuntimeException('Reset grup Mahjong hanya tersedia saat turnamen masih ongoing dan sudah ada grup.');
         }
 
-        DB::transaction(function () use ($turnamen) {
-            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
 
-            if (! $this->canReset($locked)) {
+        DB::transaction(function () use ($turnamen, $kategori) {
+            $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
+            $lockedKategori = $this->resolveCompetitionKategori($locked, $kategori->id);
+
+            if (! $this->canReset($locked, $lockedKategori->id)) {
                 throw new RuntimeException('Reset grup Mahjong hanya tersedia saat turnamen masih ongoing dan sudah ada grup.');
             }
 
-            $locked->grup()->delete();
-            DB::table('turnamen_pemenang')->where('id_turnamen', $locked->id)->delete();
-            $locked->update([
+            $lockedKategori->grup()->delete();
+            DB::table('turnamen_pemenang')->where('id_kategori', $lockedKategori->id)->delete();
+            $this->updateCompetitionLifecycle($lockedKategori, [
                 'mahjong_is_final' => false,
             ]);
         });
     }
 
-    public function generateGroups(Turnamen $turnamen, string $mode = 'random'): array
+    public function generateGroups(Turnamen $turnamen, string $mode = 'random', $idKategori = null): array
     {
-        if (! $this->canGenerateGroups($turnamen)) {
+        if (! $this->canGenerateGroups($turnamen, $idKategori)) {
             throw new RuntimeException('Grup Mahjong tidak dapat dibuat pada status turnamen ini.');
         }
 
-        $entries = $this->getApprovedEntries($turnamen);
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $entries = $this->getApprovedEntries($turnamen, $kategori->id);
         $this->assertDivisibleByFour($entries->count());
 
-        return $this->createGroupsFromEntries($turnamen, $entries, 1, $mode);
+        return $this->createGroupsFromEntries($turnamen, $kategori, $entries, 1, $mode);
     }
 
-    public function reshuffleGroups(Turnamen $turnamen, string $mode = 'random'): array
+    public function reshuffleGroups(Turnamen $turnamen, string $mode = 'random', $idKategori = null): array
     {
-        if (! $this->canReshuffle($turnamen)) {
+        if (! $this->canReshuffle($turnamen, $idKategori)) {
             throw new RuntimeException('Grup Mahjong tidak dapat diacak ulang pada status turnamen ini.');
         }
 
-        return DB::transaction(function () use ($turnamen, $mode) {
-            $this->commitCurrentRoundPoints($turnamen);
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
 
-            $entries = $this->collectEntriesFromActiveGroups($turnamen);
-            $babak = (int) $turnamen->activeGrup()->max('babak') ?: 1;
+        return DB::transaction(function () use ($turnamen, $kategori, $mode) {
+            $this->commitCurrentRoundPoints($turnamen, $kategori->id);
 
-            $this->deactivateActiveGroups($turnamen);
+            $entries = $this->collectEntriesFromActiveGroups($turnamen, $kategori->id);
+            $babak = (int) $kategori->activeGrup()->max('babak') ?: 1;
 
-            return $this->createGroupsFromEntries($turnamen, $entries, $babak, $mode, false);
+            $this->deactivateActiveGroups($turnamen, $kategori->id);
+
+            return $this->createGroupsFromEntries($turnamen, $kategori, $entries, $babak, $mode, false);
         });
     }
 
-    public function advanceRound(Turnamen $turnamen, int $jumlahLolos): array
+    public function advanceRound(Turnamen $turnamen, int $jumlahLolos, $idKategori = null): array
     {
-        if (! $this->canAdvanceRound($turnamen)) {
+        if (! $this->canAdvanceRound($turnamen, $idKategori)) {
             throw new RuntimeException('Babak Mahjong tidak dapat dilanjutkan.');
         }
 
@@ -125,12 +145,14 @@ class MahjongMatchmakingService
             throw new RuntimeException('Minimal ' . self::PLAYERS_PER_GROUP . ' pemain untuk babak selanjutnya.');
         }
 
-        return DB::transaction(function () use ($turnamen, $jumlahLolos) {
-            $this->commitCurrentRoundPoints($turnamen);
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
 
-            $currentBabak = (int) $turnamen->activeGrup()->max('babak') ?: 1;
+        return DB::transaction(function () use ($turnamen, $kategori, $jumlahLolos) {
+            $this->commitCurrentRoundPoints($turnamen, $kategori->id);
+
+            $currentBabak = (int) $kategori->activeGrup()->max('babak') ?: 1;
             $qualifierRows = $this->leaderboardService
-                ->buildMahjongBabakTable($turnamen, $currentBabak)['rows']
+                ->buildMahjongBabakTable($turnamen, $currentBabak, $kategori->id)['rows']
                 ->take($jumlahLolos)
                 ->values();
 
@@ -144,7 +166,7 @@ class MahjongMatchmakingService
             }
 
             $babak = $currentBabak + 1;
-            $this->deactivateActiveGroups($turnamen);
+            $this->deactivateActiveGroups($turnamen, $kategori->id);
 
             $isFinal = $qualifierRows->count() === self::PLAYERS_PER_GROUP;
 
@@ -158,7 +180,10 @@ class MahjongMatchmakingService
                 return $peserta;
             })->filter();
 
-            $result = $this->createGroupsFromEntries($turnamen, $entries, $babak, 'by_points', true);
+            $result = $this->createGroupsFromEntries($turnamen, $kategori, $entries, $babak, 'by_points', true);
+            $this->updateCompetitionLifecycle($kategori, [
+                'mahjong_is_final' => $isFinal,
+            ]);
             $turnamen->update(['mahjong_is_final' => $isFinal]);
 
             $result['is_final'] = $isFinal;
@@ -278,23 +303,26 @@ class MahjongMatchmakingService
         }
     }
 
-    public function getApprovedEntries(Turnamen $turnamen): Collection
+    public function getApprovedEntries(Turnamen $turnamen, $idKategori = null): Collection
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return TurnamenPeserta::query()
-            ->forTurnamen($turnamen->id)
+            ->forKategori($kategori->id)
             ->approved()
             ->with('pemain1')
             ->orderBy('id')
             ->get();
     }
 
-    public function getGlobalRankings(Turnamen $turnamen): Collection
+    public function getGlobalRankings(Turnamen $turnamen, $idKategori = null): Collection
     {
-        $babak = (int) $turnamen->activeGrup()->max('babak');
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $babak = (int) $kategori->activeGrup()->max('babak');
 
         if ($babak > 0) {
             return $this->leaderboardService
-                ->buildMahjongBabakTable($turnamen, $babak)['rows']
+                ->buildMahjongBabakTable($turnamen, $babak, $kategori->id)['rows']
                 ->map(function (array $row) {
                     return [
                         'peserta' => TurnamenPeserta::find($row['id_peserta']),
@@ -307,7 +335,7 @@ class MahjongMatchmakingService
 
         $rows = collect();
 
-        foreach ($this->getActiveMembers($turnamen) as $member) {
+        foreach ($this->getActiveMembers($turnamen, $kategori->id) as $member) {
             $rows->push([
                 'peserta' => $member->turnamenPeserta,
                 'pemain' => $member->pemain,
@@ -330,9 +358,10 @@ class MahjongMatchmakingService
         });
     }
 
-    public function getGroupStandingsPayload(Turnamen $turnamen): array
+    public function getGroupStandingsPayload(Turnamen $turnamen, $idKategori = null): array
     {
-        $groups = $turnamen->activeGrup()
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $groups = $kategori->activeGrup()
             ->with(['members.pemain', 'members.turnamenPeserta'])
             ->orderBy('nama')
             ->get();
@@ -343,7 +372,11 @@ class MahjongMatchmakingService
                 'nama' => $turnamen->nama,
                 'jenis' => $turnamen->jenis,
                 'status' => $turnamen->status,
-                'mahjong_is_final' => (bool) $turnamen->mahjong_is_final,
+                'mahjong_is_final' => (bool) $kategori->mahjong_is_final,
+            ],
+            'kategori' => [
+                'id' => $kategori->id,
+                'nama' => $kategori->nama,
             ],
             'groups' => $groups->map(function (Grup $grup) {
                 return [
@@ -362,7 +395,7 @@ class MahjongMatchmakingService
                     })->values(),
                 ];
             })->values(),
-            'global_rankings' => $this->getGlobalRankings($turnamen)->map(function (array $row) {
+            'global_rankings' => $this->getGlobalRankings($turnamen, $kategori->id)->map(function (array $row) {
                 return [
                     'id_pemain' => optional($row['pemain'])->id,
                     'id_peserta' => optional($row['peserta'])->id,
@@ -373,9 +406,10 @@ class MahjongMatchmakingService
         ];
     }
 
-    public function resolveFinalPlacements(Turnamen $turnamen): array
+    public function resolveFinalPlacements(Turnamen $turnamen, $idKategori = null): array
     {
-        $finalGroup = $turnamen->activeGrup()->with('members.pemain', 'members.turnamenPeserta')->first();
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $finalGroup = $kategori->activeGrup()->with('members.pemain', 'members.turnamenPeserta')->first();
 
         if (! $finalGroup) {
             throw new RuntimeException('Grup final Mahjong tidak ditemukan.');
@@ -403,6 +437,7 @@ class MahjongMatchmakingService
 
     protected function createGroupsFromEntries(
         Turnamen $turnamen,
+        TurnamenKategori $kategori,
         Collection $entries,
         int $babak,
         string $mode,
@@ -410,12 +445,13 @@ class MahjongMatchmakingService
     ): array {
         $ordered = $this->orderEntries($entries, $mode);
         $chunks = $ordered->chunk(self::PLAYERS_PER_GROUP)->values();
-        $ronde = $this->nextMahjongRonde($turnamen, $babak);
+        $ronde = $this->nextMahjongRonde($kategori, $babak);
         $result = ['groups' => [], 'babak' => $babak, 'ronde' => $ronde, 'mode' => $mode];
 
         foreach ($chunks as $index => $groupEntries) {
             $grup = Grup::create([
                 'id_turnamen' => $turnamen->id,
+                'id_kategori' => $kategori->id,
                 'nama' => 'Grup ' . $this->groupLabel($index + 1),
                 'babak' => $babak,
                 'ronde' => $ronde,
@@ -445,11 +481,11 @@ class MahjongMatchmakingService
         return $result;
     }
 
-    protected function collectEntriesFromActiveGroups(Turnamen $turnamen): Collection
+    protected function collectEntriesFromActiveGroups(Turnamen $turnamen, $idKategori = null): Collection
     {
         $entries = collect();
 
-        foreach ($this->getActiveMembers($turnamen) as $member) {
+        foreach ($this->getActiveMembers($turnamen, $idKategori) as $member) {
             if (! $member->turnamenPeserta) {
                 continue;
             }
@@ -463,9 +499,9 @@ class MahjongMatchmakingService
         return $entries->unique('id')->values();
     }
 
-    public function commitCurrentRoundPoints(Turnamen $turnamen): void
+    public function commitCurrentRoundPoints(Turnamen $turnamen, $idKategori = null): void
     {
-        foreach ($this->getActiveMembers($turnamen) as $member) {
+        foreach ($this->getActiveMembers($turnamen, $idKategori) as $member) {
             $member->update([
                 'poin_akumulasi' => $member->total_poin,
                 'poin_didapat' => 0,
@@ -473,16 +509,19 @@ class MahjongMatchmakingService
         }
     }
 
-    protected function deactivateActiveGroups(Turnamen $turnamen): void
+    protected function deactivateActiveGroups(Turnamen $turnamen, $idKategori = null): void
     {
-        $turnamen->activeGrup()->update(['is_aktif' => false]);
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $kategori->activeGrup()->update(['is_aktif' => false]);
     }
 
-    protected function getActiveMembers(Turnamen $turnamen): Collection
+    protected function getActiveMembers(Turnamen $turnamen, $idKategori = null): Collection
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return GrupMember::query()
-            ->whereHas('grup', function ($query) use ($turnamen) {
-                $query->where('id_turnamen', $turnamen->id)->where('is_aktif', true);
+            ->whereHas('grup', function ($query) use ($kategori) {
+                $query->where('id_kategori', $kategori->id)->where('is_aktif', true);
             })
             ->with(['pemain', 'turnamenPeserta'])
             ->get();
@@ -521,10 +560,10 @@ class MahjongMatchmakingService
         return chr(64 + $index);
     }
 
-    protected function nextMahjongRonde(Turnamen $turnamen, int $babak): int
+    protected function nextMahjongRonde(TurnamenKategori $kategori, int $babak): int
     {
         $maxRonde = Grup::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $kategori->id)
             ->where('babak', $babak)
             ->max('ronde');
 

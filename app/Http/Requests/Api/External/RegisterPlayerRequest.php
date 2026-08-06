@@ -23,6 +23,7 @@ class RegisterPlayerRequest extends FormRequest
     {
         return [
             'id_turnamen' => ['required', 'integer', 'exists:m_turnamen,id'],
+            'id_kategori' => ['nullable', 'integer', 'exists:turnamen_kategori,id'],
             'nama' => ['required', 'string', 'max:255'],
             'no_hp' => ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
             'gender' => ['required', 'in:male,female'],

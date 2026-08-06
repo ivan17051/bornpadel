@@ -27,6 +27,22 @@ use RuntimeException;
 class KnockoutBracketService
 
 {
+    /** @var int|null */
+    protected $operationKategoriId = null;
+
+    protected function resolvedKategoriId(Turnamen $turnamen, $idKategori = null): int
+    {
+        if ($idKategori !== null && $idKategori !== '') {
+            return (int) $turnamen->resolveKategori($idKategori)->id;
+        }
+
+        if ($this->operationKategoriId !== null) {
+            return (int) $this->operationKategoriId;
+        }
+
+        return (int) $turnamen->resolveKategori()->id;
+    }
+
 
     protected $leaderboardService;
 
@@ -42,9 +58,9 @@ class KnockoutBracketService
 
 
 
-    public function hasKnockoutBracket(Turnamen $turnamen): bool
+    public function hasKnockoutBracket(Turnamen $turnamen, $idKategori = null): bool
     {
-        return Pertandingan::where('id_turnamen', $turnamen->id)
+        return Pertandingan::where('id_kategori', $this->resolvedKategoriId($turnamen, $idKategori))
             ->whereNull('id_grup')
             ->whereIn('nama_ronde', ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final'])
             ->exists();
@@ -55,12 +71,12 @@ class KnockoutBracketService
      *
      * @return array{peserta_ids: array<int, int>, pemain_ids: array<int, int>}
      */
-    public function getKnockoutParticipantKeys(Turnamen $turnamen): array
+    public function getKnockoutParticipantKeys(Turnamen $turnamen, $idKategori = null): array
     {
         $pesertaIds = [];
         $pemainIds = [];
 
-        $matches = $this->knockoutMatchesQuery($turnamen)
+        $matches = $this->knockoutMatchesQuery($turnamen, $idKategori)
             ->get([
                 'id_peserta1',
                 'id_peserta2',
@@ -105,26 +121,26 @@ class KnockoutBracketService
         return ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final', 'Perebutan Juara 3'];
     }
 
-    protected function knockoutMatchesQuery(Turnamen $turnamen)
+    protected function knockoutMatchesQuery(Turnamen $turnamen, $idKategori = null)
     {
         return Pertandingan::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $this->resolvedKategoriId($turnamen, $idKategori))
             ->whereNull('id_grup')
             ->whereIn('nama_ronde', $this->knockoutRoundNames());
     }
 
-    public function canResetKnockoutBracket(Turnamen $turnamen): bool
+    public function canResetKnockoutBracket(Turnamen $turnamen, $idKategori = null): bool
     {
         if ($turnamen->isMahjong() || $turnamen->status === 'completed') {
             return false;
         }
 
-        return $this->knockoutMatchesQuery($turnamen)->exists();
+        return $this->knockoutMatchesQuery($turnamen, $idKategori)->exists();
     }
 
-    public function hasKnockoutScores(Turnamen $turnamen): bool
+    public function hasKnockoutScores(Turnamen $turnamen, $idKategori = null): bool
     {
-        return $this->knockoutMatchesQuery($turnamen)
+        return $this->knockoutMatchesQuery($turnamen, $idKategori)
             ->where(function ($query) {
                 $query->where('status', 'completed')
                     ->orWhereHas('skor');
@@ -135,7 +151,7 @@ class KnockoutBracketService
     /**
      * @return array{deleted: int, revoked_wins: int, had_scores: bool}
      */
-    public function resetKnockoutBracket(Turnamen $turnamen): array
+    public function resetKnockoutBracket(Turnamen $turnamen, $idKategori = null): array
     {
         if (! $this->canResetKnockoutBracket($turnamen)) {
             throw new RuntimeException(
@@ -201,11 +217,11 @@ class KnockoutBracketService
             ];
         });
     }
-    public function canEndGroupStage(Turnamen $turnamen): bool
+    public function canEndGroupStage(Turnamen $turnamen, $idKategori = null): bool
 
     {
 
-        if (! $turnamen->grup()->exists()) {
+        if (! $turnamen->competitionGrup($idKategori)->exists()) {
 
             return false;
 
@@ -217,7 +233,7 @@ class KnockoutBracketService
 
         }
 
-        if ($this->hasKnockoutBracket($turnamen)) {
+        if ($this->hasKnockoutBracket($turnamen, $idKategori)) {
 
             return false;
 
@@ -225,7 +241,7 @@ class KnockoutBracketService
 
 
 
-        $groupMatches = Pertandingan::where('id_turnamen', $turnamen->id)
+        $groupMatches = Pertandingan::where('id_kategori', $this->resolvedKategoriId($turnamen, $idKategori))
 
             ->where('nama_ronde', 'Fase Grup');
 
@@ -380,41 +396,48 @@ class KnockoutBracketService
     public function generateKnockoutBracket(
         Turnamen $turnamen,
         int $jumlahLolos = 2,
-        string $mode = self::QUALIFICATION_PER_GROUP
+        string $mode = self::QUALIFICATION_PER_GROUP,
+        $idKategori = null
     ): array {
-        if (! $this->canEndGroupStage($turnamen)) {
-            throw new RuntimeException('Fase grup belum selesai atau bracket knockout sudah dibuat.');
-        }
+        $this->operationKategoriId = $this->resolvedKategoriId($turnamen, $idKategori);
 
-        if (! in_array($mode, [self::QUALIFICATION_PER_GROUP, self::QUALIFICATION_TOTAL], true)) {
-            throw new RuntimeException('Mode kualifikasi tidak valid.');
-        }
-
-        $qualifiers = $this->getQualifiers($turnamen, $jumlahLolos, $mode);
-
-        if ($qualifiers->count() < 2) {
-            throw new RuntimeException('Minimal 2 peserta lolos diperlukan untuk bracket knockout.');
-        }
-
-        return DB::transaction(function () use ($turnamen, $qualifiers, $mode, $jumlahLolos) {
-            $result = $this->createSeededBracket($turnamen, $qualifiers);
-            $result['qualification_mode'] = $mode;
-
-            if ($mode === self::QUALIFICATION_TOTAL) {
-                $plan = $this->describeTotalQualification($turnamen, $jumlahLolos);
-                $result['jumlah_lolos_total'] = $jumlahLolos;
-                $result['jumlah_lolos_per_grup'] = $plan['base_per_group'];
-                $result['lucky_loser_slots'] = $plan['lucky_loser_slots'];
-                $result['qualification_summary'] = $plan['summary'];
-            } else {
-                $result['jumlah_lolos_per_grup'] = $jumlahLolos;
-                $result['jumlah_lolos_total'] = $qualifiers->count();
-                $result['lucky_loser_slots'] = 0;
-                $result['qualification_summary'] = null;
+        try {
+            if (! $this->canEndGroupStage($turnamen, $idKategori)) {
+                throw new RuntimeException('Fase grup belum selesai atau bracket knockout sudah dibuat.');
             }
 
-            return $result;
-        });
+            if (! in_array($mode, [self::QUALIFICATION_PER_GROUP, self::QUALIFICATION_TOTAL], true)) {
+                throw new RuntimeException('Mode kualifikasi tidak valid.');
+            }
+
+            $qualifiers = $this->getQualifiers($turnamen, $jumlahLolos, $mode);
+
+            if ($qualifiers->count() < 2) {
+                throw new RuntimeException('Minimal 2 peserta lolos diperlukan untuk bracket knockout.');
+            }
+
+            return DB::transaction(function () use ($turnamen, $qualifiers, $mode, $jumlahLolos) {
+                $result = $this->createSeededBracket($turnamen, $qualifiers);
+                $result['qualification_mode'] = $mode;
+
+                if ($mode === self::QUALIFICATION_TOTAL) {
+                    $plan = $this->describeTotalQualification($turnamen, $jumlahLolos);
+                    $result['jumlah_lolos_total'] = $jumlahLolos;
+                    $result['jumlah_lolos_per_grup'] = $plan['base_per_group'];
+                    $result['lucky_loser_slots'] = $plan['lucky_loser_slots'];
+                    $result['qualification_summary'] = $plan['summary'];
+                } else {
+                    $result['jumlah_lolos_per_grup'] = $jumlahLolos;
+                    $result['jumlah_lolos_total'] = $qualifiers->count();
+                    $result['lucky_loser_slots'] = 0;
+                    $result['qualification_summary'] = null;
+                }
+
+                return $result;
+            });
+        } finally {
+            $this->operationKategoriId = null;
+        }
     }
 
     /**
@@ -578,6 +601,8 @@ class KnockoutBracketService
                 $roundMatches[$roundName][] = Pertandingan::create([
 
                     'id_turnamen' => $turnamen->id,
+
+                    'id_kategori' => $this->resolvedKategoriId($turnamen),
 
                     'id_grup' => null,
 
@@ -744,6 +769,7 @@ class KnockoutBracketService
 
         $thirdPlace = Pertandingan::create([
             'id_turnamen' => $turnamen->id,
+            'id_kategori' => $this->resolvedKategoriId($turnamen),
             'id_grup' => null,
             'nama_ronde' => 'Perebutan Juara 3',
             'id_pemain1' => null,
@@ -902,11 +928,11 @@ class KnockoutBracketService
      *
      * @return \Illuminate\Support\Collection<int, array{nama_ronde: string, matches: \Illuminate\Support\Collection}>
      */
-    public function getKnockoutRoundsWithMatches(Turnamen $turnamen): Collection
+    public function getKnockoutRoundsWithMatches(Turnamen $turnamen, $idKategori = null): Collection
     {
         $roundOrder = ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final', 'Perebutan Juara 3'];
 
-        $matchesByRound = Pertandingan::where('id_turnamen', $turnamen->id)
+        $matchesByRound = Pertandingan::where('id_kategori', $this->resolvedKategoriId($turnamen, $idKategori))
             ->whereNull('id_grup')
             ->with(array_merge([
                 'peserta1.pemain1',
@@ -932,7 +958,7 @@ class KnockoutBracketService
 
 
 
-    public function getBracketTree(Turnamen $turnamen): array
+    public function getBracketTree(Turnamen $turnamen, $idKategori = null): array
 
     {
 
@@ -949,7 +975,7 @@ class KnockoutBracketService
             TurnamenPeserta::partnerPemainEagerLoadsFor('pesertaPemenang')
         );
 
-        $allMatches = Pertandingan::where('id_turnamen', $turnamen->id)
+        $allMatches = Pertandingan::where('id_kategori', $this->resolvedKategoriId($turnamen))
             ->whereNull('id_grup')
             ->with($relations)
             ->orderBy('id')
@@ -1333,7 +1359,7 @@ class KnockoutBracketService
         $roundOrder = ['Babak 16 Besar', 'Perempatfinal', 'Semifinal', 'Final'];
 
         $existingRounds = Pertandingan::query()
-            ->where('id_turnamen', $turnamen->id)
+            ->where('id_kategori', $this->resolvedKategoriId($turnamen))
             ->whereNull('id_grup')
             ->whereIn('nama_ronde', $roundOrder)
             ->pluck('nama_ronde')
@@ -1348,7 +1374,7 @@ class KnockoutBracketService
             $roundName = $activeRounds[$roundIndex];
 
             $matches = Pertandingan::query()
-                ->where('id_turnamen', $turnamen->id)
+                ->where('id_kategori', $this->resolvedKategoriId($turnamen))
                 ->whereNull('id_grup')
                 ->where('nama_ronde', $roundName)
                 ->orderBy('id')
@@ -1624,7 +1650,7 @@ class KnockoutBracketService
 
     protected function findSwappableMatch(Turnamen $turnamen, int $matchId): Pertandingan
     {
-        $match = Pertandingan::where('id_turnamen', $turnamen->id)
+        $match = Pertandingan::where('id_kategori', $this->resolvedKategoriId($turnamen))
             ->whereNull('id_grup')
             ->where('id', $matchId)
             ->first();

@@ -214,6 +214,7 @@ class SingleDoublePairSemanticsTest extends TestCase
         $response->assertRedirect(route('guest.register.form', [
             'no_hp' => '+6281299000020',
             'id_turnamen' => $turnamen->id,
+            'id_kategori' => $turnamen->defaultKategori()->id,
             'registration_mode' => 'single',
         ]));
     }
