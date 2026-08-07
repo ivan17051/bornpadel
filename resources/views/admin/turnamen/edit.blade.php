@@ -9,16 +9,9 @@
 @endsection
 
 @section('content')
-<div class="row justify-content-center">
-    <div class="col-lg-10">
-        @if (session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="alert alert-danger">{{ session('error') }}</div>
-        @endif
-
-        <div class="card">
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card h-100">
             <div class="card-header">
                 <h5 class="card-title mb-0">{{ $turnamen->nama }}</h5>
             </div>
@@ -36,7 +29,9 @@
                 </form>
             </div>
         </div>
+    </div>
 
+    <div class="col-lg-4">
         @include('admin.turnamen.partials.kategori-manager', [
             'turnamen' => $turnamen,
             'kategoriList' => $kategoriList ?? $turnamen->kategori()->ordered()->get(),

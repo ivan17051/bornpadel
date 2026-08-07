@@ -301,8 +301,11 @@
     </div>
 
     @php
+        // Group Match only: registration grouping UI when matchmaking groups are not ready yet.
+        // Hidden while registration is open (same workflows live on the Pemain tab).
         $showFriendlyRegistrationPanel = $isFriendly
-            && (($registrationOpen ?? $turnamen->isRegistrationOpen()) || $grup->isEmpty())
+            && ! ($registrationOpen ?? false)
+            && $grup->isEmpty()
             && isset($friendlyRegistrationGroups);
         $canBulkApproveFriendly = auth()->user()->isAdmin();
         $turnamenOngoing = $turnamen->status === 'ongoing';

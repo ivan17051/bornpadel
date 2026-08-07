@@ -15,47 +15,49 @@
     @enderror
 </div>
 
-<div class="mb-3">
-    <label for="tanggal" class="form-label">Tanggal Turnamen <span class="text-danger">*</span></label>
-    <input type="date"
-           name="tanggal"
-           id="tanggal"
-           class="form-control @error('tanggal') is-invalid @enderror"
-           value="{{ old('tanggal', optional(optional($turnamenModel)->tanggal)->format('Y-m-d')) }}"
-           required>
-    @error('tanggal')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="mb-3">
-    <label for="harga" class="form-label">Biaya Pendaftaran (Rp) <span class="text-danger">*</span></label>
-    <input type="number"
-           name="harga"
-           id="harga"
-           class="form-control @error('harga') is-invalid @enderror"
-           value="{{ old('harga', optional($turnamenModel)->harga) }}"
-           min="0"
-           step="1000"
-           required>
-    @error('harga')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="mb-3">
-    <label for="maks_peserta" class="form-label">Maksimal Peserta</label>
-    <input type="number"
-           name="maks_peserta"
-           id="maks_peserta"
-           class="form-control @error('maks_peserta') is-invalid @enderror"
-           value="{{ old('maks_peserta', optional($turnamenModel)->maks_peserta) }}"
-           min="1"
-           placeholder="Kosongkan jika tidak ada batas">
-    <div class="form-text">Membatasi jumlah peserta yang dapat disetujui admin. Tidak membatasi pendaftaran mandiri.</div>
-    @error('maks_peserta')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <label for="tanggal" class="form-label">Tanggal Turnamen <span class="text-danger">*</span></label>
+        <input type="date"
+               name="tanggal"
+               id="tanggal"
+               class="form-control @error('tanggal') is-invalid @enderror"
+               value="{{ old('tanggal', optional(optional($turnamenModel)->tanggal)->format('Y-m-d')) }}"
+               required>
+        @error('tanggal')
+            <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+    <div class="col-md-4">
+        <label for="harga" class="form-label">Biaya Pendaftaran (Rp) <span class="text-danger">*</span></label>
+        <input type="number"
+               name="harga"
+               id="harga"
+               class="form-control @error('harga') is-invalid @enderror"
+               value="{{ old('harga', optional($turnamenModel)->harga) }}"
+               min="0"
+               step="1000"
+               required>
+        @error('harga')
+            <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+    <div class="col-md-4">
+        <label for="maks_peserta" class="form-label">Maksimal Peserta</label>
+        <input type="number"
+               name="maks_peserta"
+               id="maks_peserta"
+               class="form-control @error('maks_peserta') is-invalid @enderror"
+               value="{{ old('maks_peserta', optional($turnamenModel)->maks_peserta) }}"
+               min="1"
+               placeholder="Kosongkan jika tidak ada batas">
+        @error('maks_peserta')
+            <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+    <div class="col-12">
+        <div class="form-text mt-0">Maksimal peserta membatasi jumlah yang dapat disetujui admin, bukan pendaftaran mandiri.</div>
+    </div>
 </div>
 
 <div class="mb-3">

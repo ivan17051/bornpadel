@@ -111,16 +111,24 @@
                     </select>
                 </div>
                 <div class="col-md-auto">
-                    <noscript>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-funnel me-1"></i> Terapkan
-                        </button>
-                    </noscript>
-                    @if (request('id_turnamen'))
-                        <a href="{{ $filterRoute }}" class="btn btn-outline-secondary">
-                            Reset
-                        </a>
-                    @endif
+                    <div class="d-flex flex-wrap gap-2">
+                        <noscript>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-funnel me-1"></i> Terapkan
+                            </button>
+                        </noscript>
+                        @if (request('id_turnamen'))
+                            <a href="{{ $filterRoute }}" class="btn btn-outline-secondary">
+                                Reset
+                            </a>
+                        @endif
+                        @if ($turnamen && $user && $user->isAdmin())
+                            <a href="{{ route('admin.turnamen.edit', $turnamen) }}"
+                               class="btn btn-outline-primary">
+                                <i class="bi bi-pencil-square me-1"></i> Edit Turnamen
+                            </a>
+                        @endif
+                    </div>
                 </div>
             </div>
 

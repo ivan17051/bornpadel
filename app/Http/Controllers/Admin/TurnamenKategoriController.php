@@ -20,17 +20,29 @@ class TurnamenKategoriController extends Controller
 
     public function store(Request $request, Turnamen $turnamen)
     {
-        $data = $request->validate([
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'nama' => ['required', 'string', 'max:255'],
             'harga' => ['nullable', 'numeric', 'min:0'],
             'maks_peserta' => ['nullable', 'integer', 'min:1'],
             'urutan' => ['nullable', 'integer', 'min:1'],
         ]);
 
+        if ($validator->fails()) {
+            return back()
+                ->withErrors($validator)
+                ->withInput()
+                ->with('open_kategori_modal', true);
+        }
+
+        $data = $validator->validated();
+
         try {
             $kategori = $this->kategoriService->create($turnamen, $data);
         } catch (RuntimeException $e) {
-            return back()->withInput()->with('error', $e->getMessage());
+            return back()
+                ->withInput()
+                ->with('open_kategori_modal', true)
+                ->with('error', $e->getMessage());
         }
 
         return redirect()
@@ -42,7 +54,7 @@ class TurnamenKategoriController extends Controller
     {
         $this->assertBelongsToTurnamen($turnamen, $kategori);
 
-        $data = $request->validate([
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'nama' => ['required', 'string', 'max:255'],
             'harga' => ['required', 'numeric', 'min:0'],
             'maks_peserta' => ['nullable', 'integer', 'min:1'],
@@ -50,10 +62,22 @@ class TurnamenKategoriController extends Controller
             'players_per_group' => ['nullable', 'integer', 'min:' . Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP],
         ]);
 
+        if ($validator->fails()) {
+            return back()
+                ->withErrors($validator)
+                ->withInput()
+                ->with('open_kategori_edit_id', $kategori->id);
+        }
+
+        $data = $validator->validated();
+
         try {
             $this->kategoriService->update($kategori, $data);
         } catch (RuntimeException $e) {
-            return back()->withInput()->with('error', $e->getMessage());
+            return back()
+                ->withInput()
+                ->with('open_kategori_edit_id', $kategori->id)
+                ->with('error', $e->getMessage());
         }
 
         return redirect()
