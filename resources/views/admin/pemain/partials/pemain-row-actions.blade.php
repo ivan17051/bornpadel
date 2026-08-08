@@ -18,6 +18,10 @@
     $canManagePartner = ($showPartnerActions ?? false) && $peserta;
     $hasSetPartner = $canManagePartner && ! $peserta->isPaired();
     $hasChangePartner = $canManagePartner && $peserta->isPaired();
+
+    $regGroupMove = $regGroupMove ?? null;
+    $regGroupRemove = $regGroupRemove ?? null;
+    $hasRegGroupActions = is_array($regGroupMove) || is_array($regGroupRemove);
 @endphp
 
 <div class="dropdown">
@@ -64,6 +68,33 @@
                     <i class="bi bi-arrow-repeat me-2"></i> Ubah Partner
                 </button>
             </li>
+        @endif
+
+        @if ($hasRegGroupActions)
+            <li><hr class="dropdown-divider"></li>
+            @if (is_array($regGroupMove))
+                <li>
+                    <button type="button"
+                            class="dropdown-item friendly-reg-move-open"
+                            data-peserta-id="{{ $regGroupMove['peserta_id'] }}"
+                            data-pemain-name="{{ $regGroupMove['pemain_name'] }}"
+                            data-from-group-id="{{ $regGroupMove['from_group_id'] ?? '' }}">
+                        <i class="bi bi-arrow-left-right me-2"></i>
+                        {{ $regGroupMove['label'] ?? 'Pindah Grup' }}
+                    </button>
+                </li>
+            @endif
+            @if (is_array($regGroupRemove))
+                <li>
+                    <button type="button"
+                            class="dropdown-item text-danger friendly-reg-remove"
+                            data-peserta-id="{{ $regGroupRemove['peserta_id'] }}"
+                            data-pemain-name="{{ $regGroupRemove['pemain_name'] }}">
+                        <i class="bi bi-box-arrow-left me-2"></i>
+                        {{ $regGroupRemove['label'] ?? 'Lepas dari grup' }}
+                    </button>
+                </li>
+            @endif
         @endif
 
         @if ($hasApprove)

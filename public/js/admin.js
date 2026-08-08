@@ -711,6 +711,195 @@ const BornPadelAdmin = (function () {
                 });
             });
         }
+
+        initFriendlyRegistrationGroupEdit();
+    };
+
+    const initFriendlyRegistrationGroupEdit = () => {
+        const panel = document.getElementById('pemain-table-card');
+        if (!panel || panel.dataset.regEdit !== '1') {
+            return;
+        }
+
+        const turnamenId = parseInt(panel.dataset.turnamenId, 10);
+        const kategoriId = panel.dataset.kategori ? parseInt(panel.dataset.kategori, 10) : null;
+        const assignUrl = panel.dataset.regAssignUrl;
+        const removeUrl = panel.dataset.regRemoveUrl;
+        const renameTemplate = panel.dataset.regRenameUrlTemplate || '';
+        let groups = [];
+
+        try {
+            groups = JSON.parse(panel.dataset.regGroups || '[]');
+        } catch (e) {
+            groups = [];
+        }
+
+        const basePayload = () => {
+            const payload = { id_turnamen: turnamenId };
+            if (kategoriId) {
+                payload.id_kategori = kategoriId;
+            }
+            return payload;
+        };
+
+        const moveModalEl = document.getElementById('friendlyRegGroupModal');
+        const renameModalEl = document.getElementById('friendlyRegRenameModal');
+        if (!moveModalEl || !renameModalEl) {
+            return;
+        }
+
+        const moveModal = new bootstrap.Modal(moveModalEl);
+        const renameModal = new bootstrap.Modal(renameModalEl);
+        const moveSelect = document.getElementById('friendly-reg-target-group');
+        const moveNameEl = document.getElementById('friendly-reg-player-name');
+        const moveHintEl = document.getElementById('friendly-reg-slots-hint');
+        const moveSaveBtn = document.getElementById('btn-save-friendly-reg');
+        const renameInput = document.getElementById('friendly-reg-rename-input');
+        const renameSaveBtn = document.getElementById('btn-save-friendly-reg-rename');
+
+        let activeMovePesertaId = null;
+        let activeRenameGroupId = null;
+
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        const openMoveModal = (pesertaId, playerName, fromGroupId) => {
+            activeMovePesertaId = parseInt(pesertaId, 10) || 0;
+            const fromId = fromGroupId ? parseInt(fromGroupId, 10) : null;
+            const targets = groups.filter((g) => g.slots > 0 && g.id !== fromId);
+
+            if (!targets.length) {
+                showAlert('Tidak ada grup dengan slot kosong.', 'warning');
+                return;
+            }
+
+            if (moveNameEl) {
+                moveNameEl.textContent = playerName || 'pemain';
+            }
+
+            moveSelect.innerHTML = targets.map((g) =>
+                `<option value="${g.id}">${escapeHtml(g.nama)} (sisa ${g.slots})</option>`
+            ).join('');
+
+            if (moveHintEl) {
+                moveHintEl.textContent = fromId
+                    ? 'Hanya grup yang belum penuh yang muncul di daftar.'
+                    : 'Pemain tanpa grup akan dimasukkan ke grup yang dipilih.';
+            }
+
+            moveModal.show();
+        };
+
+        panel.querySelectorAll('.friendly-reg-move-open').forEach((btn) => {
+            btn.addEventListener('click', (event) => {
+                event.preventDefault();
+                openMoveModal(btn.dataset.pesertaId, btn.dataset.pemainName, btn.dataset.fromGroupId);
+            });
+        });
+
+        if (moveSaveBtn) {
+            moveSaveBtn.addEventListener('click', async () => {
+                if (!activeMovePesertaId) {
+                    return;
+                }
+
+                const groupId = parseInt(moveSelect.value, 10);
+                if (!groupId) {
+                    showAlert('Pilih grup tujuan.', 'warning');
+                    return;
+                }
+
+                const original = moveSaveBtn.innerHTML;
+                setButtonLoading(moveSaveBtn, true);
+
+                try {
+                    await apiRequest(assignUrl, 'POST', {
+                        ...basePayload(),
+                        id_peserta: activeMovePesertaId,
+                        id_grup_pendaftaran: groupId,
+                    });
+                    moveModal.hide();
+                    showAlert('Pemain berhasil dipindah ke grup.', 'success');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                } finally {
+                    setButtonLoading(moveSaveBtn, false, original);
+                }
+            });
+        }
+
+        panel.querySelectorAll('.friendly-reg-remove').forEach((btn) => {
+            btn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const name = btn.dataset.pemainName || 'pemain ini';
+                const confirmed = await confirmAction({
+                    title: `Lepas ${name} dari grup?`,
+                    text: 'Pemain tetap terdaftar di turnamen sebagai individu (tanpa grup).',
+                    confirmText: 'Ya, lepas',
+                    icon: 'warning',
+                    confirmButtonColor: '#dc3545',
+                });
+                if (!confirmed) return;
+
+                try {
+                    await apiRequest(removeUrl, 'POST', {
+                        ...basePayload(),
+                        id_peserta: parseInt(btn.dataset.pesertaId, 10),
+                    });
+                    showAlert('Pemain dilepas dari grup.', 'success');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                }
+            });
+        });
+
+        panel.querySelectorAll('.friendly-reg-rename-open').forEach((btn) => {
+            btn.addEventListener('click', (event) => {
+                event.preventDefault();
+                activeRenameGroupId = parseInt(btn.dataset.groupId, 10) || 0;
+                if (renameInput) {
+                    renameInput.value = btn.dataset.groupName || '';
+                }
+                renameModal.show();
+            });
+        });
+
+        if (renameSaveBtn) {
+            renameSaveBtn.addEventListener('click', async () => {
+                if (!activeRenameGroupId) {
+                    return;
+                }
+
+                const nama = (renameInput?.value || '').trim();
+                if (!nama) {
+                    showAlert('Nama grup wajib diisi.', 'warning');
+                    return;
+                }
+
+                const original = renameSaveBtn.innerHTML;
+                setButtonLoading(renameSaveBtn, true);
+
+                try {
+                    const url = renameTemplate.replace('__ID__', String(activeRenameGroupId));
+                    await apiRequest(url, 'PATCH', {
+                        ...basePayload(),
+                        nama,
+                    });
+                    renameModal.hide();
+                    showAlert('Nama grup berhasil diperbarui.', 'success');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                } finally {
+                    setButtonLoading(renameSaveBtn, false, original);
+                }
+            });
+        }
     };
 
     const initMatchmakingActions = () => {

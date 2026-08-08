@@ -6,6 +6,13 @@
     $showPartnerActions = auth()->user()->isAdmin() && $turnamen && $turnamen->requiresPairRegistration() && ! $turnamen->isRegistrationClosed() && empty($isDoubleView);
     $showPartnerColumn = $turnamen && $turnamen->requiresPairRegistration() && empty($isDoubleView);
     $showFriendlyGroups = $turnamen && $turnamen->allowsGroupRegistration() && empty($isDoubleView) && ! request()->filled('sort');
+    $canEditRegistrationGroups = $canEditRegistrationGroups ?? false;
+    $friendlyRegistrationGroupTargets = collect($friendlyRegistrationGroupTargets ?? []);
+    $friendlyPlayersPerGroup = $turnamen && $turnamen->allowsGroupRegistration()
+        ? (isset($kategori) && $kategori
+            ? $kategori->friendlyPlayersPerGroup()
+            : $turnamen->friendlyPlayersPerGroup())
+        : 4;
     $sortThParams = compact('filterRoute', 'preserveTab');
 @endphp
 
@@ -82,6 +89,17 @@
      @if ($turnamen)
      data-turnamen-id="{{ $turnamen->id }}"
      data-bulk-approve-url="{{ route('admin.peserta.bulk-approve') }}"
+     @if (! empty($kategoriId) || ! empty(optional($kategori ?? null)->id))
+     data-kategori="{{ $kategoriId ?? $kategori->id }}"
+     @endif
+     @if ($canEditRegistrationGroups)
+     data-reg-edit="1"
+     data-reg-players-per-group="{{ $friendlyPlayersPerGroup }}"
+     data-reg-assign-url="{{ route('admin.pemain.friendly.registration-group.assign') }}"
+     data-reg-remove-url="{{ route('admin.pemain.friendly.registration-group.remove') }}"
+     data-reg-rename-url-template="{{ route('admin.pemain.friendly.registration-group.rename', ['group' => '__ID__']) }}"
+     data-reg-groups='@json($friendlyRegistrationGroupTargets->values())'
+     @endif
      @endif>
     <div class="card-header d-flex justify-content-between align-items-center row border-top-0">
         <div class="col-md-6">
@@ -240,8 +258,35 @@
                             @if ($showFriendlyGroups && $friendlyGroupKey !== $prevFriendlyGroupKey)
                                 <tr class="table-secondary">
                                     <td colspan="{{ $friendlyColspan }}" class="small fw-semibold py-2">
-                                        <i class="bi bi-people me-1"></i>
-                                        {{ $friendlyGroup ? $friendlyGroup->nama : 'Individu / Belum berkelompok' }}
+                                        <div class="d-flex flex-wrap align-items-center gap-2">
+                                            <span>
+                                                <i class="bi bi-people me-1"></i>
+                                                <span class="friendly-reg-group-name" @if ($friendlyGroup) data-group-id="{{ $friendlyGroup->id }}" @endif>
+                                                    {{ $friendlyGroup ? $friendlyGroup->nama : 'Individu / Belum berkelompok' }}
+                                                </span>
+                                                @if ($friendlyGroup)
+                                                    @php
+                                                        $groupTargetMeta = $friendlyRegistrationGroupTargets->firstWhere('id', (int) $friendlyGroup->id);
+                                                        $groupCount = $groupTargetMeta['count'] ?? null;
+                                                    @endphp
+                                                    @if ($groupCount !== null)
+                                                        <span class="badge text-bg-light text-dark border ms-1">
+                                                            {{ $groupCount }}/{{ $friendlyPlayersPerGroup }}
+                                                        </span>
+                                                    @endif
+                                                @endif
+                                            </span>
+                                            @if ($canEditRegistrationGroups && $friendlyGroup)
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-secondary friendly-reg-rename-open ms-auto"
+                                                        data-group-id="{{ $friendlyGroup->id }}"
+                                                        data-group-name="{{ $friendlyGroup->nama }}"
+                                                        title="Ubah nama grup"
+                                                        aria-label="Ubah nama grup">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                                 @php $prevFriendlyGroupKey = $friendlyGroupKey; @endphp
@@ -292,6 +337,38 @@
                                     @endif
                                 </td>
                                 <td class="text-end text-nowrap">
+                                    @php
+                                        $regGroupMove = null;
+                                        $regGroupRemove = null;
+                                        if ($canEditRegistrationGroups && $pesertaRow) {
+                                            $fromGroupId = $friendlyGroup ? (int) $friendlyGroup->id : null;
+                                            $moveTargets = $friendlyRegistrationGroupTargets->filter(function ($group) use ($fromGroupId) {
+                                                if (($group['slots'] ?? 0) <= 0) {
+                                                    return false;
+                                                }
+                                                if ($fromGroupId && (int) $group['id'] === $fromGroupId) {
+                                                    return false;
+                                                }
+
+                                                return true;
+                                            });
+                                            if ($moveTargets->isNotEmpty()) {
+                                                $regGroupMove = [
+                                                    'peserta_id' => $pesertaRow->id,
+                                                    'pemain_name' => $item->nama,
+                                                    'from_group_id' => $fromGroupId ?: '',
+                                                    'label' => 'Pindah Grup',
+                                                ];
+                                            }
+                                            if ($friendlyGroup) {
+                                                $regGroupRemove = [
+                                                    'peserta_id' => $pesertaRow->id,
+                                                    'pemain_name' => $item->nama,
+                                                    'label' => 'Lepas dari grup',
+                                                ];
+                                            }
+                                        }
+                                    @endphp
                                     @include('admin.pemain.partials.pemain-row-actions', [
                                         'pemain' => $item,
                                         'peserta' => $pesertaRow,
@@ -300,6 +377,8 @@
                                         'turnamenOngoing' => $turnamenOngoing,
                                         'pemainEditFrom' => $pemainEditFrom ?? 'index',
                                         'showPartnerActions' => $showPartnerActions,
+                                        'regGroupMove' => $regGroupMove,
+                                        'regGroupRemove' => $regGroupRemove,
                                     ])
                                 </td>
                             </tr>
@@ -330,6 +409,68 @@
     @include('admin.pemain.partials.set-partner-modal', [
         'soloPesertaOptions' => $soloPesertaOptions ?? collect(),
     ])
+@endif
+
+@if ($canEditRegistrationGroups)
+    <div class="modal fade friendly-reg-modal" id="friendlyRegGroupModal" tabindex="-1" aria-labelledby="friendlyRegGroupModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="friendlyRegGroupModalLabel">Pindah Grup</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Pindahkan <strong id="friendly-reg-player-name">pemain</strong> ke grup yang masih ada slot kosong.
+                    </p>
+                    <label for="friendly-reg-target-group" class="form-label">Grup tujuan</label>
+                    <select id="friendly-reg-target-group" class="form-select"></select>
+                    <div class="form-text" id="friendly-reg-slots-hint"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" id="btn-save-friendly-reg">
+                        <i class="bi bi-check-lg me-1"></i> Simpan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade friendly-reg-modal" id="friendlyRegRenameModal" tabindex="-1" aria-labelledby="friendlyRegRenameModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="friendlyRegRenameModalLabel">Ubah Nama Grup</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <label for="friendly-reg-rename-input" class="form-label">Nama grup</label>
+                    <input type="text" class="form-control" id="friendly-reg-rename-input" maxlength="255" autocomplete="off">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" id="btn-save-friendly-reg-rename">
+                        <i class="bi bi-check-lg me-1"></i> Simpan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @once
+    @push('styles')
+    <style>
+        /* Match SweetAlert-like dim (not solid black Bootstrap default) */
+        body:has(.friendly-reg-modal.show) .modal-backdrop {
+            --bs-backdrop-bg: rgba(0, 0, 0, 0.4);
+            --bs-backdrop-opacity: 1;
+            background-color: rgba(0, 0, 0, 0.4);
+            opacity: 1;
+        }
+    </style>
+    @endpush
+    @endonce
 @endif
 
 <div class="modal fade" id="buktiBayarModal" tabindex="-1" aria-labelledby="buktiBayarModalLabel" aria-hidden="true">

@@ -13,6 +13,7 @@ use App\Http\Requests\Admin\UpdatePemainRequest;
 use App\Models\Pemain;
 use App\Models\Pertandingan;
 use App\Models\Turnamen;
+use App\Models\TurnamenGrupPendaftaran;
 use App\Models\TurnamenPeserta;
 use App\Services\GroupMatchmakingService;
 use App\Services\PemainPhotoService;
@@ -24,6 +25,7 @@ use App\Services\TournamentAccessService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class PemainController extends Controller
 {
@@ -729,6 +731,113 @@ class PemainController extends Controller
         return redirect()
             ->to($this->pemainReturnUrl($request))
             ->with('success', 'Profil pemain berhasil dihapus.');
+    }
+
+    public function assignFriendlyRegistrationGroupMember(Request $request)
+    {
+        $request->validate([
+            'id_turnamen' => ['required', 'exists:m_turnamen,id'],
+            'id_peserta' => ['required', 'integer', 'exists:turnamen_peserta,id'],
+            'id_grup_pendaftaran' => ['required', 'integer', 'exists:turnamen_grup_pendaftaran,id'],
+            'id_kategori' => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveFriendlyTournament((int) $request->input('id_turnamen'));
+            $kategoriId = $this->resolveKategoriId($request, $turnamen);
+
+            $this->registrationService->assignPesertaToRegistrationGroup(
+                $turnamen,
+                (int) $request->input('id_peserta'),
+                (int) $request->input('id_grup_pendaftaran'),
+                $kategoriId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pemain berhasil dipindah ke grup.',
+        ]);
+    }
+
+    public function removeFriendlyRegistrationGroupMember(Request $request)
+    {
+        $request->validate([
+            'id_turnamen' => ['required', 'exists:m_turnamen,id'],
+            'id_peserta' => ['required', 'integer', 'exists:turnamen_peserta,id'],
+            'id_kategori' => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveFriendlyTournament((int) $request->input('id_turnamen'));
+            $kategoriId = $this->resolveKategoriId($request, $turnamen);
+
+            $this->registrationService->removePesertaFromRegistrationGroup(
+                $turnamen,
+                (int) $request->input('id_peserta'),
+                $kategoriId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pemain dilepas dari grup.',
+        ]);
+    }
+
+    public function renameFriendlyRegistrationGroup(Request $request, TurnamenGrupPendaftaran $group)
+    {
+        $request->validate([
+            'id_turnamen' => ['required', 'exists:m_turnamen,id'],
+            'nama' => ['required', 'string', 'max:255'],
+            'id_kategori' => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveFriendlyTournament((int) $request->input('id_turnamen'));
+            $kategoriId = $this->resolveKategoriId($request, $turnamen);
+
+            if ((int) $group->id_turnamen !== (int) $turnamen->id) {
+                throw new RuntimeException('Grup tidak termasuk turnamen ini.');
+            }
+
+            $group = $this->registrationService->renameRegistrationGroup(
+                $turnamen,
+                (int) $group->id,
+                $request->input('nama'),
+                $kategoriId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Nama grup berhasil diperbarui.',
+            'data' => ['id' => $group->id, 'nama' => $group->nama],
+        ]);
+    }
+
+    protected function resolveFriendlyTournament(int $turnamenId): Turnamen
+    {
+        $turnamen = $this->matchmakingService->resolveTournament($turnamenId, false);
+
+        if (! $turnamen || ! $turnamen->isFriendly()) {
+            throw new RuntimeException('Fitur grup pendaftaran hanya untuk Group Match.');
+        }
+
+        return $turnamen;
+    }
+
+    protected function resolveKategoriId(Request $request, Turnamen $turnamen): int
+    {
+        return (int) $turnamen->resolveKategori(
+            $request->filled('id_kategori') ? (int) $request->input('id_kategori') : null
+        )->id;
     }
 
     protected function pemainEditReturnQuery(Request $request): array

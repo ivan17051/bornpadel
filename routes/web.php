@@ -101,6 +101,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/pemain/{pemain}/status', [PemainController::class, 'updateStatus'])->name('pemain.status');
         Route::delete('/pemain/{pemain}/registration', [PemainController::class, 'detachFromTurnamen'])->name('pemain.registration.destroy');
         Route::delete('/pemain/{pemain}', [PemainController::class, 'destroy'])->name('pemain.destroy');
+        Route::post('/pemain/friendly/registration-group/assign', [PemainController::class, 'assignFriendlyRegistrationGroupMember'])
+            ->name('pemain.friendly.registration-group.assign');
+        Route::post('/pemain/friendly/registration-group/remove', [PemainController::class, 'removeFriendlyRegistrationGroupMember'])
+            ->name('pemain.friendly.registration-group.remove');
+        Route::patch('/pemain/friendly/registration-group/{group}', [PemainController::class, 'renameFriendlyRegistrationGroup'])
+            ->name('pemain.friendly.registration-group.rename');
 
         Route::get('/matchmaking', [MatchmakingController::class, 'index'])->name('matchmaking.index');
         Route::post('/matchmaking/close-registration', [MatchmakingController::class, 'closeRegistration'])->name('matchmaking.close-registration');

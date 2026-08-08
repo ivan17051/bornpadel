@@ -23,6 +23,8 @@ class RegisteredPemainListingService
                 'peserta' => null,
                 'isDoubleView' => false,
                 'soloPesertaOptions' => collect(),
+                'canEditRegistrationGroups' => false,
+                'friendlyRegistrationGroupTargets' => collect(),
             ];
         }
 
@@ -56,6 +58,8 @@ class RegisteredPemainListingService
                 'peserta' => $pesertaQuery->paginate(15)->withQueryString(),
                 'isDoubleView' => true,
                 'soloPesertaOptions' => collect(),
+                'canEditRegistrationGroups' => false,
+                'friendlyRegistrationGroupTargets' => collect(),
             ];
         }
 
@@ -103,7 +107,27 @@ class RegisteredPemainListingService
             'peserta' => null,
             'isDoubleView' => false,
             'soloPesertaOptions' => $this->resolveSoloPesertaOptions($turnamen, $kategoriId),
+            'canEditRegistrationGroups' => $this->canEditRegistrationGroups($turnamen, $kategoriId),
+            'friendlyRegistrationGroupTargets' => $this->resolveRegistrationGroupTargets($turnamen, $kategoriId),
         ];
+    }
+
+    protected function canEditRegistrationGroups(Turnamen $turnamen, $kategoriId): bool
+    {
+        if (! $turnamen->allowsGroupRegistration()) {
+            return false;
+        }
+
+        return app(PemainRegistrationService::class)->canEditRegistrationGroups($turnamen, $kategoriId);
+    }
+
+    protected function resolveRegistrationGroupTargets(Turnamen $turnamen, $kategoriId)
+    {
+        if (! $turnamen->allowsGroupRegistration()) {
+            return collect();
+        }
+
+        return app(PemainRegistrationService::class)->getRegistrationGroupTargets($turnamen, $kategoriId);
     }
 
     protected function sortDirection(Request $request): string

@@ -623,7 +623,7 @@ class PemainRegistrationService
         });
     }
 
-    public function assertGroupNameAvailable(Turnamen $turnamen, string $nama, $idKategori = null): void
+    public function assertGroupNameAvailable(Turnamen $turnamen, string $nama, $idKategori = null, $exceptGrupPendaftaranId = null): void
     {
         $nama = trim($nama);
 
@@ -638,10 +638,15 @@ class PemainRegistrationService
         $lower = mb_strtolower($nama);
         $kategoriId = $turnamen->resolveKategori($idKategori)->id;
 
-        $existsPendaftaran = TurnamenGrupPendaftaran::query()
+        $existsPendaftaranQuery = TurnamenGrupPendaftaran::query()
             ->forKategori($kategoriId)
-            ->whereRaw('LOWER(nama) = ?', [$lower])
-            ->exists();
+            ->whereRaw('LOWER(nama) = ?', [$lower]);
+
+        if ($exceptGrupPendaftaranId) {
+            $existsPendaftaranQuery->where('id', '!=', (int) $exceptGrupPendaftaranId);
+        }
+
+        $existsPendaftaran = $existsPendaftaranQuery->exists();
 
         $existsGrup = Grup::query()
             ->where('id_kategori', $kategoriId)
@@ -650,6 +655,202 @@ class PemainRegistrationService
 
         if ($existsPendaftaran || $existsGrup) {
             throw new RuntimeException('Nama grup sudah digunakan pada kategori ini.');
+        }
+    }
+
+    /**
+     * Registration-group membership may be rearranged until competition groups exist.
+     */
+    public function canEditRegistrationGroups(Turnamen $turnamen, $idKategori = null): bool
+    {
+        if (! $turnamen->allowsGroupRegistration()) {
+            return false;
+        }
+
+        if (in_array($turnamen->status, ['completed'], true)) {
+            return false;
+        }
+
+        $kategoriId = (int) $turnamen->resolveKategori($idKategori)->id;
+
+        return ! $turnamen->competitionGrup($kategoriId)->exists();
+    }
+
+    /**
+     * Groups that still have free slots (for "Pindah Grup" targets).
+     *
+     * @return Collection<int, array{id: int, nama: string, count: int, slots: int}>
+     */
+    public function getRegistrationGroupTargets(Turnamen $turnamen, $idKategori = null): Collection
+    {
+        $kategori = $turnamen->resolveKategori($idKategori);
+        $capacity = $kategori->friendlyPlayersPerGroup();
+
+        return TurnamenGrupPendaftaran::query()
+            ->forKategori((int) $kategori->id)
+            ->withCount('members')
+            ->orderBy('nama')
+            ->get()
+            ->map(function (TurnamenGrupPendaftaran $group) use ($capacity) {
+                $count = (int) $group->members_count;
+
+                return [
+                    'id' => (int) $group->id,
+                    'nama' => $group->nama,
+                    'count' => $count,
+                    'slots' => max(0, $capacity - $count),
+                ];
+            })
+            ->values();
+    }
+
+    public function assignPesertaToRegistrationGroup(
+        Turnamen $turnamen,
+        int $pesertaId,
+        int $groupId,
+        $idKategori = null
+    ): TurnamenGrupPendaftaranMember {
+        if (! $this->canEditRegistrationGroups($turnamen, $idKategori)) {
+            throw new RuntimeException('Tidak dapat mengubah anggota grup pendaftaran saat ini.');
+        }
+
+        $kategori = $turnamen->resolveKategori($idKategori);
+        $capacity = $kategori->friendlyPlayersPerGroup();
+
+        return DB::transaction(function () use ($turnamen, $kategori, $pesertaId, $groupId, $capacity) {
+            $peserta = TurnamenPeserta::query()
+                ->forKategori((int) $kategori->id)
+                ->where('id', $pesertaId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $peserta) {
+                throw new RuntimeException('Peserta tidak ditemukan pada kategori ini.');
+            }
+
+            $target = TurnamenGrupPendaftaran::query()
+                ->forKategori((int) $kategori->id)
+                ->where('id', $groupId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $target) {
+                throw new RuntimeException('Grup pendaftaran tujuan tidak ditemukan.');
+            }
+
+            $existing = TurnamenGrupPendaftaranMember::query()
+                ->where('id_peserta', $peserta->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing && (int) $existing->id_grup_pendaftaran === (int) $target->id) {
+                return $existing;
+            }
+
+            $memberCount = TurnamenGrupPendaftaranMember::query()
+                ->where('id_grup_pendaftaran', $target->id)
+                ->count();
+
+            if ($memberCount >= $capacity) {
+                throw new RuntimeException('Grup tujuan sudah penuh.');
+            }
+
+            $oldGroupId = $existing ? (int) $existing->id_grup_pendaftaran : null;
+
+            if ($existing) {
+                $existing->delete();
+                $this->deleteRegistrationGroupIfEmpty($oldGroupId);
+            }
+
+            $nextUrutan = (int) TurnamenGrupPendaftaranMember::query()
+                ->where('id_grup_pendaftaran', $target->id)
+                ->max('urutan') + 1;
+
+            return TurnamenGrupPendaftaranMember::create([
+                'id_grup_pendaftaran' => $target->id,
+                'id_peserta' => $peserta->id,
+                'urutan' => max(1, $nextUrutan),
+            ]);
+        });
+    }
+
+    public function removePesertaFromRegistrationGroup(
+        Turnamen $turnamen,
+        int $pesertaId,
+        $idKategori = null
+    ): void {
+        if (! $this->canEditRegistrationGroups($turnamen, $idKategori)) {
+            throw new RuntimeException('Tidak dapat mengubah anggota grup pendaftaran saat ini.');
+        }
+
+        $kategori = $turnamen->resolveKategori($idKategori);
+
+        DB::transaction(function () use ($kategori, $pesertaId) {
+            $peserta = TurnamenPeserta::query()
+                ->forKategori((int) $kategori->id)
+                ->where('id', $pesertaId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $peserta) {
+                throw new RuntimeException('Peserta tidak ditemukan pada kategori ini.');
+            }
+
+            $membership = TurnamenGrupPendaftaranMember::query()
+                ->where('id_peserta', $peserta->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $membership) {
+                throw new RuntimeException('Pemain tidak berada di dalam grup.');
+            }
+
+            $groupId = (int) $membership->id_grup_pendaftaran;
+            $membership->delete();
+            $this->deleteRegistrationGroupIfEmpty($groupId);
+        });
+    }
+
+    public function renameRegistrationGroup(
+        Turnamen $turnamen,
+        int $groupId,
+        string $nama,
+        $idKategori = null
+    ): TurnamenGrupPendaftaran {
+        if (! $this->canEditRegistrationGroups($turnamen, $idKategori)) {
+            throw new RuntimeException('Tidak dapat mengubah nama grup pendaftaran saat ini.');
+        }
+
+        $kategori = $turnamen->resolveKategori($idKategori);
+        $nama = trim($nama);
+        $this->assertGroupNameAvailable($turnamen, $nama, $kategori->id, $groupId);
+
+        $group = TurnamenGrupPendaftaran::query()
+            ->forKategori((int) $kategori->id)
+            ->where('id', $groupId)
+            ->first();
+
+        if (! $group) {
+            throw new RuntimeException('Grup pendaftaran tidak ditemukan.');
+        }
+
+        $group->update(['nama' => $nama]);
+
+        return $group->fresh();
+    }
+
+    protected function deleteRegistrationGroupIfEmpty($groupId): void
+    {
+        if (! $groupId) {
+            return;
+        }
+
+        $hasMembers = TurnamenGrupPendaftaranMember::query()
+            ->where('id_grup_pendaftaran', (int) $groupId)
+            ->exists();
+
+        if (! $hasMembers) {
+            TurnamenGrupPendaftaran::query()->where('id', (int) $groupId)->delete();
         }
     }
 

@@ -6,10 +6,13 @@ use App\Models\Grup;
 use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenGrupPendaftaran;
+use App\Models\TurnamenGrupPendaftaranMember;
 use App\Models\TurnamenPeserta;
+use App\Models\User;
 use App\Services\FriendlyMatchmakingService;
 use App\Services\PemainRegistrationService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class FriendlyGroupRegistrationTest extends TestCase
@@ -289,5 +292,139 @@ class FriendlyGroupRegistrationTest extends TestCase
             TurnamenPeserta::SUMBER_INTERNAL,
             false
         );
+    }
+
+    public function test_admin_can_move_remove_and_rename_registration_groups(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->createOpenFriendly(4);
+        $service = app(PemainRegistrationService::class);
+
+        $fullA = $service->registerGroup(
+            $turnamen,
+            'Group Alpha',
+            $this->playerPayloads(70),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false
+        );
+        $groupA = $fullA['grup_pendaftaran'];
+        $memberA = $groupA->members()->orderBy('id')->first();
+
+        $fullB = $service->registerGroup(
+            $turnamen,
+            'Group Beta',
+            $this->playerPayloads(80),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false
+        );
+        $groupB = $fullB['grup_pendaftaran'];
+        $memberB = $groupB->members()->orderBy('id')->first();
+
+        $this->assertTrue($service->canEditRegistrationGroups($turnamen));
+
+        // Free one slot on Beta so Alpha member can move in.
+        $service->removePesertaFromRegistrationGroup($turnamen, (int) $memberB->id_peserta);
+        $this->assertNull(TurnamenGrupPendaftaranMember::query()
+            ->where('id_peserta', $memberB->id_peserta)
+            ->first());
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.friendly.registration-group.assign'), [
+                'id_turnamen' => $turnamen->id,
+                'id_peserta' => $memberA->id_peserta,
+                'id_grup_pendaftaran' => $groupB->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('turnamen_grup_pendaftaran_member', [
+            'id_peserta' => $memberA->id_peserta,
+            'id_grup_pendaftaran' => $groupB->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.friendly.registration-group.remove'), [
+                'id_turnamen' => $turnamen->id,
+                'id_peserta' => $memberA->id_peserta,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseMissing('turnamen_grup_pendaftaran_member', [
+            'id_peserta' => $memberA->id_peserta,
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.pemain.friendly.registration-group.rename', $groupA), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Alpha Renamed',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.nama', 'Alpha Renamed');
+
+        $this->assertSame('Alpha Renamed', $groupA->fresh()->nama);
+    }
+
+    public function test_registration_group_edit_blocked_after_competition_groups_exist(): void
+    {
+        $turnamen = $this->createOpenFriendly(4);
+        $service = app(PemainRegistrationService::class);
+
+        $groupResult = $service->registerGroup(
+            $turnamen,
+            'Locked Group',
+            $this->playerPayloads(90),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false
+        );
+
+        foreach ($groupResult['players'] as $pemain) {
+            TurnamenPeserta::query()
+                ->forTurnamen($turnamen->id)
+                ->where('id_pemain1', $pemain->id)
+                ->update(['status' => 'approved']);
+        }
+
+        for ($i = 1; $i <= 4; $i++) {
+            $pemain = Pemain::create([
+                'nama' => "Fill Solo {$i}",
+                'gender' => 'male',
+                'no_hp' => '+62877' . str_pad((string) (3000000 + $i), 7, '0', STR_PAD_LEFT),
+                'rating' => 2.0,
+            ]);
+            TurnamenPeserta::create([
+                'id_turnamen' => $turnamen->id,
+                'id_pemain1' => $pemain->id,
+                'status' => 'approved',
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+            ]);
+        }
+
+        $turnamen->update(['status' => 'ongoing']);
+        app(FriendlyMatchmakingService::class)->generateGroups($turnamen->fresh(), 'random');
+
+        $this->assertFalse($service->canEditRegistrationGroups($turnamen->fresh()));
+
+        $memberId = $groupResult['grup_pendaftaran']->members()->first()->id_peserta;
+
+        $this->expectException(\RuntimeException::class);
+        $service->removePesertaFromRegistrationGroup($turnamen->fresh(), (int) $memberId);
+    }
+
+    protected function makeAdmin(): User
+    {
+        return User::create([
+            'name' => 'Admin Friend',
+            'username' => 'admin-friend-' . uniqid(),
+            'email' => uniqid() . '@example.test',
+            'password' => Hash::make('12345678'),
+            'role' => 'admin',
+        ]);
     }
 }
