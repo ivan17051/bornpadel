@@ -72,6 +72,14 @@ class FriendlyInterGroupSlotsTest extends TestCase
             $groupIds = $roundMatches->flatMap(fn ($m) => [(int) $m->id_grup1, (int) $m->id_grup2])->all();
             $this->assertSame(count($groupIds), count(array_unique($groupIds)));
         }
+
+        $publicSessions = $service->getPublicMatchSessions($turnamen->fresh());
+        $this->assertGreaterThanOrEqual(1, $publicSessions->count());
+        $firstSession = $publicSessions->first();
+        $this->assertSame(1, $firstSession['sesi']);
+        $this->assertCount(3, $firstSession['matches']);
+        $this->assertSame('waiting_pairs', $firstSession['matches'][0]['status']);
+        $this->assertFalse($firstSession['matches'][0]['pairs_assigned']);
     }
 
     public function test_groups_remain_editable_until_a_match_has_scores(): void

@@ -457,20 +457,6 @@
             </div>
         </div>
     </div>
-
-    @once
-    @push('styles')
-    <style>
-        /* Match SweetAlert-like dim (not solid black Bootstrap default) */
-        body:has(.friendly-reg-modal.show) .modal-backdrop {
-            --bs-backdrop-bg: rgba(0, 0, 0, 0.4);
-            --bs-backdrop-opacity: 1;
-            background-color: rgba(0, 0, 0, 0.4);
-            opacity: 1;
-        }
-    </style>
-    @endpush
-    @endonce
 @endif
 
 <div class="modal fade" id="buktiBayarModal" tabindex="-1" aria-labelledby="buktiBayarModalLabel" aria-hidden="true">

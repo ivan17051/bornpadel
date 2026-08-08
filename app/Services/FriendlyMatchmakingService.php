@@ -929,6 +929,86 @@ class FriendlyMatchmakingService
     }
 
     /**
+     * Public/guest schedule: matches grouped by parallel session, including empty pair slots.
+     *
+     * @return Collection<int, array{sesi: int|null, label: string, matches: array<int, array<string, mixed>>}>
+     */
+    public function getPublicMatchSessions(Turnamen $turnamen, $idKategori = null): Collection
+    {
+        if (! $turnamen->isFriendly()) {
+            return collect();
+        }
+
+        $matches = $this->getMatches($turnamen, $idKategori);
+
+        if ($matches->isEmpty()) {
+            return collect();
+        }
+
+        return $matches
+            ->groupBy(function (Pertandingan $match) {
+                return max(0, (int) ($match->parallel_round ?? 0));
+            })
+            ->sortKeys()
+            ->map(function (Collection $sessionMatches, $sesiKey) {
+                $sesi = (int) $sesiKey;
+
+                return [
+                    'sesi' => $sesi > 0 ? $sesi : null,
+                    'label' => $sesi > 0 ? 'Sesi ' . $sesi : 'Pertandingan',
+                    'matches' => $sessionMatches
+                        ->map(function (Pertandingan $match) {
+                            return $this->formatPublicMatch($match);
+                        })
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function formatPublicMatch(Pertandingan $match): array
+    {
+        $pairsAssigned = $match->hasFriendlyPairsAssigned();
+        $scoreLabel = $match->skor->isEmpty()
+            ? '—'
+            : $match->skor->map(function ($s) {
+                return $s->skor_pemain1 . '-' . $s->skor_pemain2;
+            })->implode(', ');
+
+        if ($match->status === 'completed') {
+            $statusKey = 'completed';
+            $statusLabel = 'Selesai';
+            $statusBadge = 'success';
+        } elseif ($pairsAssigned) {
+            $statusKey = 'scheduled';
+            $statusLabel = 'Terjadwal';
+            $statusBadge = 'secondary';
+        } else {
+            $statusKey = 'waiting_pairs';
+            $statusLabel = 'Menunggu pasangan';
+            $statusBadge = 'warning';
+        }
+
+        return [
+            'id' => (int) $match->id,
+            'grup1' => optional($match->grup1)->nama ?? '—',
+            'grup2' => optional($match->grup2)->nama ?? '—',
+            'side1' => $match->side1_label,
+            'side2' => $match->side2_label,
+            'pairs_assigned' => $pairsAssigned,
+            'score' => $scoreLabel,
+            'status' => $statusKey,
+            'status_label' => $statusLabel,
+            'status_badge' => $statusBadge,
+            'winner' => $match->status === 'completed' ? $match->winner_label : null,
+        ];
+    }
+
+    /**
      * Sort matches into sessions where each session's fixtures use distinct groups
      * (so they can be played at the same time). Uses circle method for pairing order.
      *

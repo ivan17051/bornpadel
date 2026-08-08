@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesPublicKategori;
 use App\Services\LeaderboardService;
 use App\Services\PemainRegistrationService;
+use App\Services\FriendlyMatchmakingService;
 use App\Services\TournamentWinnersService;
 use Illuminate\Http\Request;
 
@@ -17,7 +18,8 @@ class StandingsController extends Controller
         Request $request,
         LeaderboardService $leaderboardService,
         PemainRegistrationService $registrationService,
-        TournamentWinnersService $winnersService
+        TournamentWinnersService $winnersService,
+        FriendlyMatchmakingService $friendlyService
     ) {
         $turnamen = $registrationService->resolvePublicTournament(
             $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
@@ -42,6 +44,10 @@ class StandingsController extends Controller
             ? $mahjongStandings['sections']
             : $leaderboardService->getStandings(optional($turnamen)->id, $kategoriId);
 
+        $friendlyMatchSessions = $turnamen && $turnamen->isFriendly()
+            ? $friendlyService->getPublicMatchSessions($turnamen, $kategoriId)
+            : collect();
+
         $winners = $turnamen && $turnamen->isMahjong()
             && (($kategori && $kategori->status === 'completed') || $turnamen->status === 'completed')
             ? $winnersService->getWinners($turnamen, $kategoriId)
@@ -56,6 +62,7 @@ class StandingsController extends Controller
             'kategori',
             'kategoriList',
             'standings',
+            'friendlyMatchSessions',
             'winners',
             'postLeagueRanking'
         ));

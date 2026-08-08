@@ -54,6 +54,14 @@
             color: var(--bp-primary-dark);
             text-decoration: underline;
         }
+        /* SweetAlert-like dim (not solid black) for Bootstrap modals */
+        .modal-backdrop,
+        .modal-backdrop.show {
+            --bs-backdrop-bg: rgba(0, 0, 0, 0.4);
+            --bs-backdrop-opacity: 1;
+            background-color: rgba(0, 0, 0, 0.4) !important;
+            opacity: 1 !important;
+        }
     </style>
     @stack('styles')
 </head>

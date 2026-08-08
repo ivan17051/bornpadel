@@ -51,6 +51,13 @@
             <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
         </div>
 
+        @include('guest.partials.tournament-nav', [
+            'turnamen' => $turnamen,
+            'kategori' => $kategori,
+            'kategoriList' => $kategoriList,
+            'activeTab' => 'register',
+        ])
+
         @include('guest.partials.kategori-selector', [
             'turnamen' => $turnamen,
             'kategori' => $kategori,
@@ -67,7 +74,7 @@
             </div>
             <div class="text-center">
                 <a href="{{ route('guest.landing') }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-1"></i> Kembali
+                    <i class="bi bi-grid me-1"></i> Ganti turnamen
                 </a>
             </div>
         @else
@@ -224,7 +231,7 @@
                             <i class="bi bi-search me-2"></i> Lanjutkan
                         </button>
                         <a href="{{ route('guest.landing') }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left me-1"></i> Kembali
+                            <i class="bi bi-grid me-1"></i> Ganti turnamen
                         </a>
                     </div>
                 </form>

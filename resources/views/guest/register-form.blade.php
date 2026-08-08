@@ -8,6 +8,10 @@
         'id_turnamen' => $turnamen->id,
         'id_kategori' => optional($kategori)->id,
     ]);
+    $kategoriList = $kategoriList
+        ?? ($turnamen->relationLoaded('kategori')
+            ? $turnamen->kategori
+            : $turnamen->kategori()->orderBy('urutan')->orderBy('id')->get());
 @endphp
 
 @section('og')
@@ -69,6 +73,13 @@
                 <span class="badge text-bg-primary mt-2">Pendaftaran Satu Grup ({{ $groupSize }})</span>
             @endif
         </div>
+
+        @include('guest.partials.tournament-nav', [
+            'turnamen' => $turnamen,
+            'kategori' => $kategori,
+            'kategoriList' => $kategoriList,
+            'activeTab' => 'register',
+        ])
 
         <div class="card guest-card mb-4">
             <div class="card-body py-3 px-4">
@@ -206,7 +217,7 @@
                                 <i class="bi bi-send me-2"></i> Kirim Pendaftaran
                             @endif
                         </button>
-                        <a href="{{ route('guest.register', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-outline-secondary">
+                        <a href="{{ route('guest.register', $registerQuery) }}" class="btn btn-outline-secondary">
                             <i class="bi bi-arrow-left me-1"></i>
                             @if ($isGroupMode || $isPairMode)
                                 {{ $anyExisting ? 'Bukan Kami — Ganti Nomor HP' : 'Ganti Nomor HP' }}

@@ -33,6 +33,13 @@
             @endif
         </div>
 
+        @include('guest.partials.tournament-nav', [
+            'turnamen' => $turnamen,
+            'kategori' => $kategori,
+            'kategoriList' => $kategoriList,
+            'activeTab' => 'participants',
+        ])
+
         @include('guest.partials.kategori-selector', [
             'turnamen' => $turnamen,
             'kategori' => $kategori,
@@ -131,14 +138,9 @@
             </div>
         </div>
 
-        <div class="text-center mt-4 d-flex flex-wrap justify-content-center gap-2">
-            @if ($turnamen->isRegistrationOpen())
-                <a href="{{ route('guest.register', ['id_turnamen' => $turnamen->id]) }}" class="btn btn-bp">
-                    <i class="bi bi-person-plus me-1"></i> Daftar Turnamen
-                </a>
-            @endif
+        <div class="text-center mt-4">
             <a href="{{ route('guest.landing') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left me-1"></i> Kembali
+                <i class="bi bi-grid me-1"></i> Ganti turnamen
             </a>
         </div>
     </div>

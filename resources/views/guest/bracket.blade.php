@@ -37,6 +37,13 @@
         </div>
 
         @if ($turnamen)
+            @include('guest.partials.tournament-nav', [
+                'turnamen' => $turnamen,
+                'kategori' => $kategori,
+                'kategoriList' => $kategoriList,
+                'activeTab' => 'bracket',
+            ])
+
             @include('guest.partials.kategori-selector', [
                 'turnamen' => $turnamen,
                 'kategori' => $kategori,
@@ -48,14 +55,9 @@
 
         <x-tournament-bracket :bracket="$bracket" :turnamen="$turnamen" :kategori="$kategori" :refreshable="true" />
 
-        <div class="text-center mt-4 d-flex flex-wrap justify-content-center gap-2">
-            @if ($turnamen)
-                <a href="{{ route('guest.standings', $bracketQuery) }}" class="btn btn-outline-primary">
-                    <i class="bi bi-bar-chart-steps me-1"></i> Klasemen Grup
-                </a>
-            @endif
+        <div class="text-center mt-4">
             <a href="{{ route('guest.landing') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left me-1"></i> Beranda
+                <i class="bi bi-grid me-1"></i> Ganti turnamen
             </a>
         </div>
     </div>

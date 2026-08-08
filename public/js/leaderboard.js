@@ -341,51 +341,167 @@
         bindRefreshButton();
     };
 
-    const renderFriendlyStandings = (rows) => {
-        if (!rows || rows.length === 0) {
-            renderEmpty('Klasemen Group Match');
-            return;
+    const renderFriendlyStandings = (rows, matchSessions = []) => {
+        const standingsPanel = container.querySelector('#friendly-standings-panel');
+        const matchesPanel = container.querySelector('#friendly-matches-public');
+        const rowsList = Array.isArray(rows) ? rows : [];
+
+        const membersCell = (row) => (row.members || []).map((m) => m.nama).filter(Boolean).join(', ') || '—';
+
+        const standingsHtml = rowsList.length === 0
+            ? `<div class="alert alert-light border text-center mb-0">
+                    <i class="bi bi-trophy text-muted d-block mb-2 fs-4"></i>
+                    Belum ada data klasemen grup.
+               </div>`
+            : `<div class="card border-0 shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center" style="width:3rem">#</th>
+                                        <th>Grup</th>
+                                        <th>Anggota</th>
+                                        <th class="text-center">Poin</th>
+                                        <th class="text-center d-none d-sm-table-cell">Set</th>
+                                        <th class="text-center d-none d-md-table-cell">GD</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rowsList.map((row) => `
+                                        <tr class="${row.rank === 1 ? 'table-success' : ''}">
+                                            <td class="text-center fw-bold">
+                                                ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
+                                            </td>
+                                            <td class="fw-semibold">${row.nama || '—'}</td>
+                                            <td class="small text-muted">${membersCell(row)}</td>
+                                            <td class="text-center"><span class="badge text-bg-primary">${row.poin_didapat ?? 0}</span></td>
+                                            <td class="text-center d-none d-sm-table-cell">${row.set_menang ?? 0}</td>
+                                            <td class="text-center d-none d-md-table-cell">${formatGameDiff(row.game_diff_label ?? row.game_menang)}</td>
+                                        </tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
+
+        const headerHtml = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-bar-chart-steps me-2"></i>Klasemen Group Match
+                </h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-refresh-leaderboard">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                </button>
+            </div>`;
+
+        if (standingsPanel) {
+            standingsPanel.innerHTML = headerHtml + standingsHtml;
         }
 
-        const body = rows.map((row) => {
-            const members = (row.members || []).map((m) => m.nama).filter(Boolean).join(', ') || '—';
+        if (matchesPanel) {
+            matchesPanel.outerHTML = renderFriendlyMatchSessionsHtml(matchSessions);
+        } else if (!standingsPanel) {
+            container.innerHTML = headerHtml + standingsHtml
+                + renderFriendlyMatchSessionsHtml(matchSessions)
+                + `<p class="text-muted small text-end mt-2 mb-0">
+                        <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
+                   </p>`;
+        }
+
+        bindRefreshButton();
+    };
+
+    const escapeHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const renderFriendlyMatchSessionsHtml = (sessions) => {
+        const list = Array.isArray(sessions) ? sessions : [];
+
+        if (list.length === 0) {
             return `
-                <tr class="${row.rank === 1 ? 'table-success' : ''}">
-                    <td class="text-center fw-bold">
-                        ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
-                    </td>
-                    <td class="fw-semibold">${row.nama || '—'}</td>
-                    <td class="small text-muted">${members}</td>
-                    <td class="text-center"><span class="badge text-bg-primary">${row.poin_didapat ?? 0}</span></td>
-                    <td class="text-center d-none d-sm-table-cell">${row.set_menang ?? 0}</td>
-                    <td class="text-center d-none d-md-table-cell">${formatGameDiff(row.games_diff_label ?? row.games_menang)}</td>
-                </tr>`;
+                <div class="friendly-match-schedule mt-4" id="friendly-matches-public">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">
+                            <i class="bi bi-lightning-charge me-2"></i>Pertandingan per Sesi
+                        </h5>
+                    </div>
+                    <div class="alert alert-light border text-center mb-0">
+                        <i class="bi bi-calendar-x text-muted d-block mb-2 fs-4"></i>
+                        Belum ada slot pertandingan. Slot antar grup dibuat setelah kerangka grup lengkap.
+                    </div>
+                </div>`;
+        }
+
+        const sessionsHtml = list.map((session) => {
+            const label = session.label
+                || (session.sesi ? `Sesi ${session.sesi}` : 'Pertandingan');
+            const matches = session.matches || [];
+
+            const rows = matches.map((match) => {
+                const badge = match.status_badge || 'secondary';
+                const badgeClass = badge === 'warning'
+                    ? 'text-bg-warning text-dark'
+                    : `text-bg-${badge}`;
+                const pairNote = match.winner
+                    ? `<div class="small text-success mt-1"><i class="bi bi-trophy me-1"></i>${escapeHtml(match.winner)}</div>`
+                    : (!match.pairs_assigned
+                        ? `<div class="small text-warning mt-1"><i class="bi bi-people me-1"></i>Belum diisi pasangan</div>`
+                        : '');
+
+                return `
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">${escapeHtml(match.grup1 || '—')} vs ${escapeHtml(match.grup2 || '—')}</div>
+                        </td>
+                        <td>
+                            <div>${escapeHtml(match.side1 || 'TBD')}</div>
+                            <div class="text-muted small">vs ${escapeHtml(match.side2 || 'TBD')}</div>
+                            ${pairNote}
+                        </td>
+                        <td class="text-center">${escapeHtml(match.score || '—')}</td>
+                        <td><span class="badge ${badgeClass}">${escapeHtml(match.status_label || '—')}</span></td>
+                    </tr>`;
+            }).join('');
+
+            return `
+                <div class="card border-0 shadow-sm friendly-match-session" data-sesi="${session.sesi || ''}">
+                    <div class="card-header bg-transparent border-bottom-0 pb-0">
+                        <h6 class="mb-0 text-secondary">
+                            <i class="bi bi-clock-history me-1"></i>${escapeHtml(label)}
+                            <span class="badge text-bg-light text-dark border ms-1">${matches.length} tanding</span>
+                        </h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Grup</th>
+                                        <th>Pasangan</th>
+                                        <th class="text-center">Skor</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rows || '<tr><td colspan="4" class="text-muted text-center py-3">Tidak ada pertandingan di sesi ini.</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
         }).join('');
 
-        container.innerHTML = renderHeader('Klasemen Group Match') + `
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th class="text-center" style="width:3rem">#</th>
-                                    <th>Grup</th>
-                                    <th>Anggota</th>
-                                    <th class="text-center">Poin</th>
-                                    <th class="text-center d-none d-sm-table-cell">Set</th>
-                                    <th class="text-center d-none d-md-table-cell">GD</th>
-                                </tr>
-                            </thead>
-                            <tbody>${body}</tbody>
-                        </table>
-                    </div>
+        return `
+            <div class="friendly-match-schedule mt-4" id="friendly-matches-public">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-lightning-charge me-2"></i>Pertandingan per Sesi
+                    </h5>
                 </div>
-            </div>
-            <p class="text-muted small text-end mt-2 mb-0">
-                <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
-            </p>`;
-        bindRefreshButton();
+                <div class="d-flex flex-column gap-4">${sessionsHtml}</div>
+            </div>`;
     };
 
     const fetchStandings = async () => {
@@ -395,15 +511,17 @@
             });
             const json = await response.json();
 
-            if (!json.success || !json.data) {
+            if (!json.success) {
                 return;
             }
 
             if (json.type === 'mahjong' || isMahjong) {
+                if (!json.data) return;
                 renderMahjongStandings(json.data);
             } else if (json.type === 'friendly' || isFriendly) {
-                renderFriendlyStandings(json.data);
+                renderFriendlyStandings(json.data || [], json.matches || []);
             } else {
+                if (!json.data) return;
                 renderGroupStandings(json.data, json.post_league || null);
             }
         } catch (e) {

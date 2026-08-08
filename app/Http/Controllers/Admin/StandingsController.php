@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\FriendlyMatchmakingService;
 use App\Services\GroupMatchmakingService;
 use App\Services\LeaderboardService;
 use Illuminate\Http\Request;
@@ -12,7 +13,8 @@ class StandingsController extends Controller
     public function index(
         Request $request,
         LeaderboardService $leaderboardService,
-        GroupMatchmakingService $matchmakingService
+        GroupMatchmakingService $matchmakingService,
+        FriendlyMatchmakingService $friendlyService
     ) {
         $turnamenList = $matchmakingService->listForFilter();
         $turnamen = $matchmakingService->resolveTournament(
@@ -28,10 +30,15 @@ class StandingsController extends Controller
                 : $leaderboardService->getStandings($turnamen->id))
             : collect();
 
+        $friendlyMatchSessions = $turnamen && $turnamen->isFriendly()
+            ? $friendlyService->getPublicMatchSessions($turnamen)
+            : collect();
+
         return view('admin.standings.index', compact(
             'turnamen',
             'turnamenList',
-            'standings'
+            'standings',
+            'friendlyMatchSessions'
         ));
     }
 }

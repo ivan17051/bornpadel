@@ -9,6 +9,7 @@
         :standings="$standings"
         :turnamen="$turnamen"
         :refreshable="true"
+        :match-sessions="$friendlyMatchSessions ?? collect()"
     />
 @else
     <x-group-leaderboard

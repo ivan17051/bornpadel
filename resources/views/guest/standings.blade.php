@@ -45,6 +45,13 @@
         </div>
 
         @if ($turnamen)
+            @include('guest.partials.tournament-nav', [
+                'turnamen' => $turnamen,
+                'kategori' => $kategori,
+                'kategoriList' => $kategoriList,
+                'activeTab' => 'standings',
+            ])
+
             @include('guest.partials.kategori-selector', [
                 'turnamen' => $turnamen,
                 'kategori' => $kategori,
@@ -76,6 +83,7 @@
                 :turnamen="$turnamen"
                 :kategori="$kategori"
                 :refreshable="true"
+                :match-sessions="$friendlyMatchSessions ?? collect()"
             />
         @else
             <div id="live-leaderboard"
@@ -113,7 +121,7 @@
 
         <div class="text-center mt-4">
             <a href="{{ route('guest.landing') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left me-1"></i> Kembali ke Beranda
+                <i class="bi bi-grid me-1"></i> Ganti turnamen
             </a>
         </div>
     </div>

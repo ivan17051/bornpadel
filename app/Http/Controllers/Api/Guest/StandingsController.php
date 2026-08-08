@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Guest;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesPublicKategori;
+use App\Services\FriendlyMatchmakingService;
 use App\Services\LeaderboardService;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -12,8 +13,11 @@ class StandingsController extends Controller
 {
     use ResolvesPublicKategori;
 
-    public function index(Request $request, LeaderboardService $leaderboardService)
-    {
+    public function index(
+        Request $request,
+        LeaderboardService $leaderboardService,
+        FriendlyMatchmakingService $friendlyService
+    ) {
         $turnamenId = $request->input('id_turnamen');
         $turnamen = $turnamenId
             ? \App\Models\Turnamen::find($turnamenId)
@@ -60,13 +64,15 @@ class StandingsController extends Controller
 
         if ($turnamen && $turnamen->isFriendly()) {
             $standings = $leaderboardService->getFriendlyStandings($turnamen->id, $kategoriId);
+            $matches = $friendlyService->getPublicMatchSessions($turnamen, $kategoriId);
 
-            if ($standings->isEmpty()) {
+            if ($standings->isEmpty() && $matches->isEmpty()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Belum ada data klasemen.',
                     'type' => 'friendly',
                     'data' => [],
+                    'matches' => [],
                 ]);
             }
 
@@ -74,6 +80,7 @@ class StandingsController extends Controller
                 'success' => true,
                 'type' => 'friendly',
                 'data' => $standings,
+                'matches' => $matches->values(),
             ]);
         }
 
