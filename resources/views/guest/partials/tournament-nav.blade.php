@@ -82,6 +82,10 @@
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         padding: 0.35rem;
+        width: 100%;
+        max-width: var(--guest-tournament-panel-max, 36rem);
+        margin-left: auto;
+        margin-right: auto;
         margin-bottom: 1.25rem;
         background: #fff;
         border: 1px solid rgba(0, 0, 0, 0.06);

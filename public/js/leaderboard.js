@@ -362,9 +362,12 @@
                                         <th class="text-center" style="width:3rem">#</th>
                                         <th>Grup</th>
                                         <th>Anggota</th>
-                                        <th class="text-center">Poin</th>
-                                        <th class="text-center d-none d-sm-table-cell">Set</th>
-                                        <th class="text-center d-none d-md-table-cell">GD</th>
+                                        <th class="text-center" title="Played / Main">P</th>
+                                        <th class="text-center" title="Won / Menang">W</th>
+                                        <th class="text-center" title="Lost / Kalah">L</th>
+                                        <th class="text-center" title="Poin">Poin</th>
+                                        <th class="text-center d-none d-sm-table-cell" title="Set menang">Set</th>
+                                        <th class="text-center d-none d-md-table-cell" title="Game difference / selisih game">GD</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -375,12 +378,23 @@
                                             </td>
                                             <td class="fw-semibold">${row.nama || '—'}</td>
                                             <td class="small text-muted">${membersCell(row)}</td>
+                                            <td class="text-center">${row.main ?? 0}</td>
+                                            <td class="text-center">${row.menang ?? 0}</td>
+                                            <td class="text-center">${row.kalah ?? 0}</td>
                                             <td class="text-center"><span class="badge text-bg-primary">${row.poin_didapat ?? 0}</span></td>
                                             <td class="text-center d-none d-sm-table-cell">${row.set_menang ?? 0}</td>
-                                            <td class="text-center d-none d-md-table-cell">${formatGameDiff(row.game_diff_label ?? row.game_menang)}</td>
+                                            <td class="text-center d-none d-md-table-cell">${formatGameDiff(row.games_diff_label ?? row.game_diff_label ?? row.games_menang ?? row.game_menang)}</td>
                                         </tr>`).join('')}
                                 </tbody>
                             </table>
+                        </div>
+                        <div class="px-3 py-2 border-top bg-light small text-muted">
+                            <span class="me-3"><strong class="text-body">P</strong> = Main (dimainkan)</span>
+                            <span class="me-3"><strong class="text-body">W</strong> = Menang</span>
+                            <span class="me-3"><strong class="text-body">L</strong> = Kalah</span>
+                            <span class="me-3"><strong class="text-body">Poin</strong> = Poin klasemen</span>
+                            <span class="me-3 d-none d-sm-inline"><strong class="text-body">Set</strong> = Set menang</span>
+                            <span class="d-none d-md-inline"><strong class="text-body">GD</strong> = Selisih game</span>
                         </div>
                     </div>
                 </div>`;

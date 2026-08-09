@@ -49,6 +49,7 @@
         <div class="text-center mb-4">
             <h1 class="h3 fw-bold mb-1">Pendaftaran Turnamen</h1>
             <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
+            @include('guest.partials.tournament-syarat', ['turnamen' => $turnamen])
         </div>
 
         @include('guest.partials.tournament-nav', [
@@ -98,15 +99,6 @@
                         <div class="info-label">Peserta</div>
                         <strong>{{ $capacityLabel }}</strong>
                     </div>
-                </div>
-
-                <div class="border-top pt-3 mt-3">
-                    <div class="info-label mb-2">Syarat & Ketentuan</div>
-                    @if ($turnamen->syarat)
-                        <div class="text-secondary small" style="white-space: pre-line;">{{ $turnamen->syarat }}</div>
-                    @else
-                        <p class="text-muted small mb-0">Belum ada syarat khusus untuk turnamen ini.</p>
-                    @endif
                 </div>
             </div>
         </div>

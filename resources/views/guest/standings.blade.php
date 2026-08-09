@@ -38,8 +38,9 @@
             </h1>
             @if ($turnamen)
                 <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
+                @include('guest.partials.tournament-syarat', ['turnamen' => $turnamen])
                 @if ($kategori && optional($kategoriList)->count() > 1)
-                    <span class="badge text-bg-primary mt-2">{{ $kategori->nama }}</span>
+                    <span class="badge text-bg-primary mt-2 d-inline-block">{{ $kategori->nama }}</span>
                 @endif
             @endif
         </div>

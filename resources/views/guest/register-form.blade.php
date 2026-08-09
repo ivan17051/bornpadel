@@ -62,6 +62,7 @@
         <div class="text-center mb-4">
             <h1 class="h3 fw-bold mb-1">Form Pendaftaran</h1>
             <p class="text-muted mb-0">{{ $turnamen->nama }}</p>
+            @include('guest.partials.tournament-syarat', ['turnamen' => $turnamen])
             <span class="badge text-bg-light text-dark border mt-2">{{ $turnamen->jenis_label }}</span>
             @if ($kategori)
                 <span class="badge text-bg-primary mt-2">{{ $kategori->nama }}</span>

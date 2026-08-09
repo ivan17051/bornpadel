@@ -28,6 +28,7 @@
             --bs-primary-rgb: 205, 168, 88;
             --bs-link-color: #a88642;
             --bs-link-hover-color: #8a7035;
+            --guest-tournament-panel-max: 36rem;
         }
 
         body {
@@ -145,6 +146,28 @@
             letter-spacing: 0.04em;
             color: #6c757d;
             margin-bottom: 0.25rem;
+        }
+
+        .guest-tournament-syarat {
+            max-width: var(--guest-tournament-panel-max, 36rem);
+            margin: 0.85rem auto 0;
+            width: 100%;
+        }
+
+        .guest-tournament-syarat__label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #8a8a8a;
+            margin-bottom: 0.4rem;
+        }
+
+        .guest-tournament-syarat__text {
+            font-size: 0.875rem;
+            color: #5c5c5c;
+            white-space: pre-line;
+            line-height: 1.45;
         }
 
         .form-control,

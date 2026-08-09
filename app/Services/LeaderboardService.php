@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Grup;
 use App\Models\GrupMember;
+use App\Models\Pertandingan;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
 use Illuminate\Support\Collection;
@@ -220,13 +221,22 @@ class LeaderboardService
             return collect();
         }
 
-        return $turnamen->competitionGrup($idKategori)
+        $grups = $turnamen->competitionGrup($idKategori)
             ->with(['members.pemain'])
-            ->get()
-            ->map(function (Grup $grup) {
+            ->get();
+
+        $matchStats = $this->buildFriendlyGroupMatchStats($turnamen, $idKategori, $grups);
+
+        return $grups
+            ->map(function (Grup $grup) use ($matchStats) {
+                $stats = $matchStats[(int) $grup->id] ?? ['main' => 0, 'menang' => 0, 'kalah' => 0];
+
                 return [
                     'id' => $grup->id,
                     'nama' => $grup->nama,
+                    'main' => (int) $stats['main'],
+                    'menang' => (int) $stats['menang'],
+                    'kalah' => (int) $stats['kalah'],
                     'poin_didapat' => (int) $grup->poin_didapat,
                     'set_menang' => (int) $grup->set_menang,
                     'games_menang' => (int) $grup->games_menang,
@@ -247,6 +257,58 @@ class LeaderboardService
 
                 return $row;
             });
+    }
+
+    /**
+     * Win / loss counts per competition group from completed Friendly matches.
+     *
+     * @param  iterable  $grups
+     * @return array<int, array{main:int, menang:int, kalah:int}>
+     */
+    protected function buildFriendlyGroupMatchStats(Turnamen $turnamen, $idKategori, $grups): array
+    {
+        $stats = [];
+        foreach ($grups as $grup) {
+            $stats[(int) $grup->id] = ['main' => 0, 'menang' => 0, 'kalah' => 0];
+        }
+
+        $kategori = $turnamen->resolveKategori($idKategori);
+        if (! $kategori || $stats === []) {
+            return $stats;
+        }
+
+        $matches = Pertandingan::query()
+            ->where('id_kategori', $kategori->id)
+            ->where('nama_ronde', 'Friendly')
+            ->where('status', 'completed')
+            ->whereNotNull('id_pemenang')
+            ->get([
+                'id',
+                'id_grup1',
+                'id_grup2',
+                'id_pemain1',
+                'id_pemain2',
+                'id_pemain1_partner',
+                'id_pemain2_partner',
+                'id_pemenang',
+            ]);
+
+        foreach ($matches as $match) {
+            $winnerGrupId = $match->resolveWinnerGrupId();
+            $loserGrupId = $match->resolveLoserGrupId();
+
+            if ($winnerGrupId && isset($stats[$winnerGrupId])) {
+                $stats[$winnerGrupId]['main']++;
+                $stats[$winnerGrupId]['menang']++;
+            }
+
+            if ($loserGrupId && isset($stats[$loserGrupId])) {
+                $stats[$loserGrupId]['main']++;
+                $stats[$loserGrupId]['kalah']++;
+            }
+        }
+
+        return $stats;
     }
 
     public function getMahjongGlobalStandings(?int $turnamenId = null): Collection
