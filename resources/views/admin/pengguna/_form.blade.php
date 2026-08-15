@@ -77,7 +77,7 @@
 <div class="mb-3">
     <label for="role" class="form-label">Role <span class="text-danger">*</span></label>
     <select name="role" id="role" class="form-select @error('role') is-invalid @enderror" required>
-        @foreach (['admin' => 'Admin (akses semua turnamen)', 'panitia' => 'Panitia (akses satu turnamen)'] as $value => $label)
+        @foreach (['admin' => 'Admin (akses semua turnamen)', 'panitia' => 'Panitia (akses turnamen yang dipilih)'] as $value => $label)
             <option value="{{ $value }}" {{ old('role', optional($userModel)->role ?? 'panitia') === $value ? 'selected' : '' }}>
                 {{ $label }}
             </option>
@@ -89,22 +89,49 @@
 </div>
 
 <div class="mb-3" id="turnamen-field">
-    <label for="id_turnamen" class="form-label">Turnamen <span class="text-danger turnamen-required">*</span></label>
-    <select name="id_turnamen" id="id_turnamen" class="form-select @error('id_turnamen') is-invalid @enderror">
-        <option value="">— Pilih turnamen —</option>
-        @foreach ($turnamenList as $turnamen)
-            <option value="{{ $turnamen->id }}"
-                {{ (string) old('id_turnamen', optional($userModel)->id_turnamen) === (string) $turnamen->id ? 'selected' : '' }}>
-                {{ $turnamen->nama }}
-                @if ($turnamen->status !== 'draft')
-                    ({{ ucfirst($turnamen->status) }})
-                @endif
-            </option>
-        @endforeach
-    </select>
-    <div class="form-text">Panitia hanya dapat mengakses turnamen yang dipilih.</div>
+    <label class="form-label">Turnamen <span class="text-danger turnamen-required">*</span></label>
+    @php
+        if (old('id_turnamen') !== null) {
+            $selectedTurnamenIds = collect(old('id_turnamen'));
+        } elseif ($userModel && $userModel->assignedTurnamen && $userModel->assignedTurnamen->isNotEmpty()) {
+            $selectedTurnamenIds = $userModel->assignedTurnamen->pluck('id');
+        } elseif ($userModel && $userModel->id_turnamen) {
+            $selectedTurnamenIds = collect([$userModel->id_turnamen]);
+        } else {
+            $selectedTurnamenIds = collect();
+        }
+        $selectedTurnamenIds = $selectedTurnamenIds->map(function ($id) {
+            return (string) $id;
+        });
+    @endphp
+    <div class="border rounded p-3 {{ $errors->has('id_turnamen') || $errors->has('id_turnamen.*') ? 'is-invalid' : '' }}"
+         id="turnamen-checkbox-list"
+         style="max-height: 16rem; overflow-y: auto;">
+        @forelse ($turnamenList as $turnamen)
+            <div class="form-check">
+                <input class="form-check-input"
+                       type="checkbox"
+                       name="id_turnamen[]"
+                       id="id_turnamen_{{ $turnamen->id }}"
+                       value="{{ $turnamen->id }}"
+                       {{ $selectedTurnamenIds->contains((string) $turnamen->id) ? 'checked' : '' }}>
+                <label class="form-check-label" for="id_turnamen_{{ $turnamen->id }}">
+                    {{ $turnamen->nama }}
+                    @if ($turnamen->status !== 'draft')
+                        <span class="text-muted small">({{ ucfirst($turnamen->status) }})</span>
+                    @endif
+                </label>
+            </div>
+        @empty
+            <div class="text-muted small">Belum ada turnamen.</div>
+        @endforelse
+    </div>
+    <div class="form-text">Panitia hanya dapat mengakses turnamen yang dicentang. Boleh lebih dari satu.</div>
     @error('id_turnamen')
-        <div class="invalid-feedback">{{ $message }}</div>
+        <div class="invalid-feedback d-block">{{ $message }}</div>
+    @enderror
+    @error('id_turnamen.*')
+        <div class="invalid-feedback d-block">{{ $message }}</div>
     @enderror
 </div>
 
@@ -113,15 +140,17 @@
     (function () {
         const roleSelect = document.getElementById('role');
         const turnamenField = document.getElementById('turnamen-field');
-        const turnamenSelect = document.getElementById('id_turnamen');
+        const turnamenBoxes = turnamenField.querySelectorAll('input[name="id_turnamen[]"]');
 
         function toggleTurnamenField() {
             const isPanitia = roleSelect.value === 'panitia';
             turnamenField.style.display = isPanitia ? '' : 'none';
-            turnamenSelect.required = isPanitia;
-            if (!isPanitia) {
-                turnamenSelect.value = '';
-            }
+            turnamenBoxes.forEach(function (box) {
+                box.disabled = !isPanitia;
+                if (!isPanitia) {
+                    box.checked = false;
+                }
+            });
         }
 
         roleSelect.addEventListener('change', toggleTurnamenField);

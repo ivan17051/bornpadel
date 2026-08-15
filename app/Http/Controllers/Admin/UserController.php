@@ -15,7 +15,7 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::query()->with('turnamen')
+        $query = User::query()->with(['turnamen', 'assignedTurnamen'])
             ->where('username', '!=', 'testacc')->latest();
 
         if ($request->filled('search')) {
@@ -47,12 +47,13 @@ class UserController extends Controller
     {
         $data = $request->validated();
         $data['password'] = Hash::make($data['password']);
+        $turnamenIds = $this->extractTurnamenIds($data);
 
-        if ($data['role'] === 'admin') {
-            $data['id_turnamen'] = null;
-        }
+        unset($data['id_turnamen']);
+        $data['id_turnamen'] = $data['role'] === 'admin' ? null : ($turnamenIds[0] ?? null);
 
-        User::create($data);
+        $user = User::create($data);
+        $user->syncAssignedTurnamen($turnamenIds);
 
         return redirect()
             ->route('admin.pengguna.index')
@@ -61,6 +62,7 @@ class UserController extends Controller
 
     public function edit(User $user)
     {
+        $user->load('assignedTurnamen');
         $turnamenList = Turnamen::orderByDesc('doc')->get();
 
         return view('admin.pengguna.edit', [
@@ -79,11 +81,12 @@ class UserController extends Controller
             unset($data['password']);
         }
 
-        if ($data['role'] === 'admin') {
-            $data['id_turnamen'] = null;
-        }
+        $turnamenIds = $this->extractTurnamenIds($data);
+        unset($data['id_turnamen']);
+        $data['id_turnamen'] = $data['role'] === 'admin' ? null : ($turnamenIds[0] ?? null);
 
         $user->update($data);
+        $user->syncAssignedTurnamen($turnamenIds);
 
         return redirect()
             ->route('admin.pengguna.index')
@@ -101,5 +104,20 @@ class UserController extends Controller
         return redirect()
             ->route('admin.pengguna.index')
             ->with('success', 'Pengguna berhasil dihapus.');
+    }
+
+    protected function extractTurnamenIds(array $data): array
+    {
+        if (($data['role'] ?? null) !== 'panitia') {
+            return [];
+        }
+
+        $ids = $data['id_turnamen'] ?? [];
+
+        if (! is_array($ids)) {
+            $ids = $ids ? [(int) $ids] : [];
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $ids))));
     }
 }

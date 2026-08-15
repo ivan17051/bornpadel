@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\Guest\StandingsController;
 use App\Http\Controllers\Api\Guest\TournamentController;
 use App\Http\Controllers\Api\V1\External\RegistrationController as ExternalRegistrationController;
 use App\Http\Controllers\Api\V1\External\TournamentController as ExternalTournamentController;
+use App\Http\Controllers\Api\V1\External\MahjongScoreController as ExternalMahjongScoreController;
 use Illuminate\Support\Facades\Route;
 
 // Guest API
@@ -32,6 +33,10 @@ Route::prefix('v1/external')->middleware('external.api')->group(function () {
     Route::get('/tournaments/mahjong', [ExternalTournamentController::class, 'mahjongList']);
     Route::get('/tournaments/{id}/group-standings', [ExternalTournamentController::class, 'groupStandings']);
     Route::get('/tournaments/{id}/winners', [ExternalTournamentController::class, 'winners']);
+    Route::get('/tournaments/{id}/mahjong-groups', [ExternalMahjongScoreController::class, 'groups']);
+    Route::post('/tournaments/{id}/mahjong-scores', [ExternalMahjongScoreController::class, 'storeGroup']);
+    Route::post('/tournaments/{id}/mahjong-members/{member}/scores', [ExternalMahjongScoreController::class, 'storeMember']);
+    Route::patch('/tournaments/{id}/mahjong-scores/{entry}', [ExternalMahjongScoreController::class, 'update']);
 });
 
 // Admin API (session-authenticated via Sanctum stateful or token)

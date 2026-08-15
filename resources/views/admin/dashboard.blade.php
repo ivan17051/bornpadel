@@ -7,15 +7,26 @@
     <li class="breadcrumb-item active">Dashboard</li>
 @endsection
 
+@php
+    $assignedTurnamenList = $assignedTurnamenList ?? collect();
+    $dashboardTurnamenQuery = array_filter(['id_turnamen' => optional($assignedTurnamen)->id]);
+    $showTurnamenColumn = $isAdmin || $assignedTurnamenList->count() > 1;
+@endphp
+
 @section('content')
-@if ($assignedTurnamen ?? null)
+@if ($assignedTurnamenList->isNotEmpty())
     <div class="alert alert-light border mb-4 py-3">
-        <div class="d-flex align-items-center gap-2">
-            <i class="bi bi-calendar-event text-primary"></i>
+        <div class="d-flex align-items-start gap-2">
+            <i class="bi bi-calendar-event text-primary mt-1"></i>
             <div>
                 <div class="small text-muted mb-0">Turnamen Anda</div>
-                <strong>{{ $assignedTurnamen->nama }}</strong>
-                <span class="badge bg-secondary ms-1">{{ ucfirst($assignedTurnamen->status) }}</span>
+                @if ($assignedTurnamenList->count() === 1)
+                    <strong>{{ $assignedTurnamenList->first()->nama }}</strong>
+                    <span class="badge bg-secondary ms-1">{{ ucfirst($assignedTurnamenList->first()->status) }}</span>
+                @else
+                    <strong>{{ $assignedTurnamenList->count() }} turnamen</strong>
+                    <div class="small text-muted mt-1">{{ $assignedTurnamenList->pluck('nama')->implode(', ') }}</div>
+                @endif
             </div>
         </div>
     </div>
@@ -55,7 +66,7 @@
                 <p>Perlu Verifikasi</p>
             </div>
             <i class="small-box-icon bi bi-hourglass-split"></i>
-            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'paid', 'id_turnamen' => optional($assignedTurnamen)->id])) }}" class="small-box-footer link-dark">
+            <a href="{{ route('admin.pemain.index', array_merge(['status' => 'paid'], $dashboardTurnamenQuery)) }}" class="small-box-footer link-dark">
                 Review <i class="bi bi-arrow-right-circle"></i>
             </a>
         </div>
@@ -67,7 +78,7 @@
                 <p>Total Pendaftaran</p>
             </div>
             <i class="small-box-icon bi bi-people"></i>
-            <a href="{{ route('admin.pemain.index', array_filter(['id_turnamen' => optional($assignedTurnamen)->id])) }}" class="small-box-footer link-light">
+            <a href="{{ route('admin.pemain.index', $dashboardTurnamenQuery) }}" class="small-box-footer link-light">
                 Pemain terdaftar <i class="bi bi-arrow-right-circle"></i>
             </a>
         </div>
@@ -154,12 +165,12 @@
                             </h5>
                         </div>
                         <div class="col-md-6 text-end">
-                            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'paid', 'id_turnamen' => optional($assignedTurnamen)->id])) }}" class="btn btn-sm btn-outline-primary">
+                            <a href="{{ route('admin.pemain.index', array_merge(['status' => 'paid'], $dashboardTurnamenQuery)) }}" class="btn btn-sm btn-outline-primary">
                                 Lihat semua
                             </a>
                         </div>
                         <!-- <div class="col-md-6 text-end">
-                            <a href="{{ route('admin.pemain.index', array_filter(['status' => 'paid', 'id_turnamen' => optional($assignedTurnamen)->id])) }}" class="btn btn-sm btn-outline-primary">
+                            <a href="{{ route('admin.pemain.index', array_merge(['status' => 'paid'], $dashboardTurnamenQuery)) }}" class="btn btn-sm btn-outline-primary">
                                 Lihat semua
                             </a>
                         </div> -->
@@ -169,7 +180,7 @@
                             <table class="table table-hover mb-0 align-middle">
                                 <thead class="table-light">
                                     <tr>
-                                        @if ($isAdmin)
+                                        @if ($showTurnamenColumn)
                                             <th>Turnamen</th>
                                         @endif
                                         <th>Pemain</th>
@@ -181,7 +192,7 @@
                                 <tbody>
                                     @foreach ($recentRegistrations as $peserta)
                                         <tr>
-                                            @if ($isAdmin)
+                                            @if ($showTurnamenColumn)
                                                 <td>
                                                     <span class="small">{{ optional($peserta->turnamen)->nama ?? '—' }}</span>
                                                 </td>

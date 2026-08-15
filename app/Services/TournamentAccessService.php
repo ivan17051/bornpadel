@@ -31,11 +31,22 @@ class TournamentAccessService
         return $user && $user->isPanitia();
     }
 
-    public function assignedTurnamenId(): ?int
+    public function assignedTurnamenIds(): array
     {
         $user = $this->user();
 
-        return $user ? $user->id_turnamen : null;
+        if (! $user || $user->isAdmin()) {
+            return [];
+        }
+
+        return $user->assignedTurnamenIds();
+    }
+
+    public function assignedTurnamenId(): ?int
+    {
+        $ids = $this->assignedTurnamenIds();
+
+        return $ids[0] ?? null;
     }
 
     public function assignedTurnamen(): ?Turnamen
@@ -45,15 +56,36 @@ class TournamentAccessService
         return $id ? Turnamen::find($id) : null;
     }
 
+    public function assignedTurnamenList(): Collection
+    {
+        return $this->listForFilter();
+    }
+
+    public function canAccessTurnamenId(int $turnamenId): bool
+    {
+        if ($this->isAdmin()) {
+            return true;
+        }
+
+        return in_array($turnamenId, $this->assignedTurnamenIds(), true);
+    }
+
     public function listForFilter(): Collection
     {
         if ($this->isAdmin()) {
             return Turnamen::query()->orderByDesc('doc')->get();
         }
 
-        $turnamen = $this->assignedTurnamen();
+        $ids = $this->assignedTurnamenIds();
 
-        return $turnamen ? collect([$turnamen]) : collect();
+        if ($ids === []) {
+            return collect();
+        }
+
+        return Turnamen::query()
+            ->whereIn('id', $ids)
+            ->orderByDesc('doc')
+            ->get();
     }
 
     public function resolveTurnamen(
@@ -62,7 +94,32 @@ class TournamentAccessService
         bool $fallbackToActive = true
     ): ?Turnamen {
         if ($this->isPanitia()) {
-            return $this->assignedTurnamen();
+            $ids = $this->assignedTurnamenIds();
+
+            if ($ids === []) {
+                return null;
+            }
+
+            if ($id) {
+                return $this->canAccessTurnamenId($id) ? Turnamen::find($id) : null;
+            }
+
+            if (count($ids) === 1) {
+                return Turnamen::find($ids[0]);
+            }
+
+            if (! $fallbackToActive) {
+                return null;
+            }
+
+            $matchmakingService = $matchmakingService ?? app(GroupMatchmakingService::class);
+            $active = $matchmakingService->getActiveTournament();
+
+            if ($active && $this->canAccessTurnamenId((int) $active->id)) {
+                return $active;
+            }
+
+            return Turnamen::find($ids[0]);
         }
 
         if ($id) {
@@ -86,15 +143,23 @@ class TournamentAccessService
             return;
         }
 
-        if (! $user->id_turnamen) {
+        $ids = $this->assignedTurnamenIds();
+
+        if ($ids === []) {
             abort(403, 'Akun panitia belum ditugaskan ke turnamen.');
         }
 
-        if ($request->filled('id_turnamen') && (int) $request->id_turnamen !== (int) $user->id_turnamen) {
-            abort(403, 'Anda tidak memiliki akses ke turnamen ini.');
+        if ($request->filled('id_turnamen')) {
+            if (! $this->canAccessTurnamenId((int) $request->id_turnamen)) {
+                abort(403, 'Anda tidak memiliki akses ke turnamen ini.');
+            }
+
+            return;
         }
 
-        $request->merge(['id_turnamen' => $user->id_turnamen]);
+        if (count($ids) === 1) {
+            $request->merge(['id_turnamen' => $ids[0]]);
+        }
     }
 
     public function assertTurnamenId(int $turnamenId): void
@@ -103,7 +168,7 @@ class TournamentAccessService
             return;
         }
 
-        if ((int) $turnamenId !== (int) $this->assignedTurnamenId()) {
+        if (! $this->canAccessTurnamenId($turnamenId)) {
             abort(403, 'Anda tidak memiliki akses ke turnamen ini.');
         }
     }
@@ -119,8 +184,14 @@ class TournamentAccessService
             return;
         }
 
+        $ids = $this->assignedTurnamenIds();
+
+        if ($ids === []) {
+            abort(403, 'Akun panitia belum ditugaskan ke turnamen.');
+        }
+
         $exists = TurnamenPeserta::query()
-            ->forTurnamen((int) $this->assignedTurnamenId())
+            ->whereIn('id_turnamen', $ids)
             ->involvingPemain($pemain->id)
             ->exists();
 

@@ -75,9 +75,10 @@ class FeatureDemoSeeder extends Seeder
         $this->seedDraftTurnamen();
 
         if ($this->panitiaTurnamen) {
-            User::where('username', 'panitia')->update([
-                'id_turnamen' => $this->panitiaTurnamen->id,
-            ]);
+            $panitia = User::where('username', 'panitia')->first();
+            if ($panitia) {
+                $panitia->syncAssignedTurnamen([$this->panitiaTurnamen->id]);
+            }
         }
 
         $this->printSummary();
@@ -92,6 +93,7 @@ class FeatureDemoSeeder extends Seeder
         }
 
         foreach ([
+            'user_turnamen',
             'pertandingan_skor',
             'pertandingan',
             'grup_member',

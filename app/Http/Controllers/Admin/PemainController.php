@@ -676,7 +676,7 @@ class PemainController extends Controller
         $pesertaQuery = TurnamenPeserta::query()->involvingPemain($pemain->id);
 
         if ($this->tournamentAccess->isPanitia()) {
-            $pesertaQuery->forTurnamen($this->tournamentAccess->assignedTurnamenId());
+            $pesertaQuery->whereIn('id_turnamen', $this->tournamentAccess->assignedTurnamenIds());
         }
 
         $pesertaIds = $pesertaQuery->pluck('id');
@@ -694,7 +694,7 @@ class PemainController extends Controller
         });
 
         if ($this->tournamentAccess->isPanitia()) {
-            $matchQuery->where('id_turnamen', $this->tournamentAccess->assignedTurnamenId());
+            $matchQuery->whereIn('id_turnamen', $this->tournamentAccess->assignedTurnamenIds());
         }
 
         $inMatches = $matchQuery->exists();

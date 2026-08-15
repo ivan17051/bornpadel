@@ -22,7 +22,8 @@ class UpdateUserRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:255', Rule::unique('m_users', 'email')->ignore($userId)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
             'role' => ['required', 'in:admin,panitia'],
-            'id_turnamen' => ['nullable', 'required_if:role,panitia', 'exists:m_turnamen,id'],
+            'id_turnamen' => ['nullable', 'array', 'required_if:role,panitia', 'min:1'],
+            'id_turnamen.*' => ['integer', 'exists:m_turnamen,id'],
         ];
     }
 
@@ -38,7 +39,9 @@ class UpdateUserRequest extends FormRequest
             'password.confirmed' => 'Konfirmasi password tidak cocok.',
             'role.in' => 'Role tidak valid.',
             'id_turnamen.required_if' => 'Turnamen wajib dipilih untuk role panitia.',
+            'id_turnamen.min' => 'Pilih minimal satu turnamen untuk panitia.',
             'id_turnamen.exists' => 'Turnamen tidak ditemukan.',
+            'id_turnamen.*.exists' => 'Turnamen tidak ditemukan.',
         ];
     }
 }

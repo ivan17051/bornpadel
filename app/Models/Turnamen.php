@@ -217,6 +217,12 @@ class Turnamen extends Model
         return $this->hasMany(TurnamenPeserta::class, 'id_turnamen');
     }
 
+    public function assignedUsers()
+    {
+        return $this->belongsToMany(User::class, 'user_turnamen', 'id_turnamen', 'id_user')
+            ->withTimestamps();
+    }
+
     public function kategori()
     {
         return $this->hasMany(TurnamenKategori::class, 'id_turnamen')->orderBy('urutan')->orderBy('id');

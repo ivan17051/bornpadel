@@ -82,6 +82,8 @@
                             <td class="d-none d-md-table-cell">
                                 @if ($item->role === 'admin')
                                     <span class="text-muted">Semua turnamen</span>
+                                @elseif ($item->assignedTurnamen->isNotEmpty())
+                                    {{ $item->assignedTurnamen->pluck('nama')->implode(', ') }}
                                 @elseif ($item->turnamen)
                                     {{ $item->turnamen->nama }}
                                 @else

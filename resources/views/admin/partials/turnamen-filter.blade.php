@@ -3,12 +3,18 @@
     $preserveParams = $preserveParams ?? [];
     $turnamenList = $turnamenList ?? collect();
     $requireTurnamenSelection = $requireTurnamenSelection ?? false;
-    $emptyOptionLabel = $emptyOptionLabel ?? ($requireTurnamenSelection ? 'Pilih turnamen' : 'Default (turnamen aktif)');
     $useSelect2TurnamenFilter = $useSelect2TurnamenFilter ?? false;
     $turnamenFilterMax = $turnamenFilterMax ?? null;
     $user = auth()->user();
     $isPanitia = $user && $user->isPanitia();
-    $lockedTurnamen = $isPanitia ? $turnamenList->first() : null;
+    $assignedCount = $turnamenList instanceof \Illuminate\Support\Collection ? $turnamenList->count() : 0;
+    $emptyOptionLabel = $emptyOptionLabel ?? (
+        $requireTurnamenSelection || ($isPanitia && $assignedCount > 1)
+            ? 'Pilih turnamen'
+            : 'Default (turnamen aktif)'
+    );
+    $lockedTurnamen = $isPanitia && $assignedCount === 1 ? $turnamenList->first() : null;
+    $showTurnamenSelect = ! $isPanitia || $assignedCount > 1;
 
     $filterTurnamenList = $turnamenList;
 
@@ -31,7 +37,7 @@
         </div>
     @endif
 
-    @if ($isPanitia && ! $lockedTurnamen)
+    @if ($isPanitia && $assignedCount === 0)
         <div class="alert alert-warning mb-3">
             <i class="bi bi-exclamation-triangle me-2"></i>Akun panitia belum ditugaskan ke turnamen.
         </div>
@@ -72,7 +78,7 @@
             @endif
         </div>
     </div>
-@elseif (! $isPanitia)
+@elseif ($showTurnamenSelect)
 <div class="card mb-3" @if ($kategori) data-workspace-kategori="{{ $kategori->id }}" @endif>
     <div class="card-body py-3">
         <form method="GET" action="{{ $filterRoute }}" id="admin-turnamen-filter-form">

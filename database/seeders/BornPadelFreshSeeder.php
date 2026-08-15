@@ -121,6 +121,7 @@ class BornPadelFreshSeeder extends Seeder
         DB::table('m_users')->update(['id_turnamen' => null]);
 
         $tables = [
+            'user_turnamen',
             'pertandingan_skor',
             'pertandingan',
             'grup_member',
@@ -152,9 +153,11 @@ class BornPadelFreshSeeder extends Seeder
             return;
         }
 
-        User::where('username', 'panitia')->update([
-            'id_turnamen' => $turnamen->id,
-        ]);
+        $panitia = User::where('username', 'panitia')->first();
+
+        if ($panitia) {
+            $panitia->syncAssignedTurnamen([$turnamen->id]);
+        }
     }
 
     /* ------------------------------------------------------------------ */

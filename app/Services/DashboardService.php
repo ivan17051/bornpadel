@@ -93,12 +93,12 @@ class DashboardService
         return $stats;
     }
 
-    public function getGlobalRegistrationStats(?int $turnamenId = null): array
+    public function getGlobalRegistrationStats(?array $turnamenIds = null): array
     {
         $query = TurnamenPeserta::query();
 
-        if ($turnamenId) {
-            $query->where('id_turnamen', $turnamenId);
+        if ($turnamenIds !== null) {
+            $query->whereIn('id_turnamen', $turnamenIds !== [] ? $turnamenIds : [0]);
         }
 
         return [
@@ -110,14 +110,14 @@ class DashboardService
         ];
     }
 
-    public function getAllRecentRegistrations(?int $turnamenId = null, int $limit = 10): Collection
+    public function getAllRecentRegistrations(?array $turnamenIds = null, int $limit = 10): Collection
     {
         $query = TurnamenPeserta::query()
             ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'turnamen'])
             ->whereIn('status', ['pending', 'paid', 'unpaid']);
 
-        if ($turnamenId) {
-            $query->where('id_turnamen', $turnamenId);
+        if ($turnamenIds !== null) {
+            $query->whereIn('id_turnamen', $turnamenIds !== [] ? $turnamenIds : [0]);
         }
 
         return $query->latest('updated_at')->limit($limit)->get();

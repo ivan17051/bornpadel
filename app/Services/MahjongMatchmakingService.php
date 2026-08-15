@@ -271,6 +271,19 @@ class MahjongMatchmakingService
         return $this->syncPoinDidapatFromEntries($member);
     }
 
+    public function updateMemberPointEntry(GrupMember $member, MahjongPoinEntry $entry, int $poin): GrupMember
+    {
+        $this->assertActiveMahjongMember($member);
+
+        if ((int) $entry->id_grup_member !== (int) $member->id) {
+            throw new RuntimeException('Entri poin tidak cocok dengan anggota grup.');
+        }
+
+        $entry->update(['poin' => $poin]);
+
+        return $this->syncPoinDidapatFromEntries($member);
+    }
+
     public function syncPoinDidapatFromEntries(GrupMember $member): GrupMember
     {
         $sum = (int) $member->poinEntries()->sum('poin');

@@ -765,7 +765,11 @@ class MatchmakingController extends Controller
         $turnamenId = $request->input('tournament_id') ?? $request->input('id_turnamen');
 
         if ($this->tournamentAccess->isPanitia()) {
-            $turnamen = $this->tournamentAccess->assignedTurnamen();
+            $turnamen = $this->tournamentAccess->resolveTurnamen(
+                $turnamenId ? (int) $turnamenId : null,
+                $this->matchmakingService,
+                true
+            );
 
             if (! $turnamen) {
                 throw new RuntimeException('Akun panitia belum ditugaskan ke turnamen.');

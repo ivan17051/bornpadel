@@ -13,16 +13,15 @@ class DashboardController extends Controller
         DashboardService $dashboardService
     ) {
         $isAdmin = $tournamentAccess->isAdmin();
-        $scopedTurnamenId = $tournamentAccess->isPanitia()
-            ? $tournamentAccess->assignedTurnamenId()
-            : null;
+        $assignedTurnamenList = $isAdmin ? collect() : $tournamentAccess->assignedTurnamenList();
+        $scopedTurnamenIds = $isAdmin ? null : $assignedTurnamenList->pluck('id')->all();
 
         $globalStats = $dashboardService->getGlobalStats($isAdmin);
-        $registrationStats = $dashboardService->getGlobalRegistrationStats($scopedTurnamenId);
+        $registrationStats = $dashboardService->getGlobalRegistrationStats($scopedTurnamenIds);
         $recentTurnamen = $isAdmin
             ? $dashboardService->getRecentTurnamen(20)
             : collect();
-        $recentRegistrations = $dashboardService->getAllRecentRegistrations($scopedTurnamenId);
+        $recentRegistrations = $dashboardService->getAllRecentRegistrations($scopedTurnamenIds);
 
         return view('admin.dashboard', [
             'globalStats' => $globalStats,
@@ -30,7 +29,8 @@ class DashboardController extends Controller
             'recentTurnamen' => $recentTurnamen,
             'recentRegistrations' => $recentRegistrations,
             'isAdmin' => $isAdmin,
-            'assignedTurnamen' => $tournamentAccess->assignedTurnamen(),
+            'assignedTurnamen' => $assignedTurnamenList->count() === 1 ? $assignedTurnamenList->first() : null,
+            'assignedTurnamenList' => $assignedTurnamenList,
         ]);
     }
 }
