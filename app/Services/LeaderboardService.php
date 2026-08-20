@@ -407,6 +407,88 @@ class LeaderboardService
         ];
     }
 
+    /**
+     * Point history under matchmaking “Akumulasi”.
+     * - Full totals for completed prior babaks
+     * - Per-ronde totals for earlier rondes in the current babak (after reshuffle)
+     * Excludes the active ronde’s poin babak (shown in Poin Babak column).
+     *
+     * @return array<int, list<array{label: string, poin: int}>>
+     */
+    public function getMahjongPriorBabakBreakdown(Turnamen $turnamen, $idKategori = null): array
+    {
+        if (! $turnamen->isMahjong()) {
+            return [];
+        }
+
+        $kategori = $turnamen->resolveKategori($idKategori);
+        $currentBabak = (int) ($kategori->activeGrup()->max('babak') ?: 0);
+        $hasActiveGroups = $currentBabak > 0;
+
+        if (! $hasActiveGroups) {
+            $maxBabak = (int) ($kategori->grup()->max('babak') ?: 0);
+            if ($maxBabak < 1) {
+                return [];
+            }
+            // Finished / no active groups: treat as past the last babak.
+            $currentBabak = $maxBabak + 1;
+        }
+
+        $breakdown = [];
+
+        // Completed prior babaks (full babak totals).
+        for ($babak = 1; $babak < $currentBabak; $babak++) {
+            $table = $this->buildMahjongBabakTable($turnamen, $babak, $kategori->id);
+
+            foreach ($table['rows'] as $row) {
+                $pesertaId = (int) ($row['id_peserta'] ?? 0);
+                if ($pesertaId <= 0) {
+                    continue;
+                }
+
+                if (! isset($breakdown[$pesertaId])) {
+                    $breakdown[$pesertaId] = [];
+                }
+
+                $breakdown[$pesertaId][] = [
+                    'label' => 'Babak ' . $babak,
+                    'poin' => (int) ($row['total_babak'] ?? $row['poin_babak'] ?? 0),
+                ];
+            }
+        }
+
+        // Earlier rondes within the current active babak (reshuffles stay on same babak).
+        if ($hasActiveGroups) {
+            $table = $this->buildMahjongBabakTable($turnamen, $currentBabak, $kategori->id);
+
+            foreach ($table['rows'] as $row) {
+                $pesertaId = (int) ($row['id_peserta'] ?? 0);
+                if ($pesertaId <= 0) {
+                    continue;
+                }
+
+                $scores = $row['round_scores'] ?? [];
+                // Drop the active (latest) ronde — that is Poin Babak, not Akumulasi history.
+                if (count($scores) > 0) {
+                    array_pop($scores);
+                }
+
+                foreach ($scores as $index => $poin) {
+                    if (! isset($breakdown[$pesertaId])) {
+                        $breakdown[$pesertaId] = [];
+                    }
+
+                    $breakdown[$pesertaId][] = [
+                        'label' => 'Ronde ' . ($index + 1),
+                        'poin' => (int) $poin,
+                    ];
+                }
+            }
+        }
+
+        return $breakdown;
+    }
+
     public function buildMahjongBabakTable(Turnamen $turnamen, int $babak, $idKategori = null): array
     {
         $roundBatches = $this->getMahjongRoundBatchesForBabak($turnamen, $babak, $idKategori);

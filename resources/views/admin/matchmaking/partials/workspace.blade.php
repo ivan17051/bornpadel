@@ -379,11 +379,22 @@
                                             $memberEntries = $member->relationLoaded('poinEntries')
                                                 ? $member->poinEntries
                                                 : $member->poinEntries()->get();
+                                            $priorBabakLines = ($mahjongPriorBabakBreakdown ?? [])[(int) $member->id_turnamen_peserta] ?? [];
                                         @endphp
                                         <tr class="mahjong-member-row" data-member-id="{{ $member->id }}">
                                             <td class="fw-semibold">{{ $member->display_name }}</td>
                                             <td class="text-center text-muted mahjong-akumulasi" data-member-id="{{ $member->id }}">
-                                                {{ (int) $member->poin_akumulasi }}
+                                                <div>{{ (int) $member->poin_akumulasi }}</div>
+                                                @if (! empty($priorBabakLines))
+                                                    <div class="small mt-1 lh-sm">
+                                                        @foreach ($priorBabakLines as $line)
+                                                            <div class="text-muted">
+                                                                {{ $line['label'] ?? ('Babak ' . ($line['babak'] ?? '?')) }}:
+                                                                <span class="fw-semibold text-body">{{ (int) $line['poin'] }}</span>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
                                             </td>
                                             <td class="text-center">
                                                 <span class="badge text-bg-info mahjong-poin-babak" data-member-id="{{ $member->id }}">

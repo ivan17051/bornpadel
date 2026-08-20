@@ -29,6 +29,16 @@ class MahjongMatchmakingService
         $this->mahjongRanker = $mahjongRanker;
     }
 
+    /**
+     * Prior babak / ronde totals keyed by id_turnamen_peserta for Akumulasi breakdown UI.
+     *
+     * @return array<int, list<array{label: string, poin: int}>>
+     */
+    public function getPriorBabakBreakdown(Turnamen $turnamen, $idKategori = null): array
+    {
+        return $this->leaderboardService->getMahjongPriorBabakBreakdown($turnamen, $idKategori);
+    }
+
     public function canGenerateGroups(Turnamen $turnamen, $idKategori = null): bool
     {
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);

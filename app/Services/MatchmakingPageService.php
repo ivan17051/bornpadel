@@ -488,6 +488,12 @@ class MatchmakingPageService
 
                 : false,
 
+            'mahjongPriorBabakBreakdown' => $turnamen && $isMahjong && $kategoriId
+
+                ? $this->mahjongService->getPriorBabakBreakdown($turnamen, $kategoriId)
+
+                : [],
+
             'activePlayerCount' => $isMahjong && $turnamen
 
                 ? $this->mahjongService->getGlobalRankings($turnamen, $kategoriId)->count()
