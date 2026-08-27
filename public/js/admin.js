@@ -1442,6 +1442,7 @@ const BornPadelAdmin = (function () {
 
             const babakBadge = document.querySelector(`.mahjong-poin-babak[data-member-id="${memberId}"]`);
             const totalBadge = document.querySelector(`.mahjong-total-poin[data-member-id="${memberId}"]`);
+            const menangBadge = document.querySelector(`.mahjong-menang[data-member-id="${memberId}"]`);
             const entriesWrap = document.querySelector(`.mahjong-poin-entries[data-member-id="${memberId}"]`);
 
             if (babakBadge) {
@@ -1450,14 +1451,21 @@ const BornPadelAdmin = (function () {
             if (totalBadge) {
                 totalBadge.textContent = data.total_poin;
             }
+            if (menangBadge) {
+                menangBadge.textContent = data.menang ?? 0;
+            }
             if (entriesWrap) {
                 const entries = Array.isArray(data.entries) ? data.entries : [];
                 const destroyTemplate = entriesWrap.dataset.destroyUrlTemplate || '';
                 entriesWrap.innerHTML = entries.map((entry) => {
                     const deleteUrl = destroyTemplate.replace('__ENTRY__', entry.id);
+                    const winnerClass = entry.is_winner ? ' border-warning' : '';
+                    const winnerIcon = entry.is_winner
+                        ? '<i class="bi bi-trophy-fill text-warning me-1" title="Pemenang ronde"></i>'
+                        : '';
                     return `
-                        <span class="badge text-bg-light text-dark border mahjong-poin-entry" data-entry-id="${entry.id}">
-                            ${formatMahjongEntryLabel(entry.poin)}
+                        <span class="badge text-bg-light text-dark border mahjong-poin-entry${winnerClass}" data-entry-id="${entry.id}">
+                            ${winnerIcon}${formatMahjongEntryLabel(entry.poin)}
                             <button type="button"
                                     class="btn btn-link btn-sm p-0 ms-1 text-danger btn-delete-mahjong-poin"
                                     data-member-id="${memberId}"
@@ -1479,6 +1487,27 @@ const BornPadelAdmin = (function () {
         const saveMahjongGroupPointsBtn = document.getElementById('btn-save-mahjong-group-points');
         let mahjongGroupPointsModal = null;
         let activeMahjongGroupPointsUrl = null;
+        let activeMahjongWinnerMemberId = null;
+
+        function setMahjongWinnerSelection(memberId) {
+            activeMahjongWinnerMemberId = memberId ? parseInt(memberId, 10) : null;
+            if (!mahjongGroupPointsFields) {
+                return;
+            }
+
+            mahjongGroupPointsFields.querySelectorAll('.mahjong-winner-pick').forEach((btn) => {
+                const isSelected = parseInt(btn.dataset.memberId, 10) === activeMahjongWinnerMemberId;
+                btn.classList.toggle('btn-warning', isSelected);
+                btn.classList.toggle('btn-outline-secondary', !isSelected);
+                btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+                const icon = btn.querySelector('.mahjong-winner-icon');
+                if (icon) {
+                    icon.className = isSelected
+                        ? 'bi bi-trophy-fill text-dark mahjong-winner-icon me-1'
+                        : 'bi bi-trophy mahjong-winner-icon me-1';
+                }
+            });
+        }
 
         if (mahjongGroupPointsModalEl && typeof bootstrap !== 'undefined') {
             mahjongGroupPointsModal = bootstrap.Modal.getOrCreateInstance(mahjongGroupPointsModalEl);
@@ -1508,21 +1537,27 @@ const BornPadelAdmin = (function () {
             };
 
             activeMahjongGroupPointsUrl = btn.dataset.url || null;
+            activeMahjongWinnerMemberId = null;
             const groupName = btn.dataset.grupName || 'Grup';
 
             if (mahjongGroupPointsTitle) {
                 mahjongGroupPointsTitle.innerHTML = `<i class="bi bi-pencil-square me-1"></i> Input Poin — ${escapeHtml(groupName)}`;
             }
             if (mahjongGroupPointsHelp) {
-                mahjongGroupPointsHelp.textContent = `Isi poin untuk keempat pemain di ${groupName}, lalu simpan sekaligus.`;
+                mahjongGroupPointsHelp.textContent = `Klik nama pemain untuk menandai pemenang ronde (wajib 1), isi poin keempat pemain di ${groupName}, lalu simpan.`;
             }
 
             mahjongGroupPointsFields.innerHTML = members.map((member) => `
                 <div class="row g-2 align-items-center">
                     <div class="col-7">
-                        <label class="form-label mb-0 fw-semibold" for="mahjong-group-poin-${member.id}">
-                            ${escapeHtml(member.name || 'Pemain')}
-                        </label>
+                        <button type="button"
+                                class="btn btn-outline-secondary btn-sm w-100 text-start mahjong-winner-pick"
+                                data-member-id="${member.id}"
+                                aria-pressed="false"
+                                title="Tandai sebagai pemenang ronde">
+                            <i class="bi bi-trophy mahjong-winner-icon me-1"></i>
+                            <span class="fw-semibold">${escapeHtml(member.name || 'Pemain')}</span>
+                        </button>
                     </div>
                     <div class="col-5">
                         <input type="number"
@@ -1551,9 +1586,25 @@ const BornPadelAdmin = (function () {
             });
         });
 
+        if (mahjongGroupPointsFields) {
+            mahjongGroupPointsFields.addEventListener('click', (event) => {
+                const pickBtn = event.target.closest('.mahjong-winner-pick');
+                if (!pickBtn || !mahjongGroupPointsFields.contains(pickBtn)) {
+                    return;
+                }
+                event.preventDefault();
+                setMahjongWinnerSelection(pickBtn.dataset.memberId);
+            });
+        }
+
         if (saveMahjongGroupPointsBtn) {
             saveMahjongGroupPointsBtn.addEventListener('click', async () => {
                 if (!activeMahjongGroupPointsUrl || !mahjongGroupPointsFields) {
+                    return;
+                }
+
+                if (!activeMahjongWinnerMemberId) {
+                    showToast('Pilih pemenang ronde dengan mengklik nama pemain.', 'error');
                     return;
                 }
 
@@ -1584,12 +1635,16 @@ const BornPadelAdmin = (function () {
                 setButtonLoading(saveMahjongGroupPointsBtn, true);
 
                 try {
-                    const data = await apiRequest(activeMahjongGroupPointsUrl, 'POST', { scores });
+                    const data = await apiRequest(activeMahjongGroupPointsUrl, 'POST', {
+                        scores,
+                        id_grup_member_pemenang: activeMahjongWinnerMemberId,
+                    });
                     const members = data?.data?.members || [];
                     members.forEach((member) => {
                         renderMahjongMemberPoints(member.id, member);
                     });
                     mahjongGroupPointsModal?.hide();
+                    activeMahjongWinnerMemberId = null;
                     showToast(data.message);
                 } catch (e) {
                     showToast(e.message, 'error');

@@ -29,6 +29,7 @@ class ExternalMahjongScoreApiTest extends TestCase
         $this->withHeaders($this->externalHeaders())
             ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores', [
                 'id_grup' => 1,
+                'id_grup_member_pemenang' => 1,
                 'scores' => [
                     ['id_grup_member' => 1, 'poin' => 1],
                     ['id_grup_member' => 2, 'poin' => 1],
@@ -65,17 +66,21 @@ class ExternalMahjongScoreApiTest extends TestCase
         $store = $this->withHeaders($this->externalHeaders())
             ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores', [
                 'id_grup' => $grup->id,
+                'id_grup_member_pemenang' => $grup->members->first()->id,
                 'scores' => $scores,
             ])
             ->assertCreated()
             ->assertJsonPath('success', true);
 
         $this->assertCount(4, $store->json('data.members'));
+        $winnerId = (int) $grup->members->first()->id;
+        $this->assertSame(1, (int) collect($store->json('data.members'))->firstWhere('id_grup_member', $winnerId)['menang']);
 
         foreach ($scores as $score) {
             $member = GrupMember::findOrFail($score['id_grup_member']);
             $this->assertSame($score['poin'], (int) $member->poin_didapat);
             $this->assertSame(1, $member->poinEntries()->count());
+            $this->assertSame((int) $member->id === $winnerId, (bool) $member->poinEntries()->first()->is_winner);
         }
 
         $firstMember = $grup->members->first();

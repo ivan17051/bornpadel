@@ -11,10 +11,12 @@ class MahjongPoinEntry extends Model
     protected $fillable = [
         'id_grup_member',
         'poin',
+        'is_winner',
     ];
 
     protected $casts = [
         'poin' => 'integer',
+        'is_winner' => 'boolean',
     ];
 
     public function grupMember()

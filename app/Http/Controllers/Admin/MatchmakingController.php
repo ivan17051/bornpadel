@@ -225,12 +225,14 @@ class MatchmakingController extends Controller
             'scores' => ['required', 'array', 'size:4'],
             'scores.*.id' => ['required', 'integer'],
             'scores.*.poin' => ['required', 'integer'],
+            'id_grup_member_pemenang' => ['required', 'integer'],
         ]);
 
         try {
             $updatedMembers = $this->mahjongService->addGroupPointEntries(
                 $grup,
-                $request->input('scores')
+                $request->input('scores'),
+                (int) $request->input('id_grup_member_pemenang')
             );
         } catch (RuntimeException $e) {
             return response()->json([
@@ -277,10 +279,12 @@ class MatchmakingController extends Controller
             'poin_didapat' => (int) $member->poin_didapat,
             'poin_akumulasi' => (int) $member->poin_akumulasi,
             'total_poin' => $member->total_poin,
+            'menang' => (int) $member->menang,
             'entries' => $member->poinEntries->map(function ($entry) {
                 return [
                     'id' => $entry->id,
                     'poin' => (int) $entry->poin,
+                    'is_winner' => (bool) $entry->is_winner,
                 ];
             })->values(),
         ];

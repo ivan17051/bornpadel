@@ -29,6 +29,15 @@ class GrupMember extends Model
         return (int) $this->poin_akumulasi + (int) $this->poin_didapat;
     }
 
+    public function getMenangAttribute(): int
+    {
+        if ($this->relationLoaded('poinEntries')) {
+            return (int) $this->poinEntries->where('is_winner', true)->count();
+        }
+
+        return (int) $this->poinEntries()->where('is_winner', true)->count();
+    }
+
     public function grup()
     {
         return $this->belongsTo(Grup::class, 'id_grup');

@@ -145,9 +145,12 @@ class MahjongResetAndPointEntriesTest extends TestCase
             ];
         })->all();
 
+        $winnerId = (int) $grup->members->first()->id;
+
         $response = $this->actingAs($admin)
             ->postJson(route('admin.matchmaking.mahjong-group-point-entries.store', $grup), [
                 'scores' => $scores,
+                'id_grup_member_pemenang' => $winnerId,
             ])
             ->assertOk()
             ->assertJsonPath('success', true);
@@ -160,9 +163,37 @@ class MahjongResetAndPointEntriesTest extends TestCase
             $this->assertSame($score['poin'], (int) $member->poin_didapat);
             $this->assertSame(1, $member->poinEntries()->count());
             $this->assertSame($score['poin'], (int) $member->poinEntries()->first()->poin);
+            $this->assertSame((int) $member->id === $winnerId, (bool) $member->poinEntries()->first()->is_winner);
         }
 
+        $winner = GrupMember::findOrFail($winnerId);
+        $this->assertSame(1, (int) $winner->menang);
         $response->assertJsonPath('data.members.0.poin_didapat', $scores[0]['poin']);
+        $this->assertSame(1, (int) collect($membersPayload)->firstWhere('id', $winnerId)['menang']);
+    }
+
+    public function test_group_point_entries_require_winner(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $scores = $grup->members->values()->map(function (GrupMember $member) {
+            return ['id' => $member->id, 'poin' => 0];
+        })->all();
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-group-point-entries.store', $grup), [
+                'scores' => $scores,
+            ])
+            ->assertStatus(422);
     }
 
     public function test_group_point_entries_reject_incomplete_scores(): void

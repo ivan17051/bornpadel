@@ -71,7 +71,16 @@ class MahjongScoreController extends Controller
 
         try {
             $scores = $this->normalizeGroupScores($grup, $request->input('scores', []));
-            $updatedMembers = $this->mahjongService->addGroupPointEntries($grup, $scores);
+            $winnerMemberId = $this->resolveWinnerMemberId(
+                $grup,
+                $scores,
+                (int) $request->input('id_grup_member_pemenang')
+            );
+            $updatedMembers = $this->mahjongService->addGroupPointEntries(
+                $grup,
+                $scores,
+                $winnerMemberId
+            );
         } catch (RuntimeException $e) {
             return response()->json([
                 'success' => false,
@@ -215,6 +224,24 @@ class MahjongScoreController extends Controller
     }
 
     /**
+     * @param  array<int, array{id:int, poin:int}>  $scores
+     */
+    protected function resolveWinnerMemberId(Grup $grup, array $scores, int $winnerMemberId): int
+    {
+        $scoreIds = collect($scores)->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if (! in_array($winnerMemberId, $scoreIds, true)) {
+            throw new RuntimeException('id_grup_member_pemenang harus salah satu pemain di scores.');
+        }
+
+        if (! $grup->members->firstWhere('id', $winnerMemberId)) {
+            throw new RuntimeException('Pemenang harus salah satu anggota grup.');
+        }
+
+        return $winnerMemberId;
+    }
+
+    /**
      * @param  iterable  $members
      * @param  array<string, mixed>  $score
      */
@@ -271,10 +298,12 @@ class MahjongScoreController extends Controller
             'poin_didapat' => (int) $member->poin_didapat,
             'poin_akumulasi' => (int) $member->poin_akumulasi,
             'total_poin' => $member->total_poin,
+            'menang' => (int) $member->menang,
             'entries' => $member->poinEntries->map(function (MahjongPoinEntry $entry) {
                 return [
                     'id' => $entry->id,
                     'poin' => (int) $entry->poin,
+                    'is_winner' => (bool) $entry->is_winner,
                 ];
             })->values(),
         ];

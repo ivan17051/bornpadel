@@ -368,6 +368,7 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th>Pemain</th>
+                                        <th class="text-center" style="width:5rem" title="Jumlah menang (ronde)">W</th>
                                         <th class="text-center" style="width:7rem">Akumulasi</th>
                                         <th class="text-center" style="width:14rem">Poin Babak</th>
                                         <th class="text-center" style="width:7rem">Total</th>
@@ -383,6 +384,11 @@
                                         @endphp
                                         <tr class="mahjong-member-row" data-member-id="{{ $member->id }}">
                                             <td class="fw-semibold">{{ $member->display_name }}</td>
+                                            <td class="text-center">
+                                                <span class="badge text-bg-warning text-dark mahjong-menang" data-member-id="{{ $member->id }}">
+                                                    {{ (int) $member->menang }}
+                                                </span>
+                                            </td>
                                             <td class="text-center text-muted mahjong-akumulasi" data-member-id="{{ $member->id }}">
                                                 <div>{{ (int) $member->poin_akumulasi }}</div>
                                                 @if (! empty($priorBabakLines))
@@ -404,8 +410,11 @@
                                                      data-member-id="{{ $member->id }}"
                                                      data-destroy-url-template="{{ route('admin.matchmaking.mahjong-point-entries.destroy', ['member' => $member->id, 'entry' => '__ENTRY__']) }}">
                                                     @foreach ($memberEntries as $entry)
-                                                        <span class="badge text-bg-light text-dark border mahjong-poin-entry"
+                                                        <span class="badge text-bg-light text-dark border mahjong-poin-entry {{ $entry->is_winner ? 'border-warning' : '' }}"
                                                               data-entry-id="{{ $entry->id }}">
+                                                            @if ($entry->is_winner)
+                                                                <i class="bi bi-trophy-fill text-warning me-1" title="Pemenang ronde"></i>
+                                                            @endif
                                                             {{ (int) $entry->poin > 0 ? '+' : '' }}{{ (int) $entry->poin }}
                                                             <button type="button"
                                                                     class="btn btn-link btn-sm p-0 ms-1 text-danger btn-delete-mahjong-poin"
@@ -1041,7 +1050,7 @@
                     </div>
                     <div class="modal-body">
                         <p class="text-muted small mb-3" id="mahjong-group-points-help">
-                            Isi poin untuk keempat pemain dalam grup, lalu simpan sekaligus.
+                            Klik nama pemain untuk menandai pemenang ronde (wajib 1), isi poin keempat pemain, lalu simpan.
                         </p>
                         <div id="mahjong-group-points-fields" class="d-grid gap-3"></div>
                     </div>

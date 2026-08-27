@@ -16,6 +16,7 @@ class StoreMahjongGroupScoresRequest extends FormRequest
         return [
             'id_grup' => ['required', 'integer', 'exists:grup,id'],
             'id_kategori' => ['nullable', 'integer', 'exists:turnamen_kategori,id'],
+            'id_grup_member_pemenang' => ['required', 'integer'],
             'scores' => ['required', 'array', 'size:4'],
             'scores.*.poin' => ['required', 'integer'],
             'scores.*.id_grup_member' => ['nullable', 'integer'],
@@ -29,6 +30,7 @@ class StoreMahjongGroupScoresRequest extends FormRequest
         return [
             'id_grup.required' => 'id_grup wajib diisi.',
             'id_grup.exists' => 'Grup tidak ditemukan.',
+            'id_grup_member_pemenang.required' => 'id_grup_member_pemenang wajib diisi (pemenang ronde).',
             'scores.required' => 'scores wajib diisi.',
             'scores.size' => 'Poin harus diisi untuk keempat pemain dalam grup.',
             'scores.*.poin.required' => 'poin wajib diisi untuk setiap pemain.',

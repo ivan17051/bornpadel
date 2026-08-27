@@ -220,6 +220,7 @@ class MahjongMatchmakingService
         MahjongPoinEntry::create([
             'id_grup_member' => $member->id,
             'poin' => $poin,
+            'is_winner' => false,
         ]);
 
         return $this->syncPoinDidapatFromEntries($member);
@@ -227,13 +228,14 @@ class MahjongMatchmakingService
 
     /**
      * Add one poin entry for every member in the group (one mahjong hand).
+     * Exactly one winner member must be provided.
      *
      * @param  array<int, array{id: int, poin: int}>  $scores
      * @return Collection<int, GrupMember>
      */
-    public function addGroupPointEntries(Grup $grup, array $scores): Collection
+    public function addGroupPointEntries(Grup $grup, array $scores, int $winnerMemberId): Collection
     {
-        return DB::transaction(function () use ($grup, $scores) {
+        return DB::transaction(function () use ($grup, $scores, $winnerMemberId) {
             $this->assertActiveMahjongGroup($grup);
 
             $grup->loadMissing('members');
@@ -254,11 +256,16 @@ class MahjongMatchmakingService
                 throw new RuntimeException('Daftar pemain tidak cocok dengan anggota grup.');
             }
 
+            if (! $membersById->has($winnerMemberId)) {
+                throw new RuntimeException('Pemenang harus salah satu anggota grup.');
+            }
+
             foreach ($scores as $score) {
                 $memberId = (int) $score['id'];
                 MahjongPoinEntry::create([
                     'id_grup_member' => $memberId,
                     'poin' => (int) $score['poin'],
+                    'is_winner' => $memberId === $winnerMemberId,
                 ]);
             }
 
