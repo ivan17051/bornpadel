@@ -546,6 +546,7 @@ class LeaderboardService
 
             return array_merge($this->formatMahjongStandingRow($latestMember, 0), [
                 'round_scores' => $roundScores,
+                'menang' => $this->resolveMahjongBabakWins($roundBatches, (int) $pesertaId),
                 'total_babak' => $totalBabak,
                 'poin_babak' => $totalBabak,
                 'total_poin' => $this->resolveMahjongTotalPoints(
@@ -599,7 +600,7 @@ class LeaderboardService
             ->where('id_kategori', $kategoriId)
             ->where('babak', $babak)
             ->with(array_merge(
-                ['members.pemain', 'members.turnamenPeserta.pemain1'],
+                ['members.pemain', 'members.poinEntries', 'members.turnamenPeserta.pemain1'],
                 TurnamenPeserta::partnerPemainEagerLoadsFor('members.turnamenPeserta')
             ))
             ->orderBy('ronde')
@@ -625,6 +626,24 @@ class LeaderboardService
         }
 
         return null;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, Grup>>  $roundBatches
+     */
+    protected function resolveMahjongBabakWins(Collection $roundBatches, int $pesertaId): int
+    {
+        $wins = 0;
+
+        foreach ($roundBatches as $batch) {
+            $member = $this->findMahjongMemberInBatch($batch, $pesertaId);
+
+            if ($member) {
+                $wins += (int) $member->menang;
+            }
+        }
+
+        return $wins;
     }
 
     protected function resolveMahjongRoundPoints(
@@ -781,6 +800,7 @@ class LeaderboardService
             'poin_didapat' => (int) $member->poin_didapat,
             'poin_babak' => (int) $member->poin_didapat,
             'total_poin' => $member->total_poin,
+            'menang' => (int) $member->menang,
         ];
     }
 
