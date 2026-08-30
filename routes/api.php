@@ -31,6 +31,7 @@ Route::prefix('v1/external')->middleware('external.api')->group(function () {
     Route::get('/registration-check', [ExternalRegistrationController::class, 'checkRegistration']);
     Route::post('/payment-receipt', [ExternalRegistrationController::class, 'uploadPaymentReceipt']);
     Route::get('/tournaments/mahjong', [ExternalTournamentController::class, 'mahjongList']);
+    Route::get('/tournaments/{id}/participants', [ExternalTournamentController::class, 'participants']);
     Route::get('/tournaments/{id}/group-standings', [ExternalTournamentController::class, 'groupStandings']);
     Route::get('/tournaments/{id}/winners', [ExternalTournamentController::class, 'winners']);
     Route::get('/tournaments/{id}/mahjong-groups', [ExternalMahjongScoreController::class, 'groups']);

@@ -3,14 +3,19 @@
 namespace App\Http\Controllers\Api\V1\External;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ResolvesPublicKategori;
 use App\Models\Turnamen;
 use App\Models\TurnamenPemenang;
 use App\Services\LeaderboardService;
+use App\Services\PemainRegistrationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class TournamentController extends Controller
 {
+    use ResolvesPublicKategori;
+
     protected $leaderboardService;
 
     public function __construct(LeaderboardService $leaderboardService)
@@ -87,6 +92,57 @@ class TournamentController extends Controller
                 'sections' => $standings['sections'],
                 'recap' => $standings['recap'],
                 'babak_numbers' => $standings['babak_numbers'],
+            ],
+        ]);
+    }
+
+    public function participants(Request $request, int $id, PemainRegistrationService $registrationService): JsonResponse
+    {
+        $turnamen = Turnamen::find($id);
+
+        if (! $turnamen) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Turnamen tidak ditemukan.',
+            ], 404);
+        }
+
+        if (! $turnamen->isMahjong()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Endpoint ini hanya tersedia untuk turnamen Mahjong.',
+            ], 422);
+        }
+
+        try {
+            $kategori = $this->resolveApiKategori($turnamen, $request->input('id_kategori'));
+        } catch (RuntimeException $e) {
+            $kategori = $turnamen->defaultKategori();
+        }
+
+        $participantData = $registrationService->getPublicParticipantList(
+            $turnamen,
+            $kategori ? $kategori->id : null
+        );
+
+        $items = collect($participantData['items'] ?? [])->map(function ($item) {
+            $item = is_array($item) ? $item : [];
+
+            return [
+                'id' => isset($item['id']) ? (int) $item['id'] : null,
+                'nama' => $item['nama'] ?? ($item['display'] ?? ($item['label'] ?? '-')),
+                'display' => $item['display'] ?? ($item['nama'] ?? ($item['label'] ?? '-')),
+                'partner' => $item['partner'] ?? ($item['pemain2'] ?? null),
+                'status' => $item['status'] ?? null,
+                'is_paired' => (bool) ($item['is_paired'] ?? false),
+            ];
+        })->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'type' => $participantData['type'] ?? 'single',
+                'items' => $items,
             ],
         ]);
     }
