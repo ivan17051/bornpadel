@@ -20,7 +20,7 @@
         $isKnockoutPhase = ! $isMahjong && ! $isFriendly && ($hasKnockoutBracket ?? false);
         $expandGroupsByDefault = $isMahjong || $isFriendly || ! $isKnockoutPhase;
         $expandKnockoutByDefault = $isKnockoutPhase;
-        $groupsEditable = ! $isMahjong && ($canEditGroups ?? false);
+        $groupsEditable = (bool) ($canEditGroups ?? false);
         $statusSource = $kategori ?? $turnamen;
     @endphp
     <div class="card mb-4" data-workspace-kategori="{{ $kategoriId }}">
@@ -65,8 +65,12 @@
                             @else
                                 Pendaftaran masih dibuka. Tutup pendaftaran sebelum membuat grup.
                             @endif
+                        @elseif ($isMahjong && ($mahjongIsFinal ?? false) && $groupsEditable)
+                            Grup final aktif. Klik nama pemain untuk menukar antar grup (tersedia sebelum ada poin), lalu input poin dan selesaikan turnamen.
                         @elseif ($isMahjong && ($mahjongIsFinal ?? false))
                             Grup final aktif. Input poin babak final per grup lalu selesaikan turnamen untuk menentukan juara.
+                        @elseif ($isMahjong && $groupsEditable)
+                            Grup Mahjong aktif. Klik nama pemain untuk menukar antar grup (tersedia sebelum ada poin di babak ini).
                         @elseif ($isMahjong && $canReshuffle)
                             Grup Mahjong aktif. Input poin per grup, reshuffle kapan saja, atau lanjut ke babak berikutnya.
                         @elseif ($isFriendly && ($canAddFriendlyMatch ?? false))
@@ -367,7 +371,12 @@
                             <table class="table table-hover mb-0 align-middle">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>Pemain</th>
+                                        <th>
+                                            Pemain
+                                            @if ($groupsEditable)
+                                                <span class="fw-normal text-muted text-lowercase">— klik untuk tukar</span>
+                                            @endif
+                                        </th>
                                         <th class="text-center" style="width:5rem" title="Jumlah menang (ronde)">W</th>
                                         <th class="text-center" style="width:7rem">Akumulasi</th>
                                         <th class="text-center" style="width:14rem">Poin Babak</th>
@@ -383,7 +392,21 @@
                                             $priorBabakLines = ($mahjongPriorBabakBreakdown ?? [])[(int) $member->id_turnamen_peserta] ?? [];
                                         @endphp
                                         <tr class="mahjong-member-row" data-member-id="{{ $member->id }}">
-                                            <td class="fw-semibold">{{ $member->display_name }}</td>
+                                            <td class="fw-semibold {{ $groupsEditable ? 'group-member-swap-source' : '' }}"
+                                                @if ($groupsEditable)
+                                                    role="button"
+                                                    tabindex="0"
+                                                    data-member-id="{{ $member->id }}"
+                                                    data-group-id="{{ $g->id }}"
+                                                    data-group-name="{{ $g->nama }}"
+                                                    data-label="{{ $member->display_name }}"
+                                                    title="Klik untuk menukar {{ $unitLabel }} ini"
+                                                @endif>
+                                                @if ($groupsEditable)
+                                                    <i class="bi bi-arrow-left-right me-1 text-primary"></i>
+                                                @endif
+                                                {{ $member->display_name }}
+                                            </td>
                                             <td class="text-center">
                                                 <span class="badge text-bg-warning text-dark mahjong-menang" data-member-id="{{ $member->id }}">
                                                     {{ (int) $member->menang }}

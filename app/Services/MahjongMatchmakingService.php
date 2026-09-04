@@ -88,6 +88,30 @@ class MahjongMatchmakingService
             && $kategori->grup()->exists();
     }
 
+    /**
+     * Active-babak group members may be swapped only before any hand is scored.
+     */
+    public function canEditGroups(Turnamen $turnamen, $idKategori = null): bool
+    {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
+        return $turnamen->isMahjong()
+            && $this->isCompetitionOngoing($turnamen, $kategori->id)
+            && $kategori->activeGrup()->exists()
+            && ! $this->activeBabakHasScores($turnamen, $kategori->id);
+    }
+
+    public function activeBabakHasScores(Turnamen $turnamen, $idKategori = null): bool
+    {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
+        return MahjongPoinEntry::query()
+            ->whereHas('grupMember.grup', function ($query) use ($kategori) {
+                $query->where('id_kategori', $kategori->id)->where('is_aktif', true);
+            })
+            ->exists();
+    }
+
     public function resetGroupsAndMatches(Turnamen $turnamen, $idKategori = null): void
     {
         if (! $this->canReset($turnamen, $idKategori)) {

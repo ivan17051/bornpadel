@@ -248,6 +248,112 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame(7, $nextMember->total_poin);
     }
 
+    public function test_can_swap_group_members_before_babak_has_scores(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $groups = app(GroupMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $this->assertTrue($mahjong->canEditGroups($turnamen->fresh()));
+        $this->assertTrue($groups->canEditGroups($turnamen->fresh()));
+
+        $groupsById = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('id')
+            ->get();
+
+        $this->assertGreaterThanOrEqual(2, $groupsById->count());
+
+        $first = $groupsById[0]->members->first();
+        $second = $groupsById[1]->members->first();
+        $firstGroupId = (int) $first->id_grup;
+        $secondGroupId = (int) $second->id_grup;
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.swap-group-members'), [
+                'id_turnamen' => $turnamen->id,
+                'first_member_id' => $first->id,
+                'second_member_id' => $second->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame($secondGroupId, (int) $first->fresh()->id_grup);
+        $this->assertSame($firstGroupId, (int) $second->fresh()->id_grup);
+    }
+
+    public function test_cannot_swap_group_members_after_babak_has_scores(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $groups = app(GroupMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $groupsById = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('id')
+            ->get();
+
+        $first = $groupsById[0]->members->first();
+        $second = $groupsById[1]->members->first();
+
+        $mahjong->addMemberPointEntry($first, 5);
+
+        $this->assertFalse($mahjong->canEditGroups($turnamen->fresh()));
+        $this->assertFalse($groups->canEditGroups($turnamen->fresh()));
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.swap-group-members'), [
+                'id_turnamen' => $turnamen->id,
+                'first_member_id' => $first->id,
+                'second_member_id' => $second->id,
+            ])
+            ->assertStatus(422);
+
+        $this->assertSame((int) $groupsById[0]->id, (int) $first->fresh()->id_grup);
+        $this->assertSame((int) $groupsById[1]->id, (int) $second->fresh()->id_grup);
+    }
+
+    public function test_can_swap_again_after_reshuffle_clears_babak_scores(): void
+    {
+        $mahjong = app(MahjongMatchmakingService::class);
+        $groups = app(GroupMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $member = GrupMember::query()
+            ->whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->first();
+        $mahjong->addMemberPointEntry($member, 8);
+        $this->assertFalse($groups->canEditGroups($turnamen->fresh()));
+
+        $mahjong->reshuffleGroups($turnamen->fresh(), 'random');
+
+        $this->assertTrue($mahjong->canEditGroups($turnamen->fresh()));
+        $this->assertTrue($groups->canEditGroups($turnamen->fresh()));
+
+        $activeGroups = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('id')
+            ->get();
+
+        $first = $activeGroups[0]->members->first();
+        $second = $activeGroups[1]->members->first();
+        $groups->swapGroupMembers($turnamen->fresh(), $first, $second);
+
+        $this->assertSame((int) $activeGroups[1]->id, (int) $first->fresh()->id_grup);
+        $this->assertSame((int) $activeGroups[0]->id, (int) $second->fresh()->id_grup);
+    }
+
     protected function prepareMahjongTournament(int $playerCount): Turnamen
     {
         $turnamen = Turnamen::create([

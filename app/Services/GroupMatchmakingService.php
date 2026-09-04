@@ -209,10 +209,13 @@ class GroupMatchmakingService
             return app(FriendlyMatchmakingService::class)->canEditGroups($turnamen, $idKategori);
         }
 
+        if ($turnamen->isMahjong()) {
+            return app(MahjongMatchmakingService::class)->canEditGroups($turnamen, $idKategori);
+        }
+
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
 
-        return ! $turnamen->isMahjong()
-            && $this->isCompetitionOngoing($turnamen, $kategori->id)
+        return $this->isCompetitionOngoing($turnamen, $kategori->id)
             && $kategori->grup()->exists()
             && ! $this->hasGeneratedGroupMatches($turnamen, $kategori->id);
     }
@@ -396,7 +399,7 @@ class GroupMatchmakingService
     public function swapGroupMembers(Turnamen $turnamen, GrupMember $first, GrupMember $second, $idKategori = null): void
     {
         if (! $this->canEditGroups($turnamen, $idKategori)) {
-            throw new RuntimeException('Grup hanya dapat diubah sebelum matchmaking dibuat.');
+            throw new RuntimeException($this->groupsLockedMessage($turnamen));
         }
 
         if ($first->id === $second->id) {
@@ -413,6 +416,10 @@ class GroupMatchmakingService
             throw new RuntimeException('Peserta grup tidak berasal dari kategori yang dipilih.');
         }
 
+        if ($turnamen->isMahjong() && (! $first->grup->is_aktif || ! $second->grup->is_aktif)) {
+            throw new RuntimeException('Hanya anggota grup babak aktif yang dapat ditukar.');
+        }
+
         if ((int) $first->id_grup === (int) $second->id_grup) {
             throw new RuntimeException('Peserta sudah berada di grup yang sama.');
         }
@@ -421,7 +428,7 @@ class GroupMatchmakingService
             $locked = Turnamen::query()->lockForUpdate()->findOrFail($turnamen->id);
 
             if (! $this->canEditGroups($locked, $kategori->id)) {
-                throw new RuntimeException('Grup hanya dapat diubah sebelum matchmaking dibuat.');
+                throw new RuntimeException($this->groupsLockedMessage($locked));
             }
 
             $firstGroupId = $first->id_grup;
@@ -430,6 +437,15 @@ class GroupMatchmakingService
             GrupMember::query()->whereKey($first->id)->update(['id_grup' => $secondGroupId]);
             GrupMember::query()->whereKey($second->id)->update(['id_grup' => $firstGroupId]);
         });
+    }
+
+    protected function groupsLockedMessage(Turnamen $turnamen): string
+    {
+        if ($turnamen->isMahjong()) {
+            return 'Susunan grup Mahjong hanya dapat diubah sebelum ada poin di babak aktif.';
+        }
+
+        return 'Grup hanya dapat diubah sebelum matchmaking dibuat.';
     }
 
     public function generateGroupMatches(Turnamen $turnamen, $idKategori = null): array
