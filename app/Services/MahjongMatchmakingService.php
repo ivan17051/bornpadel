@@ -293,12 +293,12 @@ class MahjongMatchmakingService
 
     /**
      * Add one poin entry for every member in the group (one mahjong hand).
-     * Exactly one winner member must be provided.
+     * Winner is optional; when omitted, no entry is marked is_winner.
      *
      * @param  array<int, array{id: int, poin: int}>  $scores
      * @return Collection<int, GrupMember>
      */
-    public function addGroupPointEntries(Grup $grup, array $scores, int $winnerMemberId): Collection
+    public function addGroupPointEntries(Grup $grup, array $scores, ?int $winnerMemberId = null): Collection
     {
         return DB::transaction(function () use ($grup, $scores, $winnerMemberId) {
             $this->assertActiveMahjongGroup($grup);
@@ -321,7 +321,7 @@ class MahjongMatchmakingService
                 throw new RuntimeException('Daftar pemain tidak cocok dengan anggota grup.');
             }
 
-            if (! $membersById->has($winnerMemberId)) {
+            if ($winnerMemberId !== null && ! $membersById->has($winnerMemberId)) {
                 throw new RuntimeException('Pemenang harus salah satu anggota grup.');
             }
 
@@ -330,7 +330,7 @@ class MahjongMatchmakingService
                 MahjongPoinEntry::create([
                     'id_grup_member' => $memberId,
                     'poin' => (int) $score['poin'],
-                    'is_winner' => $memberId === $winnerMemberId,
+                    'is_winner' => $winnerMemberId !== null && $memberId === $winnerMemberId,
                 ]);
             }
 

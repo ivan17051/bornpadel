@@ -1102,7 +1102,7 @@
                     </div>
                     <div class="modal-body">
                         <p class="text-muted small mb-3" id="mahjong-group-points-help">
-                            Klik nama pemain untuk menandai pemenang ronde (wajib 1), isi poin keempat pemain, lalu simpan.
+                            Opsional: klik nama pemain untuk menandai pemenang ronde, isi poin keempat pemain, lalu simpan.
                         </p>
                         <div id="mahjong-group-points-fields" class="d-grid gap-3"></div>
                     </div>

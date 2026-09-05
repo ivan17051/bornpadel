@@ -99,6 +99,40 @@ class ExternalMahjongScoreApiTest extends TestCase
         $this->assertSame(12, (int) $firstMember->fresh()->poin_didapat);
     }
 
+    public function test_external_api_allows_group_scores_without_winner(): void
+    {
+        $turnamen = $this->prepareMahjongTournament(8);
+        app(MahjongMatchmakingService::class)->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $scores = $grup->members->values()->map(function (GrupMember $member, int $index) {
+            return [
+                'id_grup_member' => $member->id,
+                'poin' => [5, -1, -2, -2][$index],
+            ];
+        })->all();
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores', [
+                'id_grup' => $grup->id,
+                'scores' => $scores,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('success', true);
+
+        foreach ($grup->members as $member) {
+            $entry = $member->fresh()->poinEntries()->first();
+            $this->assertNotNull($entry);
+            $this->assertFalse((bool) $entry->is_winner);
+            $this->assertSame(0, (int) $member->fresh()->menang);
+        }
+    }
+
     public function test_external_api_stores_single_member_score(): void
     {
         $turnamen = $this->prepareMahjongTournament(8);

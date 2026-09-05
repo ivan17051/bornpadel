@@ -71,11 +71,16 @@ class MahjongScoreController extends Controller
 
         try {
             $scores = $this->normalizeGroupScores($grup, $request->input('scores', []));
-            $winnerMemberId = $this->resolveWinnerMemberId(
-                $grup,
-                $scores,
-                (int) $request->input('id_grup_member_pemenang')
-            );
+            $winnerMemberId = null;
+
+            if ($request->filled('id_grup_member_pemenang')) {
+                $winnerMemberId = $this->resolveWinnerMemberId(
+                    $grup,
+                    $scores,
+                    (int) $request->input('id_grup_member_pemenang')
+                );
+            }
+
             $updatedMembers = $this->mahjongService->addGroupPointEntries(
                 $grup,
                 $scores,

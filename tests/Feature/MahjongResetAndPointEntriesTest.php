@@ -172,7 +172,7 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame(1, (int) collect($membersPayload)->firstWhere('id', $winnerId)['menang']);
     }
 
-    public function test_group_point_entries_require_winner(): void
+    public function test_group_point_entries_allow_missing_winner(): void
     {
         $admin = $this->makeAdmin();
         $service = app(MahjongMatchmakingService::class);
@@ -185,15 +185,23 @@ class MahjongResetAndPointEntriesTest extends TestCase
             ->with('members')
             ->first();
 
-        $scores = $grup->members->values()->map(function (GrupMember $member) {
-            return ['id' => $member->id, 'poin' => 0];
+        $scores = $grup->members->values()->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [8, -2, -3, -3][$index]];
         })->all();
 
         $this->actingAs($admin)
             ->postJson(route('admin.matchmaking.mahjong-group-point-entries.store', $grup), [
                 'scores' => $scores,
             ])
-            ->assertStatus(422);
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        foreach ($grup->members as $member) {
+            $entry = $member->fresh()->poinEntries()->first();
+            $this->assertNotNull($entry);
+            $this->assertFalse((bool) $entry->is_winner);
+            $this->assertSame(0, (int) $member->fresh()->menang);
+        }
     }
 
     public function test_group_point_entries_reject_incomplete_scores(): void
