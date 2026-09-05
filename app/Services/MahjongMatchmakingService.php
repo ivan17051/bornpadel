@@ -39,6 +39,80 @@ class MahjongMatchmakingService
         return $this->leaderboardService->getMahjongPriorBabakBreakdown($turnamen, $idKategori);
     }
 
+    public function isExternalScoringEnabled(Turnamen $turnamen, $idKategori = null): bool
+    {
+        if (! $turnamen->isMahjong()) {
+            return false;
+        }
+
+        return $turnamen->categoryMahjongExternalScoringEnabled($idKategori);
+    }
+
+    public function setExternalScoringEnabled(Turnamen $turnamen, bool $enabled, $idKategori = null): bool
+    {
+        if (! $turnamen->isMahjong()) {
+            throw new RuntimeException('Pengaturan skor eksternal hanya untuk turnamen Mahjong.');
+        }
+
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
+        $this->updateCompetitionLifecycle($kategori, [
+            'mahjong_external_scoring_enabled' => $enabled,
+        ]);
+
+        return $enabled;
+    }
+
+    /**
+     * Inactive group history for the matchmaking workspace (babak → ronde → groups).
+     *
+     * @return Collection<int, array{babak: int, rondes: Collection<int, array{ronde: int, groups: Collection<int, Grup>}>}>
+     */
+    public function getMatchmakingHistory(Turnamen $turnamen, $idKategori = null): Collection
+    {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
+        $groups = Grup::query()
+            ->where('id_kategori', $kategori->id)
+            ->where('is_aktif', false)
+            ->with([
+                'members.pemain',
+                'members.poinEntries',
+                'members.turnamenPeserta.pemain1',
+            ])
+            ->orderByDesc('babak')
+            ->orderBy('ronde')
+            ->orderBy('nama')
+            ->orderBy('id')
+            ->get();
+
+        if ($groups->isEmpty()) {
+            return collect();
+        }
+
+        return $groups
+            ->groupBy(fn (Grup $grup) => (int) ($grup->babak ?: 1))
+            ->sortKeysDesc()
+            ->map(function (Collection $babakGroups, $babak) {
+                $rondes = $babakGroups
+                    ->groupBy(fn (Grup $grup) => (int) ($grup->ronde ?: 1))
+                    ->sortKeys()
+                    ->map(function (Collection $rondeGroups, $ronde) {
+                        return [
+                            'ronde' => (int) $ronde,
+                            'groups' => $rondeGroups->values(),
+                        ];
+                    })
+                    ->values();
+
+                return [
+                    'babak' => (int) $babak,
+                    'rondes' => $rondes,
+                ];
+            })
+            ->values();
+    }
+
     public function canGenerateGroups(Turnamen $turnamen, $idKategori = null): bool
     {
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);

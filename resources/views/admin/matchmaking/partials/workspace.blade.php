@@ -257,6 +257,22 @@
                                 <i class="bi bi-arrow-repeat me-1"></i> Reshuffle Groups
                             </button>
                         @endif
+                        @if ($isMahjong)
+                            <div class="form-check form-switch d-inline-flex align-items-center ms-1 me-1"
+                                 title="Izinkan klien eksternal (API key) mengirim skor Mahjong">
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       role="switch"
+                                       id="mahjong-external-scoring-toggle"
+                                       data-url="{{ route('admin.matchmaking.mahjong-external-scoring') }}"
+                                       data-turnamen="{{ $turnamen->id }}"
+                                       data-kategori="{{ $kategoriId }}"
+                                       @checked($mahjongExternalScoringEnabled ?? false)>
+                                <label class="form-check-label small ms-2" for="mahjong-external-scoring-toggle">
+                                    API skor eksternal
+                                </label>
+                            </div>
+                        @endif
                         @if (! $isFriendly)
                         <button type="button"
                                 id="btn-end-group-stage"
@@ -685,6 +701,8 @@
         @endif
         </div>
     @endif
+
+    @include('admin.matchmaking.partials.mahjong-history')
 
     @if ($isFriendly && $grup->isNotEmpty())
         @include('admin.matchmaking.partials.friendly-matches')

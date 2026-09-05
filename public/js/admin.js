@@ -1550,6 +1550,28 @@ const BornPadelAdmin = (function () {
             });
         }
 
+        const mahjongExternalScoringToggle = document.getElementById('mahjong-external-scoring-toggle');
+
+        if (mahjongExternalScoringToggle) {
+            mahjongExternalScoringToggle.addEventListener('change', async () => {
+                const enabled = mahjongExternalScoringToggle.checked;
+                mahjongExternalScoringToggle.disabled = true;
+
+                try {
+                    const data = await apiRequest(mahjongExternalScoringToggle.dataset.url, 'PATCH', {
+                        id_turnamen: parseInt(mahjongExternalScoringToggle.dataset.turnamen, 10),
+                        enabled,
+                    });
+                    showToast(data.message);
+                } catch (e) {
+                    mahjongExternalScoringToggle.checked = !enabled;
+                    showToast(e.message, 'error');
+                } finally {
+                    mahjongExternalScoringToggle.disabled = false;
+                }
+            });
+        }
+
         function formatMahjongEntryLabel(poin) {
             const value = parseInt(poin, 10) || 0;
             return (value > 0 ? '+' : '') + value;

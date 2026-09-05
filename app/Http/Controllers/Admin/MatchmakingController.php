@@ -194,6 +194,35 @@ class MatchmakingController extends Controller
         ]);
     }
 
+    public function updateMahjongExternalScoring(Request $request)
+    {
+        $request->validate([
+            'enabled' => ['required', 'boolean'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $enabled = $this->mahjongService->setExternalScoringEnabled(
+                $turnamen,
+                $request->boolean('enabled'),
+                $kategoriId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $enabled
+                ? 'Input skor via API eksternal diaktifkan.'
+                : 'Input skor via API eksternal dinonaktifkan.',
+            'data' => [
+                'mahjong_external_scoring_enabled' => $enabled,
+            ],
+        ]);
+    }
+
     public function updateMahjongPoints(Request $request, GrupMember $member)
     {
         $request->validate([

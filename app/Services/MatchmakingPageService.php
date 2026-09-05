@@ -488,11 +488,23 @@ class MatchmakingPageService
 
                 : false,
 
+            'mahjongExternalScoringEnabled' => $turnamen && $isMahjong && $kategoriId
+
+                ? $this->mahjongService->isExternalScoringEnabled($turnamen, $kategoriId)
+
+                : false,
+
             'mahjongPriorBabakBreakdown' => $turnamen && $isMahjong && $kategoriId
 
                 ? $this->mahjongService->getPriorBabakBreakdown($turnamen, $kategoriId)
 
                 : [],
+
+            'mahjongHistory' => $turnamen && $isMahjong && $kategoriId
+
+                ? $this->mahjongService->getMatchmakingHistory($turnamen, $kategoriId)
+
+                : collect(),
 
             'activePlayerCount' => $isMahjong && $turnamen
 

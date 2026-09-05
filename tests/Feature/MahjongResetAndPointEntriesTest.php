@@ -425,6 +425,41 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame(1, Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count());
     }
 
+    public function test_matchmaking_history_lists_inactive_babak_rondes_after_reshuffle(): void
+    {
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $this->assertTrue($mahjong->getMatchmakingHistory($turnamen->fresh())->isEmpty());
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $scores = $grup->members->values()->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [8, -2, -3, -3][$index]];
+        })->all();
+
+        $mahjong->addGroupPointEntries($grup, $scores, (int) $grup->members->first()->id);
+        $mahjong->reshuffleGroups($turnamen->fresh(), 'random');
+
+        $history = $mahjong->getMatchmakingHistory($turnamen->fresh());
+
+        $this->assertCount(1, $history);
+        $this->assertSame(1, (int) $history[0]['babak']);
+        $this->assertGreaterThanOrEqual(1, $history[0]['rondes']->count());
+
+        $firstRonde = $history[0]['rondes']->first();
+        $this->assertSame(1, (int) $firstRonde['ronde']);
+        $this->assertGreaterThanOrEqual(1, $firstRonde['groups']->count());
+
+        $historicalMember = $firstRonde['groups']->first()->members->first();
+        $this->assertGreaterThan(0, $historicalMember->poinEntries->count());
+    }
+
     protected function prepareMahjongTournament(int $playerCount): Turnamen
     {
         $turnamen = Turnamen::create([

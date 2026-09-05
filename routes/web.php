@@ -117,6 +117,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/matchmaking/reset-bracket', [MatchmakingController::class, 'resetKnockoutBracket'])->name('matchmaking.reset-bracket');
         Route::post('/matchmaking/end-group-stage', [MatchmakingController::class, 'endGroupStage'])->name('matchmaking.end-group-stage');
         Route::post('/matchmaking/reshuffle-groups', [MatchmakingController::class, 'reshuffleGroups'])->name('matchmaking.reshuffle-groups');
+        Route::patch('/matchmaking/mahjong-external-scoring', [MatchmakingController::class, 'updateMahjongExternalScoring'])->name('matchmaking.mahjong-external-scoring');
         Route::patch('/matchmaking/grup-member/{member}/points', [MatchmakingController::class, 'updateMahjongPoints'])->name('matchmaking.mahjong-points');
         Route::post('/matchmaking/grup-member/{member}/point-entries', [MatchmakingController::class, 'storeMahjongPointEntry'])->name('matchmaking.mahjong-point-entries.store');
         Route::post('/matchmaking/grup/{grup}/point-entries', [MatchmakingController::class, 'storeMahjongGroupPointEntries'])->name('matchmaking.mahjong-group-point-entries.store');

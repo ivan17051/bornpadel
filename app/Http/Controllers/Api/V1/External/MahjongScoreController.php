@@ -69,6 +69,13 @@ class MahjongScoreController extends Controller
             ], 404);
         }
 
+        if ($blocked = $this->rejectIfExternalScoringDisabled(
+            $turnamen,
+            $request->input('id_kategori') ?? $grup->id_kategori
+        )) {
+            return $blocked;
+        }
+
         try {
             $scores = $this->normalizeGroupScores($grup, $request->input('scores', []));
             $winnerMemberId = null;
@@ -97,7 +104,7 @@ class MahjongScoreController extends Controller
             'success' => true,
             'message' => 'Poin grup berhasil disimpan.',
             'data' => [
-                'turnamen' => $this->turnamenPayload($turnamen),
+                'turnamen' => $this->turnamenPayload($turnamen->fresh()),
                 'grup' => $this->groupPayload($grup->fresh(['members.pemain', 'members.poinEntries', 'members.turnamenPeserta.pemain1'])),
                 'members' => $updatedMembers->map(function (GrupMember $member) {
                     return $this->memberPayload($member);
@@ -121,6 +128,13 @@ class MahjongScoreController extends Controller
                 'success' => false,
                 'message' => 'Anggota grup tidak ditemukan pada turnamen ini.',
             ], 404);
+        }
+
+        if ($blocked = $this->rejectIfExternalScoringDisabled(
+            $turnamen,
+            $request->input('id_kategori') ?? $member->grup->id_kategori
+        )) {
+            return $blocked;
         }
 
         try {
@@ -157,6 +171,13 @@ class MahjongScoreController extends Controller
                 'success' => false,
                 'message' => 'Entri poin tidak ditemukan pada turnamen ini.',
             ], 404);
+        }
+
+        if ($blocked = $this->rejectIfExternalScoringDisabled(
+            $turnamen,
+            $request->input('id_kategori') ?? $member->grup->id_kategori
+        )) {
+            return $blocked;
         }
 
         try {
@@ -201,6 +222,24 @@ class MahjongScoreController extends Controller
         }
 
         return $turnamen;
+    }
+
+    /**
+     * @param  int|string|null  $idKategori
+     */
+    protected function rejectIfExternalScoringDisabled(Turnamen $turnamen, $idKategori = null): ?JsonResponse
+    {
+        if ($this->mahjongService->isExternalScoringEnabled($turnamen, $idKategori)) {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Input skor eksternal sedang dinonaktifkan untuk turnamen ini.',
+            'data' => [
+                'mahjong_external_scoring_enabled' => false,
+            ],
+        ], 403);
     }
 
     /**
@@ -273,6 +312,7 @@ class MahjongScoreController extends Controller
             'jenis' => $turnamen->jenis,
             'status' => $turnamen->status,
             'mahjong_is_final' => (bool) $turnamen->mahjong_is_final,
+            'mahjong_external_scoring_enabled' => $this->mahjongService->isExternalScoringEnabled($turnamen),
         ];
     }
 

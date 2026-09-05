@@ -7,8 +7,10 @@ use App\Models\GrupMember;
 use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
+use App\Models\User;
 use App\Services\MahjongMatchmakingService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class ExternalMahjongScoreApiTest extends TestCase
@@ -131,6 +133,77 @@ class ExternalMahjongScoreApiTest extends TestCase
             $this->assertFalse((bool) $entry->is_winner);
             $this->assertSame(0, (int) $member->fresh()->menang);
         }
+    }
+
+    public function test_external_api_rejects_writes_when_scoring_disabled(): void
+    {
+        $admin = User::create([
+            'name' => 'Mahjong Toggle Admin',
+            'username' => 'mahjong-toggle-' . uniqid(),
+            'email' => uniqid() . '@example.test',
+            'password' => Hash::make('12345678'),
+            'role' => 'admin',
+        ]);
+
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-external-scoring'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => false,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.mahjong_external_scoring_enabled', false);
+
+        $this->assertFalse($mahjong->isExternalScoringEnabled($turnamen->fresh()));
+
+        $scores = $grup->members->values()->map(function (GrupMember $member) {
+            return ['id_grup_member' => $member->id, 'poin' => 1];
+        })->all();
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores', [
+                'id_grup' => $grup->id,
+                'scores' => $scores,
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('success', false);
+
+        $member = $grup->members->first();
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-members/'.$member->id.'/scores', [
+                'poin' => 3,
+            ])
+            ->assertStatus(403);
+
+        // Read endpoints remain available.
+        $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-groups')
+            ->assertOk()
+            ->assertJsonPath('data.turnamen.mahjong_external_scoring_enabled', false);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-external-scoring'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => true,
+            ])
+            ->assertOk();
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-members/'.$member->id.'/scores', [
+                'poin' => 3,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.poin_didapat', 3);
     }
 
     public function test_external_api_stores_single_member_score(): void
