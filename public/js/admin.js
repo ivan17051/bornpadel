@@ -1378,32 +1378,24 @@ const BornPadelAdmin = (function () {
                     setButtonLoading(confirmBtn, true);
 
                     try {
+                        if (isMahjong) {
+                            await requestMahjongAdvancePreview(parsed, null);
+                            modal?.hide();
+                            setButtonLoading(confirmBtn, false, original);
+                            return;
+                        }
+
                         const payload = {
                             tournament_id: parseInt(endGroupBtn.dataset.turnamen, 10),
                             id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
                             jumlah_lolos: parsed,
+                            qualification_mode: mode,
                         };
 
-                        if (!isMahjong) {
-                            payload.qualification_mode = mode;
-                        }
-
                         const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
-
-                        if (isMahjong && data.needs_tiebreak) {
-                            modal?.hide();
-                            setButtonLoading(confirmBtn, false, original);
-                            openMahjongAdvanceTiebreakModal(parsed, data.data || {});
-                            return;
-                        }
-
                         modal?.hide();
                         showToast(data.message);
-                        if (isMahjong) {
-                            reloadPage();
-                        } else {
-                            goTo(endGroupBtn.dataset.bracketUrl || data.redirect_url);
-                        }
+                        goTo(endGroupBtn.dataset.bracketUrl || data.redirect_url);
                     } catch (e) {
                         showToast(e.message, 'error');
                         setButtonLoading(confirmBtn, false, original);
@@ -1416,10 +1408,18 @@ const BornPadelAdmin = (function () {
             const tiebreakHelp = document.getElementById('mahjong-tiebreak-help');
             const tiebreakAuto = document.getElementById('mahjong-tiebreak-auto');
             const tiebreakConfirmBtn = document.getElementById('btn-confirm-mahjong-tiebreak');
+            const previewModalEl = document.getElementById('mahjongAdvancePreviewModal');
+            const previewHelp = document.getElementById('mahjong-advance-preview-help');
+            const previewBody = document.getElementById('mahjong-advance-preview-body');
+            const previewConfirmBtn = document.getElementById('btn-confirm-mahjong-advance-preview');
             const tiebreakModal = (isMahjong && tiebreakModalEl && typeof bootstrap !== 'undefined')
                 ? new bootstrap.Modal(tiebreakModalEl)
                 : null;
+            const previewModal = (isMahjong && previewModalEl && typeof bootstrap !== 'undefined')
+                ? new bootstrap.Modal(previewModalEl)
+                : null;
             let pendingMahjongJumlahLolos = null;
+            let pendingMahjongTiebreakIds = null;
 
             const escapeHtml = (value) => {
                 const div = document.createElement('div');
@@ -1434,6 +1434,7 @@ const BornPadelAdmin = (function () {
                 }
 
                 pendingMahjongJumlahLolos = jumlahLolos;
+                pendingMahjongTiebreakIds = null;
                 const slots = parseInt(payload.slots_remaining || '0', 10);
                 const contested = Array.isArray(payload.contested) ? payload.contested : [];
                 const autoQualified = Array.isArray(payload.auto_qualified) ? payload.auto_qualified : [];
@@ -1476,6 +1477,64 @@ const BornPadelAdmin = (function () {
                 tiebreakModal.show();
             };
 
+            const openMahjongAdvancePreviewModal = (payload) => {
+                if (!previewModal || !previewBody) {
+                    showToast('Modal pratinjau lolos tidak tersedia.', 'error');
+                    return;
+                }
+
+                pendingMahjongJumlahLolos = parseInt(payload.jumlah_lolos || pendingMahjongJumlahLolos || '0', 10);
+                pendingMahjongTiebreakIds = Array.isArray(payload.tiebreak_peserta_ids)
+                    ? payload.tiebreak_peserta_ids
+                    : pendingMahjongTiebreakIds;
+
+                const qualifiers = Array.isArray(payload.qualifiers) ? payload.qualifiers : [];
+                const nextBabak = parseInt(payload.next_babak || '0', 10);
+                const isFinal = !!payload.is_final;
+
+                if (previewHelp) {
+                    previewHelp.textContent = isFinal
+                        ? `Pemain berikut lolos ke babak final (Babak ${nextBabak}) berdasarkan total poin, menang, lalu akumulasi.`
+                        : `Pemain berikut lolos ke Babak ${nextBabak} berdasarkan total poin, menang, lalu akumulasi.`;
+                }
+
+                previewBody.innerHTML = qualifiers.map((row) => `
+                    <tr>
+                        <td class="text-muted">${parseInt(row.rank || '0', 10)}</td>
+                        <td class="fw-semibold">${escapeHtml(row.nama)}</td>
+                        <td class="text-muted">${escapeHtml(row.grup_nama || '—')}</td>
+                        <td class="text-center"><span class="badge text-bg-primary">${parseInt(row.total_babak || '0', 10)}</span></td>
+                        <td class="text-center"><span class="badge text-bg-warning text-dark">${parseInt(row.menang || '0', 10)}</span></td>
+                        <td class="text-center"><span class="badge text-bg-secondary">${parseInt(row.poin_akumulasi || '0', 10)}</span></td>
+                    </tr>
+                `).join('') || '<tr><td colspan="6" class="text-center text-muted">Tidak ada pemain.</td></tr>';
+
+                previewModal.show();
+            };
+
+            const requestMahjongAdvancePreview = async (jumlahLolos, tiebreakIds) => {
+                const payload = {
+                    tournament_id: parseInt(endGroupBtn.dataset.turnamen, 10),
+                    id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
+                    jumlah_lolos: jumlahLolos,
+                    preview: true,
+                };
+
+                if (Array.isArray(tiebreakIds) && tiebreakIds.length) {
+                    payload.tiebreak_peserta_ids = tiebreakIds;
+                }
+
+                const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
+
+                if (data.needs_tiebreak) {
+                    openMahjongAdvanceTiebreakModal(jumlahLolos, data.data || {});
+                    return data;
+                }
+
+                openMahjongAdvancePreviewModal(data.data || {});
+                return data;
+            };
+
             if (tiebreakConfirmBtn) {
                 tiebreakConfirmBtn.addEventListener('click', async () => {
                     const slots = parseInt(tiebreakList?.dataset.slotsRemaining || '0', 10);
@@ -1497,26 +1556,52 @@ const BornPadelAdmin = (function () {
                     setButtonLoading(tiebreakConfirmBtn, true);
 
                     try {
-                        const data = await apiRequest(endGroupBtn.dataset.url, 'POST', {
+                        await requestMahjongAdvancePreview(pendingMahjongJumlahLolos, picks);
+                        tiebreakModal?.hide();
+                        setButtonLoading(tiebreakConfirmBtn, false, original);
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                        setButtonLoading(tiebreakConfirmBtn, false, original);
+                    }
+                });
+            }
+
+            if (previewConfirmBtn) {
+                previewConfirmBtn.addEventListener('click', async () => {
+                    if (!pendingMahjongJumlahLolos) {
+                        showToast('Data pratinjau tidak valid. Coba ulangi lanjut babak.', 'error');
+                        return;
+                    }
+
+                    const original = previewConfirmBtn.innerHTML;
+                    setButtonLoading(previewConfirmBtn, true);
+
+                    try {
+                        const payload = {
                             tournament_id: parseInt(endGroupBtn.dataset.turnamen, 10),
                             id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
                             jumlah_lolos: pendingMahjongJumlahLolos,
-                            tiebreak_peserta_ids: picks,
-                        });
+                        };
+
+                        if (Array.isArray(pendingMahjongTiebreakIds) && pendingMahjongTiebreakIds.length) {
+                            payload.tiebreak_peserta_ids = pendingMahjongTiebreakIds;
+                        }
+
+                        const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
 
                         if (data.needs_tiebreak) {
-                            showToast(data.message || 'Masih ada seri yang harus dipilih.', 'error');
-                            setButtonLoading(tiebreakConfirmBtn, false, original);
+                            previewModal?.hide();
+                            setButtonLoading(previewConfirmBtn, false, original);
                             openMahjongAdvanceTiebreakModal(pendingMahjongJumlahLolos, data.data || {});
                             return;
                         }
 
-                        tiebreakModal?.hide();
+                        previewModal?.hide();
                         showToast(data.message);
                         reloadPage();
                     } catch (e) {
                         showToast(e.message, 'error');
-                        setButtonLoading(tiebreakConfirmBtn, false, original);
+                        setButtonLoading(previewConfirmBtn, false, original);
                     }
                 });
             }

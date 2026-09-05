@@ -77,6 +77,7 @@ class MatchmakingController extends Controller
                 'jumlah_lolos' => ['required', 'integer', 'min:4'],
                 'tiebreak_peserta_ids' => ['nullable', 'array'],
                 'tiebreak_peserta_ids.*' => ['integer', 'exists:turnamen_peserta,id'],
+                'preview' => ['nullable', 'boolean'],
             ], [
                 'jumlah_lolos.required' => 'Jumlah pemain lolos wajib diisi.',
                 'jumlah_lolos.min' => 'Minimal 4 pemain untuk babak selanjutnya.',
@@ -87,6 +88,40 @@ class MatchmakingController extends Controller
                 $tiebreakPesertaIds = $request->has('tiebreak_peserta_ids')
                     ? array_map('intval', $request->input('tiebreak_peserta_ids', []))
                     : null;
+
+                if ($request->boolean('preview')) {
+                    $preview = $this->mahjongService->previewAdvanceRound(
+                        $turnamen,
+                        $jumlahLolos,
+                        $kategoriId,
+                        $tiebreakPesertaIds
+                    );
+
+                    if (! empty($preview['needs_tiebreak'])) {
+                        return response()->json([
+                            'success' => false,
+                            'needs_tiebreak' => true,
+                            'message' => sprintf(
+                                'Ada %d pemain dengan poin, menang, dan akumulasi sama. Pilih %d pemain yang lolos ke babak berikutnya.',
+                                count($preview['contested'] ?? []),
+                                (int) ($preview['slots_remaining'] ?? 0)
+                            ),
+                            'data' => $preview,
+                        ]);
+                    }
+
+                    return response()->json([
+                        'success' => true,
+                        'preview' => true,
+                        'message' => sprintf(
+                            'Pratinjau: %d pemain akan lolos ke babak %d.',
+                            count($preview['qualifiers'] ?? []),
+                            (int) ($preview['next_babak'] ?? 0)
+                        ),
+                        'data' => $preview,
+                    ]);
+                }
+
                 $result = $this->mahjongService->advanceRound(
                     $turnamen,
                     $jumlahLolos,

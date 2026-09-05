@@ -1050,7 +1050,8 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
                     <button type="button" class="btn btn-success" id="btn-confirm-end-group-stage">
-                        <i class="bi bi-flag me-1"></i> {{ ($isMahjong ?? false) ? 'Lanjutkan Babak' : 'Buat Bracket' }}
+                        <i class="bi bi-{{ ($isMahjong ?? false) ? 'eye' : 'flag' }} me-1"></i>
+                        {{ ($isMahjong ?? false) ? 'Lihat pemain lolos' : 'Buat Bracket' }}
                     </button>
                 </div>
             </div>
@@ -1058,6 +1059,45 @@
     </div>
 
     @if ($isMahjong ?? false)
+        <div class="modal fade" id="mahjongAdvancePreviewModal" tabindex="-1" aria-labelledby="mahjongAdvancePreviewModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="mahjongAdvancePreviewModalLabel">
+                            <i class="bi bi-list-ol me-1"></i> Pemain yang lolos
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted mb-3" id="mahjong-advance-preview-help">
+                            Berikut pemain yang akan lanjut ke babak berikutnya berdasarkan total poin, menang, lalu akumulasi.
+                        </p>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:3rem">#</th>
+                                        <th>Pemain</th>
+                                        <th>Grup</th>
+                                        <th class="text-center">Total</th>
+                                        <th class="text-center">W</th>
+                                        <th class="text-center">Akumulasi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mahjong-advance-preview-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-success" id="btn-confirm-mahjong-advance-preview">
+                            <i class="bi bi-flag me-1"></i> Konfirmasi lanjut babak
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="modal fade" id="mahjongAdvanceTiebreakModal" tabindex="-1" aria-labelledby="mahjongAdvanceTiebreakModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content">
@@ -1077,7 +1117,7 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
                         <button type="button" class="btn btn-success" id="btn-confirm-mahjong-tiebreak">
-                            <i class="bi bi-check2 me-1"></i> Konfirmasi lolos
+                            <i class="bi bi-eye me-1"></i> Lihat pemain lolos
                         </button>
                     </div>
                 </div>

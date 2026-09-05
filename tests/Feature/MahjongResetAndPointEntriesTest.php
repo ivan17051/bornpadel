@@ -425,6 +425,50 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame(1, Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count());
     }
 
+    public function test_advance_preview_lists_qualifiers_with_scores_without_mutating(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $members = GrupMember::query()
+            ->whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->orderBy('id')
+            ->get();
+
+        $points = [50, 40, 30, 20, 10, 5, 4, 3];
+        foreach ($members as $index => $member) {
+            $mahjong->updateMemberPoints($member, $points[$index]);
+        }
+
+        $activeBefore = Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count();
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 4,
+                'preview' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('preview', true)
+            ->assertJsonPath('data.jumlah_lolos', 4)
+            ->assertJsonPath('data.is_final', true);
+
+        $qualifiers = $response->json('data.qualifiers');
+        $this->assertCount(4, $qualifiers);
+        $this->assertSame(50, (int) $qualifiers[0]['total_babak']);
+        $this->assertSame(40, (int) $qualifiers[1]['total_babak']);
+        $this->assertSame(30, (int) $qualifiers[2]['total_babak']);
+        $this->assertSame(20, (int) $qualifiers[3]['total_babak']);
+        $this->assertSame(1, (int) $qualifiers[0]['rank']);
+
+        $this->assertSame(
+            $activeBefore,
+            Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count()
+        );
+    }
+
     public function test_matchmaking_history_lists_inactive_babak_rondes_after_reshuffle(): void
     {
         $mahjong = app(MahjongMatchmakingService::class);
