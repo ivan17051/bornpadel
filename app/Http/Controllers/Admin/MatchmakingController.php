@@ -75,6 +75,8 @@ class MatchmakingController extends Controller
         if ($turnamen->isMahjong()) {
             $request->validate([
                 'jumlah_lolos' => ['required', 'integer', 'min:4'],
+                'tiebreak_peserta_ids' => ['nullable', 'array'],
+                'tiebreak_peserta_ids.*' => ['integer', 'exists:turnamen_peserta,id'],
             ], [
                 'jumlah_lolos.required' => 'Jumlah pemain lolos wajib diisi.',
                 'jumlah_lolos.min' => 'Minimal 4 pemain untuk babak selanjutnya.',
@@ -82,9 +84,30 @@ class MatchmakingController extends Controller
 
             try {
                 $jumlahLolos = (int) $request->input('jumlah_lolos');
-                $result = $this->mahjongService->advanceRound($turnamen, $jumlahLolos, $kategoriId);
+                $tiebreakPesertaIds = $request->has('tiebreak_peserta_ids')
+                    ? array_map('intval', $request->input('tiebreak_peserta_ids', []))
+                    : null;
+                $result = $this->mahjongService->advanceRound(
+                    $turnamen,
+                    $jumlahLolos,
+                    $kategoriId,
+                    $tiebreakPesertaIds
+                );
             } catch (RuntimeException $e) {
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+
+            if (! empty($result['needs_tiebreak'])) {
+                return response()->json([
+                    'success' => false,
+                    'needs_tiebreak' => true,
+                    'message' => sprintf(
+                        'Ada %d pemain dengan poin, menang, dan akumulasi sama. Pilih %d pemain yang lolos ke babak berikutnya.',
+                        count($result['contested'] ?? []),
+                        (int) ($result['slots_remaining'] ?? 0)
+                    ),
+                    'data' => $result,
+                ]);
             }
 
             $message = $result['is_final']

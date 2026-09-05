@@ -354,6 +354,69 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame((int) $activeGroups[0]->id, (int) $second->fresh()->id_grup);
     }
 
+    public function test_advance_round_requests_manual_pick_when_cutline_is_tied(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $members = GrupMember::query()
+            ->whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->orderBy('id')
+            ->get();
+
+        $this->assertCount(8, $members);
+
+        // Two clear leaders, then three tied for the remaining two slots.
+        $points = [50, 40, 20, 20, 20, 5, 4, 3];
+        foreach ($members as $index => $member) {
+            $mahjong->updateMemberPoints($member, $points[$index]);
+        }
+
+        $response = $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 4,
+            ])
+            ->assertOk()
+            ->assertJsonPath('needs_tiebreak', true)
+            ->assertJsonPath('data.slots_remaining', 2);
+
+        $contestedIds = collect($response->json('data.contested'))->pluck('id_peserta')->all();
+        $this->assertCount(3, $contestedIds);
+
+        $picks = array_slice($contestedIds, 0, 2);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 4,
+                'tiebreak_peserta_ids' => $picks,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.is_final', true);
+
+        $activePesertaIds = GrupMember::query()
+            ->whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->pluck('id_turnamen_peserta')
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        $expected = collect([$members[0]->id_turnamen_peserta, $members[1]->id_turnamen_peserta])
+            ->merge($picks)
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame($expected, $activePesertaIds);
+        $this->assertSame(1, Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count());
+    }
+
     protected function prepareMahjongTournament(int $playerCount): Turnamen
     {
         $turnamen = Turnamen::create([

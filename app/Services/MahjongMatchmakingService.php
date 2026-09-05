@@ -169,8 +169,12 @@ class MahjongMatchmakingService
         });
     }
 
-    public function advanceRound(Turnamen $turnamen, int $jumlahLolos, $idKategori = null): array
-    {
+    public function advanceRound(
+        Turnamen $turnamen,
+        int $jumlahLolos,
+        $idKategori = null,
+        ?array $tiebreakPesertaIds = null
+    ): array {
         if (! $this->canAdvanceRound($turnamen, $idKategori)) {
             throw new RuntimeException('Babak Mahjong tidak dapat dilanjutkan.');
         }
@@ -179,25 +183,44 @@ class MahjongMatchmakingService
             throw new RuntimeException('Minimal ' . self::PLAYERS_PER_GROUP . ' pemain untuk babak selanjutnya.');
         }
 
+        if ($jumlahLolos > self::PLAYERS_PER_GROUP
+            && $jumlahLolos % self::PLAYERS_PER_GROUP !== 0) {
+            throw new RuntimeException('Jumlah pemain lolos harus kelipatan ' . self::PLAYERS_PER_GROUP . '.');
+        }
+
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $currentBabak = (int) $kategori->activeGrup()->max('babak') ?: 1;
+        $standingRows = $this->leaderboardService
+            ->buildMahjongBabakTable($turnamen, $currentBabak, $kategori->id)['rows'];
 
-        return DB::transaction(function () use ($turnamen, $kategori, $jumlahLolos) {
+        $selection = $this->mahjongRanker->resolveAdvanceQualifiers(
+            $standingRows,
+            $jumlahLolos,
+            $tiebreakPesertaIds
+        );
+
+        if (($selection['status'] ?? '') === 'needs_tiebreak') {
+            return [
+                'needs_tiebreak' => true,
+                'jumlah_lolos' => $jumlahLolos,
+                'slots_remaining' => (int) ($selection['slots_remaining'] ?? 0),
+                'auto_qualified' => $this->formatAdvanceStandingRows($selection['auto_qualified'] ?? collect()),
+                'contested' => $this->formatAdvanceStandingRows($selection['contested'] ?? collect()),
+            ];
+        }
+
+        $qualifierRows = $selection['qualifiers'] ?? collect();
+
+        if ($qualifierRows->count() < self::PLAYERS_PER_GROUP) {
+            throw new RuntimeException('Pemain lolos tidak cukup untuk membentuk grup.');
+        }
+
+        if ($qualifierRows->count() !== $jumlahLolos) {
+            throw new RuntimeException('Jumlah pemain lolos tidak sesuai permintaan.');
+        }
+
+        return DB::transaction(function () use ($turnamen, $kategori, $qualifierRows, $currentBabak) {
             $this->commitCurrentRoundPoints($turnamen, $kategori->id);
-
-            $currentBabak = (int) $kategori->activeGrup()->max('babak') ?: 1;
-            $qualifierRows = $this->leaderboardService
-                ->buildMahjongBabakTable($turnamen, $currentBabak, $kategori->id)['rows']
-                ->take($jumlahLolos)
-                ->values();
-
-            if ($qualifierRows->count() < self::PLAYERS_PER_GROUP) {
-                throw new RuntimeException('Pemain lolos tidak cukup untuk membentuk grup.');
-            }
-
-            if ($qualifierRows->count() > self::PLAYERS_PER_GROUP
-                && $qualifierRows->count() % self::PLAYERS_PER_GROUP !== 0) {
-                throw new RuntimeException('Jumlah pemain lolos harus kelipatan ' . self::PLAYERS_PER_GROUP . '.');
-            }
 
             $babak = $currentBabak + 1;
             $this->deactivateActiveGroups($turnamen, $kategori->id);
@@ -226,6 +249,24 @@ class MahjongMatchmakingService
 
             return $result;
         });
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    protected function formatAdvanceStandingRows(Collection $rows): array
+    {
+        return $rows->map(function (array $row) {
+            return [
+                'id_peserta' => (int) ($row['id_peserta'] ?? 0),
+                'nama' => (string) ($row['nama'] ?? 'Pemain'),
+                'grup_nama' => $row['grup_nama'] ?? null,
+                'total_babak' => (int) ($row['total_babak'] ?? $row['total_poin'] ?? 0),
+                'menang' => (int) ($row['menang'] ?? 0),
+                'poin_akumulasi' => (int) ($row['poin_akumulasi'] ?? 0),
+            ];
+        })->values()->all();
     }
 
     public function updateMemberPoints(GrupMember $member, int $poinDidapat): GrupMember

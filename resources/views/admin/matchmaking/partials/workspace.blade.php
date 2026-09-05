@@ -958,7 +958,8 @@
                     @if ($isMahjong ?? false)
                         <p class="text-muted small">
                             Berapa banyak pemain untuk diloloskan ke babak selanjutnya?
-                            Sistem akan mengambil pemain dengan total poin tertinggi dan membagi ulang ke grup berisi 4 pemain.
+                            Sistem mengambil pemain dengan total poin tertinggi, lalu jumlah menang, lalu akumulasi jika masih seri.
+                            Jika masih seri pada batas lolos, Anda memilih manual siapa yang maju.
                             Jumlah lolos harus kelipatan 4, atau tepat 4 untuk grup final.
                         </p>
                         <div class="mb-0">
@@ -1037,6 +1038,34 @@
             </div>
         </div>
     </div>
+
+    @if ($isMahjong ?? false)
+        <div class="modal fade" id="mahjongAdvanceTiebreakModal" tabindex="-1" aria-labelledby="mahjongAdvanceTiebreakModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="mahjongAdvanceTiebreakModalLabel">
+                            <i class="bi bi-people me-1"></i> Pilih pemain lolos (seri)
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted mb-2" id="mahjong-tiebreak-help">
+                            Beberapa pemain memiliki total poin, menang, dan akumulasi sama. Pilih siapa yang lanjut ke babak berikutnya.
+                        </p>
+                        <div id="mahjong-tiebreak-auto" class="mb-3 d-none"></div>
+                        <div class="list-group" id="mahjong-tiebreak-list"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-success" id="btn-confirm-mahjong-tiebreak">
+                            <i class="bi bi-check2 me-1"></i> Konfirmasi lolos
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if ($groupsEditable)
         <div class="modal fade" id="groupMemberSwapModal" tabindex="-1" aria-labelledby="groupMemberSwapModalLabel" aria-hidden="true">

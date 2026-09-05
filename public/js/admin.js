@@ -1389,6 +1389,14 @@ const BornPadelAdmin = (function () {
                         }
 
                         const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
+
+                        if (isMahjong && data.needs_tiebreak) {
+                            modal?.hide();
+                            setButtonLoading(confirmBtn, false, original);
+                            openMahjongAdvanceTiebreakModal(parsed, data.data || {});
+                            return;
+                        }
+
                         modal?.hide();
                         showToast(data.message);
                         if (isMahjong) {
@@ -1399,6 +1407,116 @@ const BornPadelAdmin = (function () {
                     } catch (e) {
                         showToast(e.message, 'error');
                         setButtonLoading(confirmBtn, false, original);
+                    }
+                });
+            }
+
+            const tiebreakModalEl = document.getElementById('mahjongAdvanceTiebreakModal');
+            const tiebreakList = document.getElementById('mahjong-tiebreak-list');
+            const tiebreakHelp = document.getElementById('mahjong-tiebreak-help');
+            const tiebreakAuto = document.getElementById('mahjong-tiebreak-auto');
+            const tiebreakConfirmBtn = document.getElementById('btn-confirm-mahjong-tiebreak');
+            const tiebreakModal = (isMahjong && tiebreakModalEl && typeof bootstrap !== 'undefined')
+                ? new bootstrap.Modal(tiebreakModalEl)
+                : null;
+            let pendingMahjongJumlahLolos = null;
+
+            const escapeHtml = (value) => {
+                const div = document.createElement('div');
+                div.textContent = value == null ? '' : String(value);
+                return div.innerHTML;
+            };
+
+            const openMahjongAdvanceTiebreakModal = (jumlahLolos, payload) => {
+                if (!tiebreakModal || !tiebreakList) {
+                    showToast('Modal pemilihan seri tidak tersedia.', 'error');
+                    return;
+                }
+
+                pendingMahjongJumlahLolos = jumlahLolos;
+                const slots = parseInt(payload.slots_remaining || '0', 10);
+                const contested = Array.isArray(payload.contested) ? payload.contested : [];
+                const autoQualified = Array.isArray(payload.auto_qualified) ? payload.auto_qualified : [];
+
+                if (tiebreakHelp) {
+                    tiebreakHelp.textContent = `Ada ${contested.length} pemain dengan total poin, menang, dan akumulasi sama. Pilih ${slots} pemain yang lolos.`;
+                }
+
+                if (tiebreakAuto) {
+                    if (autoQualified.length) {
+                        tiebreakAuto.classList.remove('d-none');
+                        tiebreakAuto.innerHTML = `
+                            <div class="small text-muted mb-1">Sudah lolos otomatis (${autoQualified.length}):</div>
+                            <div class="small">${autoQualified.map((row) => escapeHtml(row.nama)).join(', ')}</div>
+                        `;
+                    } else {
+                        tiebreakAuto.classList.add('d-none');
+                        tiebreakAuto.innerHTML = '';
+                    }
+                }
+
+                tiebreakList.innerHTML = contested.map((row) => `
+                    <label class="list-group-item list-group-item-action d-flex align-items-start gap-2">
+                        <input class="form-check-input mt-1 mahjong-tiebreak-pick"
+                               type="checkbox"
+                               value="${parseInt(row.id_peserta || '0', 10)}">
+                        <span class="flex-grow-1">
+                            <span class="fw-semibold d-block">${escapeHtml(row.nama)}</span>
+                            <span class="small text-muted">
+                                ${row.grup_nama ? escapeHtml(row.grup_nama) + ' · ' : ''}
+                                Total ${parseInt(row.total_babak || '0', 10)}
+                                · W ${parseInt(row.menang || '0', 10)}
+                                · Akumulasi ${parseInt(row.poin_akumulasi || '0', 10)}
+                            </span>
+                        </span>
+                    </label>
+                `).join('');
+
+                tiebreakList.dataset.slotsRemaining = String(slots);
+                tiebreakModal.show();
+            };
+
+            if (tiebreakConfirmBtn) {
+                tiebreakConfirmBtn.addEventListener('click', async () => {
+                    const slots = parseInt(tiebreakList?.dataset.slotsRemaining || '0', 10);
+                    const picks = Array.from(document.querySelectorAll('.mahjong-tiebreak-pick:checked'))
+                        .map((el) => parseInt(el.value || '0', 10))
+                        .filter((id) => id > 0);
+
+                    if (!pendingMahjongJumlahLolos || !slots) {
+                        showToast('Data seri tidak valid. Coba ulangi lanjut babak.', 'error');
+                        return;
+                    }
+
+                    if (picks.length !== slots) {
+                        showToast(`Pilih tepat ${slots} pemain.`, 'error');
+                        return;
+                    }
+
+                    const original = tiebreakConfirmBtn.innerHTML;
+                    setButtonLoading(tiebreakConfirmBtn, true);
+
+                    try {
+                        const data = await apiRequest(endGroupBtn.dataset.url, 'POST', {
+                            tournament_id: parseInt(endGroupBtn.dataset.turnamen, 10),
+                            id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
+                            jumlah_lolos: pendingMahjongJumlahLolos,
+                            tiebreak_peserta_ids: picks,
+                        });
+
+                        if (data.needs_tiebreak) {
+                            showToast(data.message || 'Masih ada seri yang harus dipilih.', 'error');
+                            setButtonLoading(tiebreakConfirmBtn, false, original);
+                            openMahjongAdvanceTiebreakModal(pendingMahjongJumlahLolos, data.data || {});
+                            return;
+                        }
+
+                        tiebreakModal?.hide();
+                        showToast(data.message);
+                        reloadPage();
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                        setButtonLoading(tiebreakConfirmBtn, false, original);
                     }
                 });
             }
