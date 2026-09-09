@@ -74,17 +74,23 @@ class MatchmakingController extends Controller
 
         if ($turnamen->isMahjong()) {
             $request->validate([
-                'jumlah_lolos' => ['required', 'integer', 'min:4'],
+                'qualification_mode' => ['nullable', 'in:total,per_group'],
+                'jumlah_lolos' => ['required', 'integer', 'min:1'],
                 'tiebreak_peserta_ids' => ['nullable', 'array'],
                 'tiebreak_peserta_ids.*' => ['integer', 'exists:turnamen_peserta,id'],
                 'preview' => ['nullable', 'boolean'],
             ], [
                 'jumlah_lolos.required' => 'Jumlah pemain lolos wajib diisi.',
-                'jumlah_lolos.min' => 'Minimal 4 pemain untuk babak selanjutnya.',
+                'jumlah_lolos.min' => 'Jumlah pemain lolos minimal 1.',
+                'qualification_mode.in' => 'Mode kualifikasi tidak valid.',
             ]);
 
             try {
                 $jumlahLolos = (int) $request->input('jumlah_lolos');
+                $mode = $request->input(
+                    'qualification_mode',
+                    MahjongMatchmakingService::ADVANCE_MODE_TOTAL
+                );
                 $tiebreakPesertaIds = $request->has('tiebreak_peserta_ids')
                     ? array_map('intval', $request->input('tiebreak_peserta_ids', []))
                     : null;
@@ -94,16 +100,22 @@ class MatchmakingController extends Controller
                         $turnamen,
                         $jumlahLolos,
                         $kategoriId,
-                        $tiebreakPesertaIds
+                        $tiebreakPesertaIds,
+                        $mode
                     );
 
                     if (! empty($preview['needs_tiebreak'])) {
+                        $groupLabel = ! empty($preview['tiebreak_grup_nama'])
+                            ? ' di '.$preview['tiebreak_grup_nama']
+                            : '';
+
                         return response()->json([
                             'success' => false,
                             'needs_tiebreak' => true,
                             'message' => sprintf(
-                                'Ada %d pemain dengan poin, menang, dan akumulasi sama. Pilih %d pemain yang lolos ke babak berikutnya.',
+                                'Ada %d pemain dengan poin, menang, dan akumulasi sama%s. Pilih %d pemain yang lolos.',
                                 count($preview['contested'] ?? []),
+                                $groupLabel,
                                 (int) ($preview['slots_remaining'] ?? 0)
                             ),
                             'data' => $preview,
@@ -126,19 +138,25 @@ class MatchmakingController extends Controller
                     $turnamen,
                     $jumlahLolos,
                     $kategoriId,
-                    $tiebreakPesertaIds
+                    $tiebreakPesertaIds,
+                    $mode
                 );
             } catch (RuntimeException $e) {
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
             }
 
             if (! empty($result['needs_tiebreak'])) {
+                $groupLabel = ! empty($result['tiebreak_grup_nama'])
+                    ? ' di '.$result['tiebreak_grup_nama']
+                    : '';
+
                 return response()->json([
                     'success' => false,
                     'needs_tiebreak' => true,
                     'message' => sprintf(
-                        'Ada %d pemain dengan poin, menang, dan akumulasi sama. Pilih %d pemain yang lolos ke babak berikutnya.',
+                        'Ada %d pemain dengan poin, menang, dan akumulasi sama%s. Pilih %d pemain yang lolos.',
                         count($result['contested'] ?? []),
+                        $groupLabel,
                         (int) ($result['slots_remaining'] ?? 0)
                     ),
                     'data' => $result,

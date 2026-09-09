@@ -974,13 +974,31 @@
                 </div>
                 <div class="modal-body">
                     @if ($isMahjong ?? false)
-                        <p class="text-muted small">
-                            Berapa banyak pemain untuk diloloskan ke babak selanjutnya?
-                            Sistem mengambil pemain dengan total poin tertinggi, lalu jumlah menang, lalu akumulasi jika masih seri.
-                            Jika masih seri pada batas lolos, Anda memilih manual siapa yang maju.
-                            Jumlah lolos harus kelipatan 4, atau tepat 4 untuk grup final.
+                        @php
+                            $mahjongGroupCount = max(1, $grup->count());
+                            $mahjongDefaultPerGroup = ($mahjongGroupCount % 2 === 0) ? 2 : 1;
+                            if (($mahjongGroupCount * $mahjongDefaultPerGroup) % 4 !== 0) {
+                                $mahjongDefaultPerGroup = 1;
+                            }
+                        @endphp
+                        <p class="text-muted small mb-3">
+                            Pilih cara menentukan pemain yang lolos ke babak selanjutnya.
+                            Urutan: total poin, lalu menang, lalu akumulasi. Jika masih seri, pilih manual.
+                            Total pemain lolos harus kelipatan 4 (atau tepat 4 untuk final).
                         </p>
-                        <div class="mb-0">
+
+                        <div class="mb-3">
+                            <label class="form-label d-block">Mode kualifikasi</label>
+                            <div class="btn-group w-100" role="group" aria-label="Mode kualifikasi Mahjong">
+                                <input type="radio" class="btn-check" name="mahjong_qualification_mode" id="mahjong-qualification-mode-total" value="total" checked autocomplete="off">
+                                <label class="btn btn-outline-primary" for="mahjong-qualification-mode-total">Total lolos</label>
+
+                                <input type="radio" class="btn-check" name="mahjong_qualification_mode" id="mahjong-qualification-mode-per-group" value="per_group" autocomplete="off">
+                                <label class="btn btn-outline-primary" for="mahjong-qualification-mode-per-group">Per grup</label>
+                            </div>
+                        </div>
+
+                        <div class="mb-0" id="mahjong-jumlah-lolos-total-wrap">
                             <label for="jumlah-lolos-input" class="form-label">Jumlah pemain lolos</label>
                             <input type="number"
                                    id="jumlah-lolos-input"
@@ -990,6 +1008,22 @@
                                    step="4"
                                    value="{{ min(max(4, ($activePlayerCount ?? $approvedCount) >= 8 ? 8 : 4), $activePlayerCount ?? $approvedCount) }}"
                                    required>
+                            <div class="form-text">Ambil pemain terbaik secara keseluruhan.</div>
+                        </div>
+
+                        <div class="mb-0 d-none" id="mahjong-jumlah-lolos-per-group-wrap">
+                            <label for="jumlah-lolos-per-group-input" class="form-label">Jumlah pemain lolos per grup</label>
+                            <input type="number"
+                                   id="jumlah-lolos-per-group-input"
+                                   class="form-control"
+                                   min="1"
+                                   max="3"
+                                   value="{{ $mahjongDefaultPerGroup }}"
+                                   data-group-count="{{ $mahjongGroupCount }}">
+                            <div class="form-text" id="mahjong-jumlah-lolos-per-group-preview">
+                                {{ $mahjongGroupCount }} grup × top {{ $mahjongDefaultPerGroup }}
+                                = {{ $mahjongGroupCount * $mahjongDefaultPerGroup }} lolos.
+                            </div>
                         </div>
                     @else
                         @php

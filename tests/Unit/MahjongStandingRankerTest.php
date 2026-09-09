@@ -126,4 +126,70 @@ class MahjongStandingRankerTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $ranker->resolveAdvanceQualifiers($rows, 2, [1]);
     }
+
+    public function test_resolve_advance_qualifiers_per_group_takes_top_n_each(): void
+    {
+        $ranker = new MahjongStandingRanker();
+        $grouped = new Collection([
+            10 => new Collection([
+                ['id_peserta' => 1, 'nama' => 'A', 'grup_nama' => 'Grup A', 'total_babak' => 40, 'menang' => 1, 'poin_akumulasi' => 0],
+                ['id_peserta' => 2, 'nama' => 'B', 'grup_nama' => 'Grup A', 'total_babak' => 30, 'menang' => 1, 'poin_akumulasi' => 0],
+                ['id_peserta' => 3, 'nama' => 'C', 'grup_nama' => 'Grup A', 'total_babak' => 20, 'menang' => 1, 'poin_akumulasi' => 0],
+                ['id_peserta' => 4, 'nama' => 'D', 'grup_nama' => 'Grup A', 'total_babak' => 10, 'menang' => 0, 'poin_akumulasi' => 0],
+            ]),
+            20 => new Collection([
+                ['id_peserta' => 5, 'nama' => 'E', 'grup_nama' => 'Grup B', 'total_babak' => 50, 'menang' => 1, 'poin_akumulasi' => 0],
+                ['id_peserta' => 6, 'nama' => 'F', 'grup_nama' => 'Grup B', 'total_babak' => 5, 'menang' => 0, 'poin_akumulasi' => 0],
+                ['id_peserta' => 7, 'nama' => 'G', 'grup_nama' => 'Grup B', 'total_babak' => 4, 'menang' => 0, 'poin_akumulasi' => 0],
+                ['id_peserta' => 8, 'nama' => 'H', 'grup_nama' => 'Grup B', 'total_babak' => 3, 'menang' => 0, 'poin_akumulasi' => 0],
+            ]),
+        ]);
+
+        $result = $ranker->resolveAdvanceQualifiersPerGroup($grouped, 2);
+
+        $this->assertSame('resolved', $result['status']);
+        $this->assertSame([1, 2, 5, 6], $result['qualifiers']->pluck('id_peserta')->all());
+    }
+
+    public function test_resolve_advance_qualifiers_per_group_tiebreaks_one_group_at_a_time(): void
+    {
+        $ranker = new MahjongStandingRanker();
+        $grouped = new Collection([
+            10 => new Collection([
+                ['id_peserta' => 1, 'nama' => 'A', 'grup_nama' => 'Grup A', 'total_babak' => 40, 'menang' => 1, 'poin_akumulasi' => 0],
+                ['id_peserta' => 2, 'nama' => 'B', 'grup_nama' => 'Grup A', 'total_babak' => 20, 'menang' => 1, 'poin_akumulasi' => 1],
+                ['id_peserta' => 3, 'nama' => 'C', 'grup_nama' => 'Grup A', 'total_babak' => 20, 'menang' => 1, 'poin_akumulasi' => 1],
+                ['id_peserta' => 4, 'nama' => 'D', 'grup_nama' => 'Grup A', 'total_babak' => 5, 'menang' => 0, 'poin_akumulasi' => 0],
+            ]),
+            20 => new Collection([
+                ['id_peserta' => 5, 'nama' => 'E', 'grup_nama' => 'Grup B', 'total_babak' => 50, 'menang' => 1, 'poin_akumulasi' => 0],
+                ['id_peserta' => 6, 'nama' => 'F', 'grup_nama' => 'Grup B', 'total_babak' => 30, 'menang' => 1, 'poin_akumulasi' => 2],
+                ['id_peserta' => 7, 'nama' => 'G', 'grup_nama' => 'Grup B', 'total_babak' => 30, 'menang' => 1, 'poin_akumulasi' => 2],
+                ['id_peserta' => 8, 'nama' => 'H', 'grup_nama' => 'Grup B', 'total_babak' => 1, 'menang' => 0, 'poin_akumulasi' => 0],
+            ]),
+        ]);
+
+        $first = $ranker->resolveAdvanceQualifiersPerGroup($grouped, 2);
+
+        $this->assertSame('needs_tiebreak', $first['status']);
+        $this->assertSame(10, $first['tiebreak_grup_id']);
+        $this->assertSame('Grup A', $first['tiebreak_grup_nama']);
+        $this->assertSame([1], $first['auto_qualified']->pluck('id_peserta')->all());
+        $this->assertSame([2, 3], $first['contested']->pluck('id_peserta')->all());
+        $this->assertSame(1, $first['slots_remaining']);
+
+        $second = $ranker->resolveAdvanceQualifiersPerGroup($grouped, 2, [3]);
+
+        $this->assertSame('needs_tiebreak', $second['status']);
+        $this->assertSame(20, $second['tiebreak_grup_id']);
+        $this->assertSame('Grup B', $second['tiebreak_grup_nama']);
+        $this->assertSame([1, 3, 5], $second['auto_qualified']->pluck('id_peserta')->all());
+        $this->assertSame([6, 7], $second['contested']->pluck('id_peserta')->all());
+        $this->assertSame(1, $second['slots_remaining']);
+
+        $resolved = $ranker->resolveAdvanceQualifiersPerGroup($grouped, 2, [3, 7]);
+
+        $this->assertSame('resolved', $resolved['status']);
+        $this->assertSame([1, 3, 5, 7], $resolved['qualifiers']->pluck('id_peserta')->all());
+    }
 }

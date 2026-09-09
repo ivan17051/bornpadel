@@ -243,13 +243,24 @@ class MahjongMatchmakingService
         });
     }
 
+    public const ADVANCE_MODE_TOTAL = 'total';
+
+    public const ADVANCE_MODE_PER_GROUP = 'per_group';
+
     public function advanceRound(
         Turnamen $turnamen,
         int $jumlahLolos,
         $idKategori = null,
-        ?array $tiebreakPesertaIds = null
+        ?array $tiebreakPesertaIds = null,
+        string $mode = self::ADVANCE_MODE_TOTAL
     ): array {
-        $selection = $this->resolveAdvanceSelection($turnamen, $jumlahLolos, $idKategori, $tiebreakPesertaIds);
+        $selection = $this->resolveAdvanceSelection(
+            $turnamen,
+            $jumlahLolos,
+            $idKategori,
+            $tiebreakPesertaIds,
+            $mode
+        );
 
         if (! empty($selection['needs_tiebreak'])) {
             return $selection;
@@ -298,9 +309,16 @@ class MahjongMatchmakingService
         Turnamen $turnamen,
         int $jumlahLolos,
         $idKategori = null,
-        ?array $tiebreakPesertaIds = null
+        ?array $tiebreakPesertaIds = null,
+        string $mode = self::ADVANCE_MODE_TOTAL
     ): array {
-        $selection = $this->resolveAdvanceSelection($turnamen, $jumlahLolos, $idKategori, $tiebreakPesertaIds);
+        $selection = $this->resolveAdvanceSelection(
+            $turnamen,
+            $jumlahLolos,
+            $idKategori,
+            $tiebreakPesertaIds,
+            $mode
+        );
 
         if (! empty($selection['needs_tiebreak'])) {
             return $selection;
@@ -317,6 +335,7 @@ class MahjongMatchmakingService
 
         return [
             'preview' => true,
+            'qualification_mode' => $mode,
             'jumlah_lolos' => $jumlahLolos,
             'current_babak' => $currentBabak,
             'next_babak' => $currentBabak + 1,
@@ -336,40 +355,86 @@ class MahjongMatchmakingService
         Turnamen $turnamen,
         int $jumlahLolos,
         $idKategori = null,
-        ?array $tiebreakPesertaIds = null
+        ?array $tiebreakPesertaIds = null,
+        string $mode = self::ADVANCE_MODE_TOTAL
     ): array {
         if (! $this->canAdvanceRound($turnamen, $idKategori)) {
             throw new RuntimeException('Babak Mahjong tidak dapat dilanjutkan.');
         }
 
-        if ($jumlahLolos < self::PLAYERS_PER_GROUP) {
-            throw new RuntimeException('Minimal ' . self::PLAYERS_PER_GROUP . ' pemain untuk babak selanjutnya.');
-        }
-
-        if ($jumlahLolos > self::PLAYERS_PER_GROUP
-            && $jumlahLolos % self::PLAYERS_PER_GROUP !== 0) {
-            throw new RuntimeException('Jumlah pemain lolos harus kelipatan ' . self::PLAYERS_PER_GROUP . '.');
+        if (! in_array($mode, [self::ADVANCE_MODE_TOTAL, self::ADVANCE_MODE_PER_GROUP], true)) {
+            throw new RuntimeException('Mode kualifikasi Mahjong tidak valid.');
         }
 
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
         $currentBabak = (int) $kategori->activeGrup()->max('babak') ?: 1;
-        $standingRows = $this->leaderboardService
-            ->buildMahjongBabakTable($turnamen, $currentBabak, $kategori->id)['rows'];
+        $activeGroups = $kategori->activeGrup()->orderBy('nama')->orderBy('id')->get();
+        $groupCount = $activeGroups->count();
 
-        $selection = $this->mahjongRanker->resolveAdvanceQualifiers(
-            $standingRows,
-            $jumlahLolos,
-            $tiebreakPesertaIds
-        );
+        if ($mode === self::ADVANCE_MODE_PER_GROUP) {
+            if ($jumlahLolos < 1 || $jumlahLolos >= self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Lolos per grup harus antara 1 dan '.(self::PLAYERS_PER_GROUP - 1).'.');
+            }
+
+            if ($groupCount < 1) {
+                throw new RuntimeException('Tidak ada grup aktif untuk dilanjutkan.');
+            }
+
+            $totalLolos = $groupCount * $jumlahLolos;
+
+            if ($totalLolos < self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Pemain lolos tidak cukup untuk membentuk grup.');
+            }
+
+            if ($totalLolos > self::PLAYERS_PER_GROUP
+                && $totalLolos % self::PLAYERS_PER_GROUP !== 0) {
+                throw new RuntimeException(sprintf(
+                    'Total pemain lolos (%d grup × %d) harus kelipatan %d.',
+                    $groupCount,
+                    $jumlahLolos,
+                    self::PLAYERS_PER_GROUP
+                ));
+            }
+
+            $groupedRows = $this->buildActiveGroupStandingRows($turnamen, $kategori->id, $activeGroups);
+            $selection = $this->mahjongRanker->resolveAdvanceQualifiersPerGroup(
+                $groupedRows,
+                $jumlahLolos,
+                $tiebreakPesertaIds
+            );
+            $expectedCount = $totalLolos;
+        } else {
+            if ($jumlahLolos < self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Minimal ' . self::PLAYERS_PER_GROUP . ' pemain untuk babak selanjutnya.');
+            }
+
+            if ($jumlahLolos > self::PLAYERS_PER_GROUP
+                && $jumlahLolos % self::PLAYERS_PER_GROUP !== 0) {
+                throw new RuntimeException('Jumlah pemain lolos harus kelipatan ' . self::PLAYERS_PER_GROUP . '.');
+            }
+
+            $standingRows = $this->leaderboardService
+                ->buildMahjongBabakTable($turnamen, $currentBabak, $kategori->id)['rows'];
+
+            $selection = $this->mahjongRanker->resolveAdvanceQualifiers(
+                $standingRows,
+                $jumlahLolos,
+                $tiebreakPesertaIds
+            );
+            $expectedCount = $jumlahLolos;
+        }
 
         if (($selection['status'] ?? '') === 'needs_tiebreak') {
             return [
                 'needs_tiebreak' => true,
+                'qualification_mode' => $mode,
                 'jumlah_lolos' => $jumlahLolos,
                 'current_babak' => $currentBabak,
                 'slots_remaining' => (int) ($selection['slots_remaining'] ?? 0),
                 'auto_qualified' => $this->formatAdvanceStandingRows($selection['auto_qualified'] ?? collect()),
                 'contested' => $this->formatAdvanceStandingRows($selection['contested'] ?? collect()),
+                'tiebreak_grup_id' => $selection['tiebreak_grup_id'] ?? null,
+                'tiebreak_grup_nama' => $selection['tiebreak_grup_nama'] ?? null,
             ];
         }
 
@@ -379,15 +444,64 @@ class MahjongMatchmakingService
             throw new RuntimeException('Pemain lolos tidak cukup untuk membentuk grup.');
         }
 
-        if ($qualifierRows->count() !== $jumlahLolos) {
+        if ($qualifierRows->count() !== $expectedCount) {
             throw new RuntimeException('Jumlah pemain lolos tidak sesuai permintaan.');
         }
 
         return [
             'needs_tiebreak' => false,
+            'qualification_mode' => $mode,
             'current_babak' => $currentBabak,
             'qualifier_rows' => $qualifierRows->values(),
         ];
+    }
+
+    /**
+     * Standing rows for each active group, keyed by grup id.
+     *
+     * @param  \Illuminate\Support\Collection<int, Grup>  $activeGroups
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, array<string, mixed>>>
+     */
+    protected function buildActiveGroupStandingRows(
+        Turnamen $turnamen,
+        $idKategori,
+        Collection $activeGroups
+    ): Collection {
+        $currentBabak = (int) $activeGroups->max('babak') ?: 1;
+        $babakRows = $this->leaderboardService
+            ->buildMahjongBabakTable($turnamen, $currentBabak, $idKategori)['rows']
+            ->keyBy(fn (array $row) => (int) ($row['id_peserta'] ?? 0));
+
+        $activeGroups->loadMissing(['members.pemain', 'members.turnamenPeserta.pemain1', 'members.poinEntries']);
+
+        return $activeGroups->mapWithKeys(function (Grup $grup) use ($babakRows) {
+            $rows = $grup->members->map(function (GrupMember $member) use ($babakRows, $grup) {
+                $pesertaId = (int) $member->id_turnamen_peserta;
+                $fromTable = $babakRows->get($pesertaId);
+
+                if (is_array($fromTable)) {
+                    $fromTable['id_grup'] = (int) $grup->id;
+                    $fromTable['grup_nama'] = $grup->nama;
+
+                    return $fromTable;
+                }
+
+                return [
+                    'id_peserta' => $pesertaId,
+                    'id_pemain' => $member->id_pemain,
+                    'nama' => $member->display_name,
+                    'id_grup' => (int) $grup->id,
+                    'grup_nama' => $grup->nama,
+                    'total_babak' => (int) $member->poin_didapat,
+                    'total_poin' => $member->total_poin,
+                    'menang' => (int) $member->menang,
+                    'poin_akumulasi' => (int) $member->poin_akumulasi,
+                    'poin_didapat' => (int) $member->poin_didapat,
+                ];
+            })->values();
+
+            return [(int) $grup->id => $rows];
+        });
     }
 
     /**
@@ -400,6 +514,7 @@ class MahjongMatchmakingService
             return [
                 'id_peserta' => (int) ($row['id_peserta'] ?? 0),
                 'nama' => (string) ($row['nama'] ?? 'Pemain'),
+                'id_grup' => isset($row['id_grup']) ? (int) $row['id_grup'] : null,
                 'grup_nama' => $row['grup_nama'] ?? null,
                 'total_babak' => (int) ($row['total_babak'] ?? $row['total_poin'] ?? 0),
                 'menang' => (int) ($row['menang'] ?? 0),

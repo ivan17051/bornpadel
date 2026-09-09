@@ -469,6 +469,168 @@ class MahjongResetAndPointEntriesTest extends TestCase
         );
     }
 
+    public function test_advance_per_group_preview_and_commit_takes_top_n_each_group(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $groups = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('nama')
+            ->orderBy('id')
+            ->get();
+
+        $this->assertCount(2, $groups);
+
+        // Top 2 per group → 4 finalists. Give each group a clear ranking.
+        foreach ($groups as $groupIndex => $grup) {
+            $points = $groupIndex === 0 ? [40, 30, 10, 5] : [50, 25, 8, 2];
+            foreach ($grup->members->values() as $memberIndex => $member) {
+                $mahjong->updateMemberPoints($member, $points[$memberIndex]);
+            }
+        }
+
+        $expectedIds = $groups->flatMap(function (Grup $grup) {
+            return $grup->members->values()->take(2)->pluck('id_turnamen_peserta');
+        })->map(fn ($id) => (int) $id)->sort()->values()->all();
+
+        $preview = $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 2,
+                'qualification_mode' => 'per_group',
+                'preview' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('preview', true)
+            ->assertJsonPath('data.qualification_mode', 'per_group')
+            ->assertJsonPath('data.jumlah_lolos', 2)
+            ->assertJsonPath('data.is_final', true);
+
+        $previewIds = collect($preview->json('data.qualifiers'))
+            ->pluck('id_peserta')
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame($expectedIds, $previewIds);
+        $this->assertSame(2, Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count());
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 2,
+                'qualification_mode' => 'per_group',
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.is_final', true);
+
+        $activePesertaIds = GrupMember::query()
+            ->whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->pluck('id_turnamen_peserta')
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame($expectedIds, $activePesertaIds);
+        $this->assertSame(1, Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count());
+    }
+
+    public function test_advance_per_group_requests_tiebreak_per_group_sequentially(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $groups = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('nama')
+            ->orderBy('id')
+            ->get();
+
+        $this->assertCount(2, $groups);
+
+        // Each group: 1 clear leader, then 2 tied for the 2nd slot.
+        foreach ($groups as $grup) {
+            $members = $grup->members->values();
+            $mahjong->updateMemberPoints($members[0], 40);
+            $mahjong->updateMemberPoints($members[1], 20);
+            $mahjong->updateMemberPoints($members[2], 20);
+            $mahjong->updateMemberPoints($members[3], 5);
+        }
+
+        $first = $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 2,
+                'qualification_mode' => 'per_group',
+                'preview' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('needs_tiebreak', true)
+            ->assertJsonPath('data.slots_remaining', 1)
+            ->assertJsonPath('data.tiebreak_grup_id', (int) $groups[0]->id);
+
+        $firstContested = collect($first->json('data.contested'))->pluck('id_peserta')->map(fn ($id) => (int) $id)->all();
+        $this->assertCount(2, $firstContested);
+        $firstPick = $firstContested[0];
+
+        $second = $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 2,
+                'qualification_mode' => 'per_group',
+                'tiebreak_peserta_ids' => [$firstPick],
+                'preview' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('needs_tiebreak', true)
+            ->assertJsonPath('data.slots_remaining', 1)
+            ->assertJsonPath('data.tiebreak_grup_id', (int) $groups[1]->id);
+
+        $secondContested = collect($second->json('data.contested'))->pluck('id_peserta')->map(fn ($id) => (int) $id)->all();
+        $this->assertCount(2, $secondContested);
+        $secondPick = $secondContested[0];
+
+        $preview = $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 2,
+                'qualification_mode' => 'per_group',
+                'tiebreak_peserta_ids' => [$firstPick, $secondPick],
+                'preview' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('preview', true)
+            ->assertJsonPath('data.is_final', true);
+
+        $qualifierIds = collect($preview->json('data.qualifiers'))
+            ->pluck('id_peserta')
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        $expected = collect([
+            $groups[0]->members->values()[0]->id_turnamen_peserta,
+            $firstPick,
+            $groups[1]->members->values()[0]->id_turnamen_peserta,
+            $secondPick,
+        ])->map(fn ($id) => (int) $id)->sort()->values()->all();
+
+        $this->assertSame($expected, $qualifierIds);
+    }
+
     public function test_matchmaking_history_lists_inactive_babak_rondes_after_reshuffle(): void
     {
         $mahjong = app(MahjongMatchmakingService::class);

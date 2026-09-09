@@ -188,4 +188,87 @@ class MahjongStandingRanker
             'qualifiers' => $autoQualified->values(),
         ];
     }
+
+    /**
+     * Pick top N from each group independently.
+     * Returns the first group cutline that still needs a manual pick.
+     *
+     * @param  \Illuminate\Support\Collection<int|string, \Illuminate\Support\Collection<int, array<string, mixed>>>  $groupedRows
+     * @param  list<int>|null  $tiebreakPesertaIds
+     * @return array{
+     *     status: 'resolved'|'needs_tiebreak',
+     *     qualifiers?: \Illuminate\Support\Collection<int, array<string, mixed>>,
+     *     auto_qualified?: \Illuminate\Support\Collection<int, array<string, mixed>>,
+     *     contested?: \Illuminate\Support\Collection<int, array<string, mixed>>,
+     *     slots_remaining?: int,
+     *     tiebreak_grup_id?: int|null,
+     *     tiebreak_grup_nama?: string|null
+     * }
+     */
+    public function resolveAdvanceQualifiersPerGroup(
+        Collection $groupedRows,
+        int $perGroup,
+        ?array $tiebreakPesertaIds = null
+    ): array {
+        if ($perGroup <= 0) {
+            return [
+                'status' => 'resolved',
+                'qualifiers' => collect(),
+            ];
+        }
+
+        $allQualifiers = collect();
+        $allAutoBeforeTie = collect();
+        $accumulatedPicks = collect($tiebreakPesertaIds ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        foreach ($groupedRows as $groupId => $rows) {
+            $groupRows = collect($rows)->values();
+            $groupName = (string) (optional($groupRows->first())['grup_nama'] ?? ('Grup '.$groupId));
+            $groupPesertaIds = $groupRows
+                ->map(fn (array $row) => (int) ($row['id_peserta'] ?? 0))
+                ->filter()
+                ->all();
+
+            // Only apply picks that belong to this group. If none yet, pass null so a
+            // later group's cutline tie returns needs_tiebreak instead of failing validation.
+            $groupPicks = $accumulatedPicks
+                ->filter(fn (int $id) => in_array($id, $groupPesertaIds, true))
+                ->values()
+                ->all();
+
+            $selection = $this->resolveAdvanceQualifiers(
+                $groupRows,
+                $perGroup,
+                $tiebreakPesertaIds === null
+                    ? null
+                    : ($groupPicks === [] ? null : $groupPicks)
+            );
+
+            if (($selection['status'] ?? '') === 'needs_tiebreak') {
+                $autoInGroup = $selection['auto_qualified'] ?? collect();
+
+                return [
+                    'status' => 'needs_tiebreak',
+                    'auto_qualified' => $allAutoBeforeTie->concat($autoInGroup)->values(),
+                    'contested' => ($selection['contested'] ?? collect())->values(),
+                    'slots_remaining' => (int) ($selection['slots_remaining'] ?? 0),
+                    'tiebreak_grup_id' => (int) $groupId,
+                    'tiebreak_grup_nama' => $groupName,
+                ];
+            }
+
+            $groupQualifiers = $selection['qualifiers'] ?? collect();
+            $allQualifiers = $allQualifiers->concat($groupQualifiers);
+            $allAutoBeforeTie = $allAutoBeforeTie->concat($groupQualifiers);
+        }
+
+        return [
+            'status' => 'resolved',
+            'qualifiers' => $allQualifiers->values(),
+        ];
+    }
 }
