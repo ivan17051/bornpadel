@@ -131,7 +131,7 @@ class KnockoutBracketService
 
     public function canResetKnockoutBracket(Turnamen $turnamen, $idKategori = null): bool
     {
-        if ($turnamen->isMahjong() || $turnamen->status === 'completed') {
+        if ($turnamen->isMahjong() || $turnamen->isMahjongTeam() || $turnamen->status === 'completed') {
             return false;
         }
 
@@ -227,7 +227,7 @@ class KnockoutBracketService
 
         }
 
-        if ($turnamen->isMahjong()) {
+        if ($turnamen->isMahjong() || $turnamen->isMahjongTeam()) {
 
             return false;
 
@@ -1470,7 +1470,7 @@ class KnockoutBracketService
             ? $pertandingan->turnamen
             : Turnamen::find($pertandingan->id_turnamen);
 
-        if (! $turnamen || $turnamen->isMahjong() || $turnamen->status === 'completed') {
+        if (! $turnamen || $turnamen->isMahjong() || $turnamen->isMahjongTeam() || $turnamen->status === 'completed') {
             return false;
         }
 

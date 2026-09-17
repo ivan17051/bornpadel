@@ -114,7 +114,7 @@
 <div class="mb-3">
     <label for="jenis" class="form-label">Jenis Turnamen <span class="text-danger">*</span></label>
     <select name="jenis" id="jenis" class="form-select @error('jenis') is-invalid @enderror" required>
-        @foreach (['single' => 'Single', 'double' => 'Double', 'mahjong' => 'Mahjong', 'friendly' => 'Group Match'] as $value => $label)
+        @foreach (['single' => 'Single', 'double' => 'Double', 'mahjong' => 'Mahjong', 'mahjong_team' => 'Mahjong Tim', 'friendly' => 'Group Match'] as $value => $label)
             <option value="{{ $value }}" {{ old('jenis', optional($turnamenModel)->jenis ?? 'single') === $value ? 'selected' : '' }}>
                 {{ $label }}
             </option>
@@ -124,6 +124,7 @@
         Single: daftar individu, pasangan diacak saat pendaftaran ditutup.
         Double: daftar individu atau berpasangan; semua harus berpasangan sebelum pendaftaran ditutup.
         Mahjong: grup 4 pemain tanpa head-to-head.
+        Mahjong Tim: tim tetap + meja silang antar tim; lolos per tim.
         Group Match: liga antar grup (ukuran grup diatur di bawah), tanding pasangan dinamis, tanpa total poin pemain.
         Tamu dapat daftar individu atau satu grup lengkap sesuai ukuran yang ditentukan; grup lengkap yang sudah disetujui dipertahankan saat matchmaking.
     </div>

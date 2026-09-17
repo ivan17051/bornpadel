@@ -190,6 +190,10 @@ class GroupMatchmakingService
             return app(MahjongMatchmakingService::class)->canGenerateGroups($turnamen, $idKategori);
         }
 
+        if ($turnamen->isMahjongTeam()) {
+            return app(MahjongTeamMatchmakingService::class)->canGenerateTeams($turnamen, $idKategori);
+        }
+
         if ($turnamen->isFriendly()) {
             $friendly = app(FriendlyMatchmakingService::class);
 
@@ -213,6 +217,10 @@ class GroupMatchmakingService
             return app(MahjongMatchmakingService::class)->canEditGroups($turnamen, $idKategori);
         }
 
+        if ($turnamen->isMahjongTeam()) {
+            return app(MahjongTeamMatchmakingService::class)->canEditTeams($turnamen, $idKategori);
+        }
+
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
 
         return $this->isCompetitionOngoing($turnamen, $kategori->id)
@@ -222,7 +230,7 @@ class GroupMatchmakingService
 
     public function canGenerateGroupMatches(Turnamen $turnamen, $idKategori = null): bool
     {
-        if ($turnamen->isFriendly() || $turnamen->isMahjong()) {
+        if ($turnamen->isFriendly() || $turnamen->isMahjong() || $turnamen->isMahjongTeam()) {
             return false;
         }
 
@@ -237,6 +245,10 @@ class GroupMatchmakingService
 
         if ($turnamen->isMahjong()) {
             return app(MahjongMatchmakingService::class)->canReset($turnamen, $idKategori);
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            return app(MahjongTeamMatchmakingService::class)->canReset($turnamen, $idKategori);
         }
 
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
@@ -338,6 +350,10 @@ class GroupMatchmakingService
 
         if ($turnamen->isMahjong()) {
             throw new RuntimeException('Gunakan fitur Mahjong untuk membuat grup turnamen ini.');
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            throw new RuntimeException('Gunakan fitur Mahjong Tim untuk membuat tim turnamen ini.');
         }
 
         if ($turnamen->isFriendly()) {
@@ -445,6 +461,10 @@ class GroupMatchmakingService
             return 'Susunan grup Mahjong hanya dapat diubah sebelum ada poin di babak aktif.';
         }
 
+        if ($turnamen->isMahjongTeam()) {
+            return 'Susunan tim Mahjong Tim hanya dapat diubah sebelum ada poin di babak aktif.';
+        }
+
         return 'Grup hanya dapat diubah sebelum matchmaking dibuat.';
     }
 
@@ -523,6 +543,12 @@ class GroupMatchmakingService
 
         if ($turnamen->isMahjong()) {
             app(MahjongMatchmakingService::class)->resetGroupsAndMatches($turnamen, $idKategori);
+
+            return;
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            app(MahjongTeamMatchmakingService::class)->resetAll($turnamen, $idKategori);
 
             return;
         }

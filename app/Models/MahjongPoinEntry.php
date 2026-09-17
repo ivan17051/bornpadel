@@ -10,6 +10,7 @@ class MahjongPoinEntry extends Model
 
     protected $fillable = [
         'id_grup_member',
+        'id_meja',
         'poin',
         'is_winner',
     ];
@@ -22,5 +23,10 @@ class MahjongPoinEntry extends Model
     public function grupMember()
     {
         return $this->belongsTo(GrupMember::class, 'id_grup_member');
+    }
+
+    public function meja()
+    {
+        return $this->belongsTo(TurnamenMeja::class, 'id_meja');
     }
 }

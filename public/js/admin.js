@@ -1290,7 +1290,11 @@ const BornPadelAdmin = (function () {
                 : [];
             const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
             const isMahjong = endGroupBtn.dataset.mahjong === '1';
+            const isMahjongTeam = endGroupBtn.dataset.mahjongTeam === '1';
 
+            if (isMahjongTeam) {
+                // Handled by dedicated Mahjong Tim advance UI below.
+            } else {
             const selectedMode = () => {
                 const checked = modalEl?.querySelector('input[name="qualification_mode"]:checked');
                 return checked ? checked.value : 'per_group';
@@ -1708,16 +1712,288 @@ const BornPadelAdmin = (function () {
                     }
                 });
             }
+            } // end !isMahjongTeam
         }
+
+        // Mahjong Tim advance + meja scoring
+        (function initMahjongTeamMatchmaking() {
+            const endGroupBtn = document.getElementById('btn-end-group-stage');
+            if (!endGroupBtn || endGroupBtn.disabled || endGroupBtn.dataset.mahjongTeam !== '1') {
+                return;
+            }
+
+            const endModalEl = document.getElementById('mahjongTeamEndBabakModal');
+            const previewModalEl = document.getElementById('mahjongTeamAdvancePreviewModal');
+            const tiebreakModalEl = document.getElementById('mahjongTeamTiebreakModal');
+            const pointsModalEl = document.getElementById('mahjongTeamMejaPointsModal');
+            const jumlahSelect = document.getElementById('mahjong-team-jumlah-lolos');
+            const confirmEndBtn = document.getElementById('btn-confirm-mahjong-team-end-babak');
+            const previewHelp = document.getElementById('mahjong-team-advance-preview-help');
+            const previewBody = document.getElementById('mahjong-team-advance-preview-body');
+            const previewConfirmBtn = document.getElementById('btn-confirm-mahjong-team-advance-preview');
+            const tiebreakHelp = document.getElementById('mahjong-team-tiebreak-help');
+            const tiebreakAuto = document.getElementById('mahjong-team-tiebreak-auto');
+            const tiebreakList = document.getElementById('mahjong-team-tiebreak-list');
+            const tiebreakConfirmBtn = document.getElementById('btn-confirm-mahjong-team-tiebreak');
+            const pointsFields = document.getElementById('mahjong-team-meja-points-fields');
+            const pointsTitle = document.getElementById('mahjong-team-meja-points-title');
+            const savePointsBtn = document.getElementById('btn-save-mahjong-team-meja-points');
+
+            const endModal = endModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(endModalEl) : null;
+            const previewModal = previewModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(previewModalEl) : null;
+            const tiebreakModal = tiebreakModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(tiebreakModalEl) : null;
+            const pointsModal = pointsModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(pointsModalEl) : null;
+
+            let pendingJumlah = null;
+            let pendingTiebreakIds = [];
+            let pendingMejaUrl = null;
+            let pendingWinnerId = null;
+
+            const escapeHtml = (value) => {
+                const div = document.createElement('div');
+                div.textContent = value == null ? '' : String(value);
+                return div.innerHTML;
+            };
+
+            endGroupBtn.addEventListener('click', () => {
+                endModal?.show();
+            });
+
+            const openTiebreak = (jumlah, payload) => {
+                pendingJumlah = jumlah;
+                const slots = parseInt(payload.slots_remaining || '0', 10);
+                const contested = Array.isArray(payload.contested) ? payload.contested : [];
+                const autoQualified = Array.isArray(payload.auto_qualified) ? payload.auto_qualified : [];
+
+                if (tiebreakHelp) {
+                    tiebreakHelp.textContent = `Ada ${contested.length} tim dengan total poin sama. Pilih ${slots} tim yang lolos.`;
+                }
+
+                if (tiebreakAuto) {
+                    if (autoQualified.length) {
+                        tiebreakAuto.classList.remove('d-none');
+                        tiebreakAuto.innerHTML = `<div class="small text-muted mb-1">Sudah lolos (${autoQualified.length}):</div>
+                            <div class="small">${autoQualified.map((r) => escapeHtml(r.nama)).join(', ')}</div>`;
+                    } else {
+                        tiebreakAuto.classList.add('d-none');
+                        tiebreakAuto.innerHTML = '';
+                    }
+                }
+
+                if (tiebreakList) {
+                    tiebreakList.innerHTML = contested.map((row) => `
+                        <label class="list-group-item list-group-item-action d-flex gap-2">
+                            <input type="checkbox" class="form-check-input mt-1 mahjong-team-tiebreak-pick" value="${parseInt(row.id_tim || '0', 10)}">
+                            <span class="flex-grow-1">
+                                <span class="fw-semibold d-block">${escapeHtml(row.nama)}</span>
+                                <span class="small text-muted">Total ${parseInt(row.total_poin || '0', 10)}</span>
+                            </span>
+                        </label>
+                    `).join('');
+                    tiebreakList.dataset.slotsRemaining = String(slots);
+                }
+
+                tiebreakModal?.show();
+            };
+
+            const openPreview = (payload) => {
+                pendingJumlah = parseInt(payload.jumlah_lolos || pendingJumlah || '0', 10);
+                if (Array.isArray(payload.tiebreak_tim_ids)) {
+                    pendingTiebreakIds = payload.tiebreak_tim_ids.map((id) => parseInt(id, 10)).filter((id) => id > 0);
+                }
+
+                const qualifiers = Array.isArray(payload.qualifiers) ? payload.qualifiers : [];
+                if (previewHelp) {
+                    previewHelp.textContent = payload.is_champion
+                        ? 'Tim berikut akan menjadi juara (tanpa peringkat individu).'
+                        : `Tim berikut lolos ke Babak ${parseInt(payload.next_babak || '0', 10)}. Poin babak baru di-reset.`;
+                }
+
+                if (previewBody) {
+                    previewBody.innerHTML = qualifiers.map((row) => `
+                        <tr>
+                            <td>${parseInt(row.rank || '0', 10)}</td>
+                            <td class="fw-semibold">${escapeHtml(row.nama)}</td>
+                            <td class="text-center"><span class="badge text-bg-primary">${parseInt(row.total_poin || '0', 10)}</span></td>
+                        </tr>
+                    `).join('') || '<tr><td colspan="3" class="text-center text-muted">Tidak ada tim.</td></tr>';
+                }
+
+                previewModal?.show();
+            };
+
+            const requestPreview = async (jumlah, tiebreakIds) => {
+                const payload = {
+                    id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
+                    jumlah_lolos: jumlah,
+                    preview: true,
+                };
+                if (Array.isArray(tiebreakIds) && tiebreakIds.length) {
+                    payload.tiebreak_tim_ids = tiebreakIds;
+                }
+
+                const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
+                if (data.needs_tiebreak) {
+                    openTiebreak(jumlah, data.data || {});
+                    return data;
+                }
+                openPreview(data.data || {});
+                return data;
+            };
+
+            if (confirmEndBtn) {
+                confirmEndBtn.addEventListener('click', async () => {
+                    const parsed = parseInt(jumlahSelect?.value || '0', 10);
+                    if (!parsed) {
+                        showToast('Pilih jumlah tim lolos.', 'error');
+                        return;
+                    }
+                    const original = confirmEndBtn.innerHTML;
+                    setButtonLoading(confirmEndBtn, true);
+                    try {
+                        pendingTiebreakIds = [];
+                        await requestPreview(parsed, null);
+                        endModal?.hide();
+                        setButtonLoading(confirmEndBtn, false, original);
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                        setButtonLoading(confirmEndBtn, false, original);
+                    }
+                });
+            }
+
+            if (tiebreakConfirmBtn) {
+                tiebreakConfirmBtn.addEventListener('click', async () => {
+                    const slots = parseInt(tiebreakList?.dataset.slotsRemaining || '0', 10);
+                    const picks = Array.from(document.querySelectorAll('.mahjong-team-tiebreak-pick:checked'))
+                        .map((el) => parseInt(el.value || '0', 10))
+                        .filter((id) => id > 0);
+                    if (picks.length !== slots) {
+                        showToast(`Pilih tepat ${slots} tim.`, 'error');
+                        return;
+                    }
+                    const original = tiebreakConfirmBtn.innerHTML;
+                    setButtonLoading(tiebreakConfirmBtn, true);
+                    try {
+                        const merged = Array.from(new Set([...(pendingTiebreakIds || []), ...picks]));
+                        pendingTiebreakIds = merged;
+                        await requestPreview(pendingJumlah, merged);
+                        tiebreakModal?.hide();
+                        setButtonLoading(tiebreakConfirmBtn, false, original);
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                        setButtonLoading(tiebreakConfirmBtn, false, original);
+                    }
+                });
+            }
+
+            if (previewConfirmBtn) {
+                previewConfirmBtn.addEventListener('click', async () => {
+                    if (!pendingJumlah) {
+                        showToast('Data pratinjau tidak valid.', 'error');
+                        return;
+                    }
+                    const original = previewConfirmBtn.innerHTML;
+                    setButtonLoading(previewConfirmBtn, true);
+                    try {
+                        const payload = {
+                            id_turnamen: parseInt(endGroupBtn.dataset.turnamen, 10),
+                            jumlah_lolos: pendingJumlah,
+                        };
+                        if (pendingTiebreakIds.length) {
+                            payload.tiebreak_tim_ids = pendingTiebreakIds;
+                        }
+                        const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
+                        if (data.needs_tiebreak) {
+                            previewModal?.hide();
+                            setButtonLoading(previewConfirmBtn, false, original);
+                            openTiebreak(pendingJumlah, data.data || {});
+                            return;
+                        }
+                        previewModal?.hide();
+                        showToast(data.message);
+                        reloadPage();
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                        setButtonLoading(previewConfirmBtn, false, original);
+                    }
+                });
+            }
+
+            document.querySelectorAll('.btn-mahjong-team-meja-points').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    pendingMejaUrl = btn.dataset.url;
+                    pendingWinnerId = null;
+                    let seats = [];
+                    try {
+                        seats = JSON.parse(btn.dataset.seats || '[]');
+                    } catch (e) {
+                        seats = [];
+                    }
+                    if (pointsTitle) {
+                        pointsTitle.textContent = `Input Poin — ${btn.dataset.mejaNama || 'Meja'}`;
+                    }
+                    if (pointsFields) {
+                        pointsFields.innerHTML = seats.map((seat) => `
+                            <div class="border rounded p-2">
+                                <button type="button" class="btn btn-link btn-sm p-0 mb-1 mahjong-team-winner-pick" data-id="${seat.id}">
+                                    ${escapeHtml(seat.nama || 'Pemain')}
+                                </button>
+                                <div class="small text-muted mb-1">${escapeHtml(seat.tim || '')}</div>
+                                <input type="number" class="form-control mahjong-team-meja-poin" data-id="${seat.id}" value="0">
+                            </div>
+                        `).join('');
+
+                        pointsFields.querySelectorAll('.mahjong-team-winner-pick').forEach((pick) => {
+                            pick.addEventListener('click', () => {
+                                pendingWinnerId = parseInt(pick.dataset.id || '0', 10) || null;
+                                pointsFields.querySelectorAll('.mahjong-team-winner-pick').forEach((el) => {
+                                    el.classList.toggle('fw-bold', parseInt(el.dataset.id || '0', 10) === pendingWinnerId);
+                                });
+                            });
+                        });
+                    }
+                    pointsModal?.show();
+                });
+            });
+
+            if (savePointsBtn) {
+                savePointsBtn.addEventListener('click', async () => {
+                    if (!pendingMejaUrl) return;
+                    const scores = Array.from(document.querySelectorAll('.mahjong-team-meja-poin')).map((input) => ({
+                        id: parseInt(input.dataset.id || '0', 10),
+                        poin: parseInt(input.value || '0', 10),
+                    }));
+                    const original = savePointsBtn.innerHTML;
+                    setButtonLoading(savePointsBtn, true);
+                    try {
+                        const payload = { scores };
+                        if (pendingWinnerId) {
+                            payload.id_grup_member_pemenang = pendingWinnerId;
+                        }
+                        const data = await apiRequest(pendingMejaUrl, 'POST', payload);
+                        pointsModal?.hide();
+                        showToast(data.message);
+                        reloadPage();
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                        setButtonLoading(savePointsBtn, false, original);
+                    }
+                });
+            }
+        })();
 
         const reshuffleBtn = document.getElementById('btn-reshuffle-groups');
 
         if (reshuffleBtn) {
             reshuffleBtn.addEventListener('click', async () => {
+                const isTeam = reshuffleBtn.dataset.mahjongTeam === '1';
                 const confirmed = await confirmAction({
-                    title: 'Acak ulang grup?',
-                    text: 'Pemain akan dibagi ulang ke grup baru (4 per grup). Total poin babak saat ini dijumlahkan ke akumulasi.',
-                    confirmText: 'Ya, reshuffle',
+                    title: isTeam ? 'Acak ulang meja?' : 'Acak ulang grup?',
+                    text: isTeam
+                        ? 'Kursi meja akan diacak ulang. Poin babak tetap diakumulasi.'
+                        : 'Pemain akan dibagi ulang ke grup baru (4 per grup). Total poin babak saat ini dijumlahkan ke akumulasi.',
+                    confirmText: isTeam ? 'Ya, reshuffle meja' : 'Ya, reshuffle',
                 });
                 if (!confirmed) return;
 

@@ -22,6 +22,8 @@ class MatchmakingPageService
 
     protected $mahjongService;
 
+    protected $mahjongTeamService;
+
     protected $friendlyService;
 
     protected $knockoutBracketService;
@@ -38,6 +40,8 @@ class MatchmakingPageService
 
         MahjongMatchmakingService $mahjongService,
 
+        MahjongTeamMatchmakingService $mahjongTeamService,
+
         FriendlyMatchmakingService $friendlyService,
 
         KnockoutBracketService $knockoutBracketService,
@@ -51,6 +55,8 @@ class MatchmakingPageService
         $this->matchmakingService = $matchmakingService;
 
         $this->mahjongService = $mahjongService;
+
+        $this->mahjongTeamService = $mahjongTeamService;
 
         $this->friendlyService = $friendlyService;
 
@@ -150,6 +156,8 @@ class MatchmakingPageService
 
         $isMahjong = $turnamen ? $turnamen->isMahjong() : false;
 
+        $isMahjongTeam = $turnamen ? $turnamen->isMahjongTeam() : false;
+
         $isFriendly = $turnamen ? $turnamen->isFriendly() : false;
 
         $friendlyMatches = collect();
@@ -176,7 +184,7 @@ class MatchmakingPageService
 
         if ($turnamen && $kategori) {
 
-            $grupQuery = $isMahjong ? $kategori->activeGrup() : $kategori->grup();
+            $grupQuery = ($isMahjong || $isMahjongTeam) ? $kategori->activeGrup() : $kategori->grup();
 
 
 
@@ -220,7 +228,7 @@ class MatchmakingPageService
 
 
 
-            if ($isMahjong) {
+            if ($isMahjong || $isMahjongTeam) {
 
                 $mahjongGroupCount = $approvedCount >= 4 ? intdiv($approvedCount, 4) : 0;
 
@@ -304,17 +312,25 @@ class MatchmakingPageService
 
         if ($turnamen && ! $isFriendly) {
 
-            $canEndGroupStage = $isMahjong
+            if ($isMahjong) {
 
-                ? $this->mahjongService->canAdvanceRound($turnamen, $kategoriId)
+                $canEndGroupStage = $this->mahjongService->canAdvanceRound($turnamen, $kategoriId);
 
-                : $this->knockoutBracketService->canEndGroupStage($turnamen, $kategoriId);
+            } elseif ($isMahjongTeam) {
+
+                $canEndGroupStage = $this->mahjongTeamService->canAdvanceBabak($turnamen, $kategoriId);
+
+            } else {
+
+                $canEndGroupStage = $this->knockoutBracketService->canEndGroupStage($turnamen, $kategoriId);
+
+            }
 
         }
 
 
 
-        $hasKnockoutBracket = $turnamen && ! $isMahjong && ! $isFriendly
+        $hasKnockoutBracket = $turnamen && ! $isMahjong && ! $isMahjongTeam && ! $isFriendly
 
             ? $this->knockoutBracketService->hasKnockoutBracket($turnamen, $kategoriId)
 
@@ -384,6 +400,8 @@ class MatchmakingPageService
 
             'isMahjong' => $isMahjong,
 
+            'isMahjongTeam' => $isMahjongTeam,
+
             'isFriendly' => $isFriendly,
 
             'friendlyPlayersPerGroup' => $friendlyPlayersPerGroup,
@@ -448,25 +466,29 @@ class MatchmakingPageService
 
                 ? $this->mahjongService->canReshuffle($turnamen, $kategoriId)
 
-                : false,
+                : ($turnamen && $isMahjongTeam
+
+                    ? $this->mahjongTeamService->canReshuffleMeja($turnamen, $kategoriId)
+
+                    : false),
 
             'canEndGroupStage' => $canEndGroupStage,
 
             'hasKnockoutBracket' => $hasKnockoutBracket,
 
-            'canResetKnockoutBracket' => $turnamen && ! $isMahjong
+            'canResetKnockoutBracket' => $turnamen && ! $isMahjong && ! $isMahjongTeam
 
                 ? $this->knockoutBracketService->canResetKnockoutBracket($turnamen, $kategoriId)
 
                 : false,
 
-            'hasKnockoutScores' => $turnamen && ! $isMahjong
+            'hasKnockoutScores' => $turnamen && ! $isMahjong && ! $isMahjongTeam
 
                 ? $this->knockoutBracketService->hasKnockoutScores($turnamen, $kategoriId)
 
                 : false,
 
-            'canEditGroupScores' => $turnamen && ! $isMahjong && ! $hasKnockoutBracket,
+            'canEditGroupScores' => $turnamen && ! $isMahjong && ! $isMahjongTeam && ! $hasKnockoutBracket,
 
             'knockoutRounds' => $knockoutRounds,
 
@@ -482,7 +504,7 @@ class MatchmakingPageService
 
                 : false,
 
-            'mahjongIsFinal' => $turnamen && $isMahjong
+            'mahjongIsFinal' => $turnamen && ($isMahjong || $isMahjongTeam)
 
                 ? (bool) $turnamen->categoryMahjongIsFinal($kategoriId)
 
@@ -506,9 +528,51 @@ class MatchmakingPageService
 
                 : collect(),
 
-            'activePlayerCount' => $isMahjong && $turnamen
+            'mahjongTeamStandings' => $turnamen && $isMahjongTeam && $kategoriId
 
-                ? $this->mahjongService->getGlobalRankings($turnamen, $kategoriId)->count()
+                ? $this->mahjongTeamService->teamStandings($turnamen, $kategoriId)
+
+                : collect(),
+
+            'mahjongTeamMeja' => $turnamen && $isMahjongTeam && $kategoriId
+
+                ? \App\Models\TurnamenMeja::query()
+                    ->where('id_kategori', $kategoriId)
+                    ->where('is_aktif', true)
+                    ->with([
+                        'seats.grupMember.pemain',
+                        'seats.grupMember.turnamenPeserta.pemain1',
+                        'seats.grupMember.grup',
+                        'seats.grupMember.poinEntries',
+                    ])
+                    ->orderBy('nama')
+                    ->orderBy('id')
+                    ->get()
+
+                : collect(),
+
+            'mahjongTeamHistory' => $turnamen && $isMahjongTeam && $kategoriId
+
+                ? $this->mahjongTeamService->getMatchmakingHistory($turnamen, $kategoriId)
+
+                : collect(),
+
+            'mahjongTeamAllowedAdvance' => (function () use ($turnamen, $isMahjongTeam, $kategoriId) {
+                if (! $turnamen || ! $isMahjongTeam || ! $kategoriId) {
+                    return [1];
+                }
+
+                $kategoriModel = \App\Models\TurnamenKategori::find($kategoriId);
+                $teamCount = $kategoriModel ? (int) $kategoriModel->activeGrup()->count() : 0;
+
+                return app(MahjongTeamSeatingService::class)->allowedAdvanceCounts($teamCount);
+            })(),
+
+            'activePlayerCount' => ($isMahjong || $isMahjongTeam) && $turnamen
+
+                ? (($isMahjongTeam
+                    ? $grup->sum(fn ($g) => $g->members->count())
+                    : $this->mahjongService->getGlobalRankings($turnamen, $kategoriId)->count()))
 
                 : $approvedCount,
 

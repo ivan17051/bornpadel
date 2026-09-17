@@ -28,6 +28,10 @@ class TournamentCompletionService
             return app(MahjongMatchmakingService::class)->canComplete($turnamen, $idKategori);
         }
 
+        if ($turnamen->isMahjongTeam()) {
+            return app(MahjongTeamMatchmakingService::class)->canComplete($turnamen, $idKategori);
+        }
+
         if ($turnamen->isFriendly()) {
             $kategori = $turnamen->resolveKategori($idKategori);
 
@@ -46,7 +50,7 @@ class TournamentCompletionService
 
     public function hasPendingThirdPlacePlayoff(Turnamen $turnamen, $idKategori = null): bool
     {
-        if ($turnamen->isMahjong() || $turnamen->isFriendly()) {
+        if ($turnamen->isMahjong() || $turnamen->isMahjongTeam() || $turnamen->isFriendly()) {
             return false;
         }
 
@@ -62,6 +66,10 @@ class TournamentCompletionService
     {
         if ($turnamen->isMahjong()) {
             return $this->completeMahjong($turnamen, $idKategori);
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            return $this->completeMahjongTeam($turnamen, $idKategori);
         }
 
         if ($turnamen->isFriendly()) {
@@ -344,6 +352,69 @@ class TournamentCompletionService
                 'turnamen' => $turnamen->fresh(),
                 'kategori' => $kategori->fresh(),
                 'placements' => $placements,
+                'awards' => $awards,
+            ];
+        });
+    }
+
+    protected function completeMahjongTeam(Turnamen $turnamen, $idKategori = null): array
+    {
+        $teamService = app(MahjongTeamMatchmakingService::class);
+
+        if (! $teamService->canComplete($turnamen, $idKategori)) {
+            throw new RuntimeException('Mahjong Tim belum dapat diselesaikan. Pastikan hanya tersisa 1 tim juara.');
+        }
+
+        return DB::transaction(function () use ($turnamen, $teamService, $idKategori) {
+            $kategori = $turnamen->resolveKategori($idKategori);
+            $members = $teamService->resolveChampionTeamMembers($turnamen, $kategori->id);
+            $placementConfig = config('tournament.points.placement', []);
+            $awards = [];
+            $placeOnePoints = (int) ($placementConfig[1] ?? 0);
+
+            TurnamenPemenang::where('id_kategori', $kategori->id)->delete();
+
+            foreach ($members as $member) {
+                if (empty($member['pemain_ids'][0])) {
+                    continue;
+                }
+
+                TurnamenPemenang::create([
+                    'id_turnamen' => $turnamen->id,
+                    'id_kategori' => $kategori->id,
+                    'peringkat' => 1,
+                    'id_pemain' => $member['pemain_ids'][0],
+                    'id_turnamen_peserta' => $member['peserta_id'],
+                    'total_poin' => $member['total_poin'],
+                ]);
+
+                $awards[] = [
+                    'place' => 1,
+                    'pemain_ids' => $member['pemain_ids'],
+                    'points' => $placeOnePoints,
+                ];
+            }
+
+            if ($awards !== []) {
+                $this->pointRewardService->awardPlacementPoints($awards);
+            }
+
+            $kategori->update(['status' => 'completed', 'mahjong_is_final' => true]);
+            $turnamen->competitionActiveGrup($kategori->id)->update(['is_aktif' => false]);
+            \App\Models\TurnamenMeja::query()
+                ->where('id_kategori', $kategori->id)
+                ->where('is_aktif', true)
+                ->update(['is_aktif' => false]);
+
+            if ($turnamen->kategori()->count() <= 1
+                || ! $turnamen->kategori()->where('status', '!=', 'completed')->exists()) {
+                $turnamen->update(['status' => 'completed', 'mahjong_is_final' => true]);
+            }
+
+            return [
+                'turnamen' => $turnamen->fresh(),
+                'kategori' => $kategori->fresh(),
+                'placements' => ['team' => $members],
                 'awards' => $awards,
             ];
         });

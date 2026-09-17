@@ -39,6 +39,10 @@ class LeaderboardService
             return $this->getFriendlyStandings($turnamen->id, $idKategori);
         }
 
+        if ($turnamen->isMahjongTeam()) {
+            return $this->getMahjongTeamStandings($turnamen, $idKategori);
+        }
+
         $grupQuery = $turnamen->isMahjong()
             ? $turnamen->competitionActiveGrup($idKategori)
             : $turnamen->competitionGrup($idKategori);
@@ -209,6 +213,44 @@ class LeaderboardService
             'has_bracket' => $hasBracket,
             'is_double' => $turnamen->playsAsPairs(),
         ];
+    }
+
+    /**
+     * Team standings for Mahjong Tim (aggregate poin_didapat per active team).
+     */
+    public function getMahjongTeamStandings(Turnamen $turnamen, $idKategori = null): Collection
+    {
+        $rows = app(MahjongTeamMatchmakingService::class)->teamStandings($turnamen, $idKategori);
+
+        return $rows->values()->map(function (array $row, int $index) {
+            return [
+                'id' => $row['id_tim'],
+                'nama' => $row['nama'],
+                'babak' => null,
+                'is_double' => false,
+                'is_mahjong' => false,
+                'is_mahjong_team' => true,
+                'matches_complete' => true,
+                'total_poin' => (int) $row['total_poin'],
+                'standings' => collect($row['members'])->values()->map(function ($member, $memberIndex) use ($row) {
+                    return [
+                        'rank' => $memberIndex + 1,
+                        'id_grup' => $row['id_tim'],
+                        'id_pemain' => null,
+                        'id_peserta' => null,
+                        'pemain_ids' => [],
+                        'nama' => $member['nama'],
+                        'poin_didapat' => (int) $member['poin_didapat'],
+                        'set_menang' => 0,
+                        'games_menang' => 0,
+                        'games_diff_label' => '0',
+                        'stats_reached_at' => null,
+                        'total_poin' => (int) $member['poin_didapat'],
+                    ];
+                }),
+                'rank' => $index + 1,
+            ];
+        });
     }
 
     public function getFriendlyStandings(?int $turnamenId = null, $idKategori = null): Collection

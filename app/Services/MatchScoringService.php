@@ -36,7 +36,7 @@ class MatchScoringService
             ? $pertandingan->turnamen
             : Turnamen::find($pertandingan->id_turnamen);
 
-        if (! $turnamen || $turnamen->isMahjong() || $turnamen->status === 'completed') {
+        if (! $turnamen || $turnamen->isMahjong() || $turnamen->isMahjongTeam() || $turnamen->status === 'completed') {
             return false;
         }
 
@@ -485,7 +485,7 @@ class MatchScoringService
      */
     public function recalculateGroupStandingsForTurnamen(Turnamen $turnamen): void
     {
-        if ($turnamen->isMahjong()) {
+        if ($turnamen->isMahjong() || $turnamen->isMahjongTeam()) {
             return;
         }
 

@@ -28,7 +28,7 @@ class UpdateTurnamenRequest extends FormRequest
             'syarat' => ['nullable', 'string'],
             'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
             'remove_foto' => ['nullable', 'boolean'],
-            'jenis' => ['required', 'in:single,double,mahjong,friendly'],
+            'jenis' => ['required', 'in:single,double,mahjong,friendly,mahjong_team'],
             'status' => ['required', 'in:draft,open,ongoing,completed'],
             'players_per_group' => ['nullable', 'integer', 'min:' . Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP, 'max:255'],
         ];

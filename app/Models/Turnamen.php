@@ -133,6 +133,11 @@ class Turnamen extends Model
         return $this->jenis === 'mahjong';
     }
 
+    public function isMahjongTeam(): bool
+    {
+        return $this->jenis === 'mahjong_team';
+    }
+
     public function isFriendly(): bool
     {
         return $this->jenis === 'friendly';
@@ -195,6 +200,10 @@ class Turnamen extends Model
 
         if ($this->jenis === 'mahjong') {
             return 'Mahjong';
+        }
+
+        if ($this->jenis === 'mahjong_team') {
+            return 'Mahjong Tim';
         }
 
         if ($this->jenis === 'friendly') {

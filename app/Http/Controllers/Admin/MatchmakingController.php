@@ -8,11 +8,13 @@ use App\Models\Grup;
 use App\Models\GrupMember;
 use App\Models\Pertandingan;
 use App\Models\Turnamen;
+use App\Models\TurnamenMeja;
 use App\Models\TurnamenPeserta;
 use App\Services\FriendlyMatchmakingService;
 use App\Services\GroupMatchmakingService;
 use App\Services\KnockoutBracketService;
 use App\Services\MahjongMatchmakingService;
+use App\Services\MahjongTeamMatchmakingService;
 use App\Services\MatchmakingPageService;
 use App\Services\MatchScoringService;
 use App\Services\TournamentAccessService;
@@ -28,6 +30,7 @@ class MatchmakingController extends Controller
 
     protected $matchmakingService;
     protected $mahjongService;
+    protected $mahjongTeamService;
     protected $friendlyService;
     protected $knockoutBracketService;
     protected $tournamentAccess;
@@ -37,6 +40,7 @@ class MatchmakingController extends Controller
     public function __construct(
         GroupMatchmakingService $matchmakingService,
         MahjongMatchmakingService $mahjongService,
+        MahjongTeamMatchmakingService $mahjongTeamService,
         FriendlyMatchmakingService $friendlyService,
         KnockoutBracketService $knockoutBracketService,
         TournamentAccessService $tournamentAccess,
@@ -45,6 +49,7 @@ class MatchmakingController extends Controller
     ) {
         $this->matchmakingService = $matchmakingService;
         $this->mahjongService = $mahjongService;
+        $this->mahjongTeamService = $mahjongTeamService;
         $this->friendlyService = $friendlyService;
         $this->knockoutBracketService = $knockoutBracketService;
         $this->tournamentAccess = $tournamentAccess;
@@ -179,6 +184,97 @@ class MatchmakingController extends Controller
             ]);
         }
 
+        if ($turnamen->isMahjongTeam()) {
+            $request->validate([
+                'jumlah_lolos' => ['required', 'integer', 'min:1'],
+                'tiebreak_tim_ids' => ['nullable', 'array'],
+                'tiebreak_tim_ids.*' => ['integer', 'exists:grup,id'],
+                'preview' => ['nullable', 'boolean'],
+            ], [
+                'jumlah_lolos.required' => 'Jumlah tim lolos wajib diisi.',
+                'jumlah_lolos.min' => 'Jumlah tim lolos minimal 1.',
+            ]);
+
+            try {
+                $jumlahLolos = (int) $request->input('jumlah_lolos');
+                $tiebreakTimIds = $request->has('tiebreak_tim_ids')
+                    ? array_map('intval', $request->input('tiebreak_tim_ids', []))
+                    : null;
+
+                if ($request->boolean('preview')) {
+                    $preview = $this->mahjongTeamService->previewAdvanceTeams(
+                        $turnamen,
+                        $jumlahLolos,
+                        $kategoriId,
+                        $tiebreakTimIds
+                    );
+
+                    if (! empty($preview['needs_tiebreak'])) {
+                        return response()->json([
+                            'success' => false,
+                            'needs_tiebreak' => true,
+                            'message' => sprintf(
+                                'Ada %d tim dengan total poin sama. Pilih %d tim yang lolos.',
+                                count($preview['contested'] ?? []),
+                                (int) ($preview['slots_remaining'] ?? 0)
+                            ),
+                            'data' => $preview,
+                        ]);
+                    }
+
+                    return response()->json([
+                        'success' => true,
+                        'preview' => true,
+                        'message' => ! empty($preview['is_champion'])
+                            ? 'Pratinjau: 1 tim akan menjadi juara.'
+                            : sprintf(
+                                'Pratinjau: %d tim akan lolos ke babak %d.',
+                                count($preview['qualifiers'] ?? []),
+                                (int) ($preview['next_babak'] ?? 0)
+                            ),
+                        'data' => $preview,
+                    ]);
+                }
+
+                $result = $this->mahjongTeamService->advanceTeams(
+                    $turnamen,
+                    $jumlahLolos,
+                    $kategoriId,
+                    $tiebreakTimIds
+                );
+            } catch (RuntimeException $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+
+            if (! empty($result['needs_tiebreak'])) {
+                return response()->json([
+                    'success' => false,
+                    'needs_tiebreak' => true,
+                    'message' => sprintf(
+                        'Ada %d tim dengan total poin sama. Pilih %d tim yang lolos.',
+                        count($result['contested'] ?? []),
+                        (int) ($result['slots_remaining'] ?? 0)
+                    ),
+                    'data' => $result,
+                ]);
+            }
+
+            $message = ! empty($result['is_champion'])
+                ? 'Juara tim ditentukan. Selesaikan turnamen untuk mengunci hasil.'
+                : sprintf(
+                    'Babak %d: %d tim lolos, %d meja dibuat. Poin babak sebelumnya di-reset.',
+                    $result['babak'],
+                    $result['qualifiers'],
+                    count($result['meja'] ?? [])
+                );
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => $result,
+            ]);
+        }
+
         $request->validate([
             'qualification_mode' => ['nullable', 'in:per_group,total'],
             'jumlah_lolos' => ['required', 'integer', 'min:1'],
@@ -231,6 +327,20 @@ class MatchmakingController extends Controller
         try {
             $turnamen = $this->resolveTournament($request);
             [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+
+            if ($turnamen->isMahjongTeam()) {
+                $result = $this->mahjongTeamService->reshuffleMeja($turnamen, $kategoriId);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => sprintf(
+                        'Meja berhasil diacak ulang (%d meja). Poin babak tetap diakumulasi.',
+                        count($result['meja'])
+                    ),
+                    'data' => $result,
+                ]);
+            }
+
             $mode = $request->input('mode', 'random');
             $result = $this->mahjongService->reshuffleGroups($turnamen, $mode, $kategoriId);
         } catch (RuntimeException $e) {
@@ -360,6 +470,58 @@ class MatchmakingController extends Controller
         ]);
     }
 
+    public function storeMahjongTeamMejaPointEntries(Request $request, TurnamenMeja $meja)
+    {
+        $request->validate([
+            'scores' => ['required', 'array', 'size:4'],
+            'scores.*.id' => ['required', 'integer'],
+            'scores.*.poin' => ['required', 'integer'],
+            'id_grup_member_pemenang' => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $winnerMemberId = $request->filled('id_grup_member_pemenang')
+                ? (int) $request->input('id_grup_member_pemenang')
+                : null;
+            $this->mahjongTeamService->addMejaPointEntries(
+                $meja,
+                $request->input('scores'),
+                $winnerMemberId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $meja->load([
+            'seats.grupMember.pemain',
+            'seats.grupMember.turnamenPeserta.pemain1',
+            'seats.grupMember.grup',
+            'seats.grupMember.poinEntries',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin meja berhasil disimpan.',
+            'data' => [
+                'meja_id' => $meja->id,
+                'seats' => $meja->seats->map(function ($seat) {
+                    $member = $seat->grupMember;
+
+                    return [
+                        'seat_id' => $seat->id,
+                        'id' => optional($member)->id,
+                        'nama' => optional($member)->display_name,
+                        'tim' => optional(optional($member)->grup)->nama,
+                        'poin_didapat' => (int) (optional($member)->poin_didapat ?? 0),
+                    ];
+                })->values(),
+            ],
+        ]);
+    }
+
     public function destroyMahjongPointEntry(GrupMember $member, \App\Models\MahjongPoinEntry $entry)
     {
         try {
@@ -410,11 +572,13 @@ class MatchmakingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => $turnamen->isFriendly()
-                ? 'Turnamen Friendly berhasil diselesaikan. Klasemen grup dikunci (tanpa perubahan total poin pemain).'
-                : (! empty($result['cancelled_third_place'])
-                    ? 'Turnamen berhasil diselesaikan. Perebutan juara 3 dibatalkan. Poin bonus juara telah ditambahkan.'
-                    : 'Turnamen berhasil diselesaikan. Poin bonus juara telah ditambahkan.'),
+            'message' => $turnamen->isMahjongTeam()
+                ? 'Mahjong Tim berhasil diselesaikan. Tim juara dikunci (tanpa peringkat individu).'
+                : ($turnamen->isFriendly()
+                    ? 'Turnamen Friendly berhasil diselesaikan. Klasemen grup dikunci (tanpa perubahan total poin pemain).'
+                    : (! empty($result['cancelled_third_place'])
+                        ? 'Turnamen berhasil diselesaikan. Perebutan juara 3 dibatalkan. Poin bonus juara telah ditambahkan.'
+                        : 'Turnamen berhasil diselesaikan. Poin bonus juara telah ditambahkan.')),
             'data' => $result,
         ]);
     }
@@ -475,6 +639,27 @@ class MatchmakingController extends Controller
                 'message' => sprintf(
                     'Berhasil membuat %d grup Mahjong (4 pemain per grup, %s).',
                     count($result['groups']),
+                    $modeLabel
+                ),
+                'data' => $result,
+            ]);
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            try {
+                $result = $this->mahjongTeamService->generateTeams($turnamen, $mode, $kategoriId);
+            } catch (RuntimeException $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+
+            $modeLabel = $mode === 'by_rating' ? 'berdasarkan rating' : 'secara acak';
+
+            return response()->json([
+                'success' => true,
+                'message' => sprintf(
+                    'Berhasil membuat %d tim dan %d meja silang (%s).',
+                    count($result['teams']),
+                    count($result['meja']),
                     $modeLabel
                 ),
                 'data' => $result,
