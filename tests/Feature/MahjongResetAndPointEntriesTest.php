@@ -229,6 +229,62 @@ class MahjongResetAndPointEntriesTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_group_point_entries_can_be_updated_for_a_round(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $members = $grup->members->values();
+        $originalScores = $members->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [8, -2, -3, -3][$index]];
+        })->all();
+        $originalWinnerId = (int) $members->first()->id;
+
+        $service->addGroupPointEntries($grup, $originalScores, $originalWinnerId);
+
+        $entriesByMember = $members->mapWithKeys(function (GrupMember $member) {
+            return [$member->id => $member->fresh()->poinEntries()->first()->id];
+        });
+
+        $newWinnerId = (int) $members->get(1)->id;
+        $updatedScores = $members->map(function (GrupMember $member, int $index) use ($entriesByMember) {
+            return [
+                'id' => $member->id,
+                'entry_id' => $entriesByMember[$member->id],
+                'poin' => [10, 4, -7, -7][$index],
+            ];
+        })->all();
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-group-point-entries.update', $grup), [
+                'scores' => $updatedScores,
+                'id_grup_member_pemenang' => $newWinnerId,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        foreach ($updatedScores as $score) {
+            $member = GrupMember::findOrFail($score['id']);
+            $entry = $member->poinEntries()->first();
+            $this->assertSame(1, $member->poinEntries()->count());
+            $this->assertSame($score['entry_id'], (int) $entry->id);
+            $this->assertSame($score['poin'], (int) $entry->poin);
+            $this->assertSame($score['poin'], (int) $member->poin_didapat);
+            $this->assertSame((int) $member->id === $newWinnerId, (bool) $entry->is_winner);
+        }
+
+        $this->assertSame(0, (int) GrupMember::findOrFail($originalWinnerId)->menang);
+        $this->assertSame(1, (int) GrupMember::findOrFail($newWinnerId)->menang);
+    }
+
     public function test_reshuffle_carries_summed_ronde_points_into_akumulasi(): void
     {
         $service = app(MahjongMatchmakingService::class);
@@ -664,6 +720,66 @@ class MahjongResetAndPointEntriesTest extends TestCase
 
         $historicalMember = $firstRonde['groups']->first()->members->first();
         $this->assertGreaterThan(0, $historicalMember->poinEntries->count());
+    }
+
+    public function test_matchmaking_workspace_renders_mahjong_group_as_round_table(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $members = $grup->members->values();
+        $firstScores = $members->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [8, -2, -3, -3][$index]];
+        })->all();
+        $secondScores = $members->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [12, -4, -4, -4][$index]];
+        })->all();
+
+        $winnerId = (int) $members->first()->id;
+
+        $emptyHtml = $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('mahjong-group-score-table', $emptyHtml);
+        $this->assertStringContainsString('>Ronde<', $emptyHtml);
+        $this->assertStringContainsString('>Subtotal<', $emptyHtml);
+        $this->assertStringContainsString('Belum ada ronde.', $emptyHtml);
+        $this->assertStringContainsString('group-member-swap-source', $emptyHtml);
+        $this->assertStringContainsString('btn-mahjong-input-poin', $emptyHtml);
+        $this->assertStringContainsString('0 (0)', $emptyHtml);
+
+        $mahjong->addGroupPointEntries($grup, $firstScores, $winnerId);
+        $mahjong->addGroupPointEntries($grup->fresh('members'), $secondScores, $winnerId);
+
+        $html = $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('mahjong-group-score-table', $html);
+        $this->assertStringContainsString('mahjong-round-row', $html);
+        $this->assertStringContainsString('data-round="1"', $html);
+        $this->assertStringContainsString('data-round="2"', $html);
+        $this->assertStringContainsString('20 (2)', $html);
+
+        foreach ($members as $member) {
+            $this->assertStringContainsString($member->display_name, $html);
+        }
+
+        $this->assertStringContainsString('btn-mahjong-edit-ronde', $html);
+        $this->assertStringNotContainsString('btn-delete-mahjong-poin', $html);
+        $this->assertStringContainsString('bi-trophy-fill', $html);
+        $this->assertStringContainsString('btn-mahjong-input-poin', $html);
     }
 
     protected function prepareMahjongTournament(int $playerCount): Turnamen

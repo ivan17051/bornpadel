@@ -470,6 +470,43 @@ class MatchmakingController extends Controller
         ]);
     }
 
+    public function updateMahjongGroupPointEntries(Request $request, Grup $grup)
+    {
+        $request->validate([
+            'scores' => ['required', 'array', 'size:4'],
+            'scores.*.id' => ['required', 'integer'],
+            'scores.*.entry_id' => ['required', 'integer'],
+            'scores.*.poin' => ['required', 'integer'],
+            'id_grup_member_pemenang' => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $winnerMemberId = $request->filled('id_grup_member_pemenang')
+                ? (int) $request->input('id_grup_member_pemenang')
+                : null;
+            $updatedMembers = $this->mahjongService->updateGroupPointEntries(
+                $grup,
+                $request->input('scores'),
+                $winnerMemberId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin ronde berhasil diperbarui.',
+            'data' => [
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
+                })->values(),
+            ],
+        ]);
+    }
+
     public function storeMahjongTeamMejaPointEntries(Request $request, TurnamenMeja $meja)
     {
         $request->validate([

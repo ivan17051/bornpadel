@@ -594,6 +594,66 @@ class MahjongMatchmakingService
         });
     }
 
+    /**
+     * Update one existing poin entry for every member in the group (one mahjong hand).
+     *
+     * @param  array<int, array{id: int, entry_id: int, poin: int}>  $scores
+     * @return Collection<int, GrupMember>
+     */
+    public function updateGroupPointEntries(Grup $grup, array $scores, ?int $winnerMemberId = null): Collection
+    {
+        return DB::transaction(function () use ($grup, $scores, $winnerMemberId) {
+            $this->assertActiveMahjongGroup($grup);
+
+            $grup->loadMissing('members.poinEntries');
+            $membersById = $grup->members->keyBy('id');
+
+            if ($membersById->count() !== self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Grup Mahjong harus berisi tepat 4 pemain.');
+            }
+
+            if (count($scores) !== self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Poin harus diisi untuk keempat pemain dalam grup.');
+            }
+
+            $scoreIds = collect($scores)->pluck('id')->map(fn ($id) => (int) $id)->sort()->values();
+            $memberIds = $membersById->keys()->map(fn ($id) => (int) $id)->sort()->values();
+
+            if ($scoreIds->all() !== $memberIds->all()) {
+                throw new RuntimeException('Daftar pemain tidak cocok dengan anggota grup.');
+            }
+
+            if ($winnerMemberId !== null && ! $membersById->has($winnerMemberId)) {
+                throw new RuntimeException('Pemenang harus salah satu anggota grup.');
+            }
+
+            $entryIds = collect($scores)->pluck('entry_id')->map(fn ($id) => (int) $id)->filter()->unique();
+            if ($entryIds->count() !== self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Setiap pemain harus punya entri poin yang valid untuk ronde ini.');
+            }
+
+            foreach ($scores as $score) {
+                $memberId = (int) $score['id'];
+                $entryId = (int) ($score['entry_id'] ?? 0);
+                $member = $membersById->get($memberId);
+                $entry = $member->poinEntries->firstWhere('id', $entryId);
+
+                if (! $entry) {
+                    throw new RuntimeException('Entri poin tidak ditemukan untuk anggota grup.');
+                }
+
+                $entry->update([
+                    'poin' => (int) $score['poin'],
+                    'is_winner' => $winnerMemberId !== null && $memberId === $winnerMemberId,
+                ]);
+            }
+
+            return $membersById->values()->map(function (GrupMember $member) {
+                return $this->syncPoinDidapatFromEntries($member);
+            })->values();
+        });
+    }
+
     public function deleteMemberPointEntry(GrupMember $member, MahjongPoinEntry $entry): GrupMember
     {
         $this->assertActiveMahjongMember($member);

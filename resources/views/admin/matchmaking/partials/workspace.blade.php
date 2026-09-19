@@ -63,6 +63,13 @@
                                 Lengkapi pasangan sebelum menutup pendaftaran.
                             @elseif ($isPairingOpen && $requiresPairRegistration)
                                 Pendaftaran masih dibuka. Pemain boleh daftar individu, lalu dipasangkan sebelum close — {{ $pairingSummary['complete_pairs'] ?? 0 }} pasangan lengkap saat ini.
+                            @elseif ($isMahjongTeam)
+                                @if (! ($canCloseRegistration ?? false))
+                                    Pendaftaran masih dibuka. <strong class="text-danger">Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).</strong>
+                                    Saat ini ada {{ $approvedCount }} pemain approved.
+                                @else
+                                    Pendaftaran masih dibuka. Siap ditutup dengan {{ $approvedCount }} pemain approved ({{ (int) ($approvedCount / 4) }} tim).
+                                @endif
                             @else
                                 Pendaftaran masih dibuka. Tutup pendaftaran sebelum membuat grup.
                             @endif
@@ -150,6 +157,19 @@
                                     <li>{{ $pairingSummary['approved_solos'] ?? 0 }} pemain tanpa pasangan</li>
                                     @if ($pairingSummary['odd_player_warning'] ?? false)
                                         <li class="text-danger">Semua pemain approved harus berpasangan sebelum menutup pendaftaran</li>
+                                    @endif
+                                </ul>
+                            </div>
+                        </div>
+                    @elseif ($registrationOpen && ($isMahjongTeam ?? false))
+                        <div class="card bg-light border-0 mb-3">
+                            <div class="card-body py-3">
+                                <h6 class="text-muted text-uppercase small mb-2">Syarat Mahjong Tim</h6>
+                                <ul class="small text-muted mb-0 ps-3">
+                                    <li>{{ $approvedCount }} pemain approved</li>
+                                    <li>Dibutuhkan tepat 16 atau 32 pemain (4 atau 8 tim × 4)</li>
+                                    @if (! ($canCloseRegistration ?? false))
+                                        <li class="text-danger">Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).</li>
                                     @endif
                                 </ul>
                             </div>
@@ -397,98 +417,174 @@
                          class="accordion-collapse collapse {{ $expandGroupsByDefault ? 'show' : '' }}"
                          aria-labelledby="group-heading-{{ $g->id }}">
                         <div class="accordion-body p-0">
+                        @php
+                            $mahjongMembers = $g->members->values();
+                            $mahjongColCount = 1 + $mahjongMembers->count();
+                            $mahjongShowAkumulasi = $mahjongMembers->contains(function ($member) use ($mahjongPriorBabakBreakdown) {
+                                $prior = ($mahjongPriorBabakBreakdown ?? [])[(int) $member->id_turnamen_peserta] ?? [];
+
+                                return (int) $member->poin_akumulasi !== 0 || ! empty($prior);
+                            });
+                            $mahjongEntryItems = [];
+                            foreach ($mahjongMembers as $member) {
+                                $entries = $member->relationLoaded('poinEntries')
+                                    ? $member->poinEntries
+                                    : $member->poinEntries()->get();
+                                foreach ($entries as $entry) {
+                                    $mahjongEntryItems[] = [
+                                        'member_id' => (int) $member->id,
+                                        'entry' => $entry,
+                                        'ts' => optional($entry->created_at)->getTimestamp() ?? 0,
+                                        'id' => (int) $entry->id,
+                                    ];
+                                }
+                            }
+                            usort($mahjongEntryItems, function ($a, $b) {
+                                return $a['ts'] <=> $b['ts'] ?: $a['id'] <=> $b['id'];
+                            });
+                            $mahjongRounds = [];
+                            $mahjongUsedEntryIds = [];
+                            foreach ($mahjongEntryItems as $item) {
+                                if (isset($mahjongUsedEntryIds[$item['id']])) {
+                                    continue;
+                                }
+                                $round = [];
+                                foreach ($mahjongMembers as $member) {
+                                    $round[(int) $member->id] = null;
+                                }
+                                $round[$item['member_id']] = $item['entry'];
+                                $mahjongUsedEntryIds[$item['id']] = true;
+                                foreach ($mahjongEntryItems as $other) {
+                                    if (isset($mahjongUsedEntryIds[$other['id']])) {
+                                        continue;
+                                    }
+                                    if ($round[$other['member_id']] !== null) {
+                                        continue;
+                                    }
+                                    if (abs($other['ts'] - $item['ts']) <= 3) {
+                                        $round[$other['member_id']] = $other['entry'];
+                                        $mahjongUsedEntryIds[$other['id']] = true;
+                                    }
+                                }
+                                $mahjongRounds[] = $round;
+                            }
+                        @endphp
+                        @if ($groupsEditable)
+                            <p class="small text-muted px-3 pt-2 mb-0">Klik nama pemain untuk menukar antar grup.</p>
+                        @endif
                         <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
+                            <table class="table table-sm table-bordered table-hover mb-0 align-middle mahjong-group-score-table"
+                                   data-grup-id="{{ $g->id }}"
+                                   data-grup-name="{{ $g->nama }}"
+                                   data-update-url="{{ route('admin.matchmaking.mahjong-group-point-entries.update', $g) }}">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>
-                                            Pemain
-                                            @if ($groupsEditable)
-                                                <span class="fw-normal text-muted text-lowercase">— klik untuk tukar</span>
-                                            @endif
-                                        </th>
-                                        <th class="text-center" style="width:5rem" title="Jumlah menang (ronde)">W</th>
-                                        <th class="text-center" style="width:7rem">Akumulasi</th>
-                                        <th class="text-center" style="width:14rem">Poin Babak</th>
-                                        <th class="text-center" style="width:7rem">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach ($g->members as $member)
-                                        @php
-                                            $memberEntries = $member->relationLoaded('poinEntries')
-                                                ? $member->poinEntries
-                                                : $member->poinEntries()->get();
-                                            $priorBabakLines = ($mahjongPriorBabakBreakdown ?? [])[(int) $member->id_turnamen_peserta] ?? [];
-                                        @endphp
-                                        <tr class="mahjong-member-row" data-member-id="{{ $member->id }}">
-                                            <td class="fw-semibold {{ $groupsEditable ? 'group-member-swap-source' : '' }}"
+                                        <th class="text-center mahjong-ronde-head">Ronde</th>
+                                        @foreach ($mahjongMembers as $member)
+                                            @php
+                                                $priorBabakLines = ($mahjongPriorBabakBreakdown ?? [])[(int) $member->id_turnamen_peserta] ?? [];
+                                            @endphp
+                                            <th class="text-center mahjong-player-head {{ $groupsEditable ? 'group-member-swap-source' : '' }}"
+                                                data-member-id="{{ $member->id }}"
+                                                data-label="{{ $member->display_name }}"
                                                 @if ($groupsEditable)
                                                     role="button"
                                                     tabindex="0"
-                                                    data-member-id="{{ $member->id }}"
                                                     data-group-id="{{ $g->id }}"
                                                     data-group-name="{{ $g->nama }}"
-                                                    data-label="{{ $member->display_name }}"
                                                     title="Klik untuk menukar {{ $unitLabel }} ini"
                                                 @endif>
-                                                @if ($groupsEditable)
-                                                    <i class="bi bi-arrow-left-right me-1 text-primary"></i>
-                                                @endif
-                                                {{ $member->display_name }}
-                                            </td>
-                                            <td class="text-center">
-                                                <span class="badge text-bg-warning text-dark mahjong-menang" data-member-id="{{ $member->id }}">
-                                                    {{ (int) $member->menang }}
-                                                </span>
-                                            </td>
-                                            <td class="text-center text-muted mahjong-akumulasi" data-member-id="{{ $member->id }}">
-                                                <div>{{ (int) $member->poin_akumulasi }}</div>
-                                                @if (! empty($priorBabakLines))
-                                                    <div class="small mt-1 lh-sm">
-                                                        @foreach ($priorBabakLines as $line)
-                                                            <div class="text-muted">
-                                                                {{ $line['label'] ?? ('Babak ' . ($line['babak'] ?? '?')) }}:
-                                                                <span class="fw-semibold text-body">{{ (int) $line['poin'] }}</span>
+                                                <div class="fw-semibold">
+                                                    @if ($groupsEditable)
+                                                        <i class="bi bi-arrow-left-right me-1 text-primary"></i>
+                                                    @endif
+                                                    <span class="mahjong-player-name">{{ $member->display_name }}</span>
+                                                </div>
+                                                @if ($mahjongShowAkumulasi)
+                                                    <div class="small text-muted fw-normal mt-1 mahjong-akumulasi" data-member-id="{{ $member->id }}">
+                                                        <div>Akumulasi {{ (int) $member->poin_akumulasi }}</div>
+                                                        @if (! empty($priorBabakLines))
+                                                            <div class="mt-1 lh-sm">
+                                                                @foreach ($priorBabakLines as $line)
+                                                                    <div>
+                                                                        {{ $line['label'] ?? ('Babak ' . ($line['babak'] ?? '?')) }}:
+                                                                        <span class="fw-semibold text-body">{{ (int) $line['poin'] }}</span>
+                                                                    </div>
+                                                                @endforeach
                                                             </div>
-                                                        @endforeach
+                                                        @endif
                                                     </div>
                                                 @endif
+                                            </th>
+                                        @endforeach
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse ($mahjongRounds as $roundIndex => $round)
+                                        <tr class="mahjong-round-row" data-round="{{ $roundIndex + 1 }}">
+                                            <td class="text-center mahjong-round-number-cell">
+                                                <button type="button"
+                                                        class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
+                                                        title="Edit ronde {{ $roundIndex + 1 }}">
+                                                    <span class="mahjong-round-label">{{ $roundIndex + 1 }}</span>
+                                                    <i class="bi bi-pencil-square ms-1"></i>
+                                                </button>
                                             </td>
-                                            <td class="text-center">
-                                                <span class="badge text-bg-info mahjong-poin-babak" data-member-id="{{ $member->id }}">
-                                                    {{ (int) $member->poin_didapat }}
-                                                </span>
-                                                <div class="mahjong-poin-entries mt-1 d-flex flex-wrap justify-content-center gap-1"
-                                                     data-member-id="{{ $member->id }}"
-                                                     data-destroy-url-template="{{ route('admin.matchmaking.mahjong-point-entries.destroy', ['member' => $member->id, 'entry' => '__ENTRY__']) }}">
-                                                    @foreach ($memberEntries as $entry)
+                                            @foreach ($mahjongMembers as $member)
+                                                @php
+                                                    $entry = $round[(int) $member->id] ?? null;
+                                                @endphp
+                                                <td class="text-center mahjong-round-cell" data-member-id="{{ $member->id }}">
+                                                    @if ($entry)
                                                         <span class="badge text-bg-light text-dark border mahjong-poin-entry {{ $entry->is_winner ? 'border-warning' : '' }}"
-                                                              data-entry-id="{{ $entry->id }}">
+                                                              data-entry-id="{{ $entry->id }}"
+                                                              data-poin="{{ (int) $entry->poin }}"
+                                                              data-is-winner="{{ $entry->is_winner ? '1' : '0' }}">
                                                             @if ($entry->is_winner)
                                                                 <i class="bi bi-trophy-fill text-warning me-1" title="Pemenang ronde"></i>
                                                             @endif
                                                             {{ (int) $entry->poin > 0 ? '+' : '' }}{{ (int) $entry->poin }}
-                                                            <button type="button"
-                                                                    class="btn btn-link btn-sm p-0 ms-1 text-danger btn-delete-mahjong-poin"
-                                                                    data-member-id="{{ $member->id }}"
-                                                                    data-entry-id="{{ $entry->id }}"
-                                                                    data-url="{{ route('admin.matchmaking.mahjong-point-entries.destroy', ['member' => $member->id, 'entry' => $entry->id]) }}"
-                                                                    title="Hapus entri">
-                                                                <i class="bi bi-x"></i>
-                                                            </button>
                                                         </span>
-                                                    @endforeach
-                                                </div>
-                                            </td>
-                                            <td class="text-center">
-                                                <span class="badge text-bg-primary mahjong-total-poin" data-member-id="{{ $member->id }}">
-                                                    {{ $member->total_poin }}
-                                                </span>
+                                                    @else
+                                                        <span class="text-muted">—</span>
+                                                    @endif
+                                                </td>
+                                            @endforeach
+                                        </tr>
+                                    @empty
+                                        <tr class="mahjong-round-empty">
+                                            <td colspan="{{ $mahjongColCount }}" class="text-center text-muted py-3">
+                                                Belum ada ronde.
                                             </td>
                                         </tr>
-                                    @endforeach
+                                    @endforelse
                                 </tbody>
+                                <tfoot class="table-light">
+                                    <tr class="mahjong-subtotal-row">
+                                        <th>Subtotal</th>
+                                        @foreach ($mahjongMembers as $member)
+                                            <th class="text-center">
+                                                <span class="mahjong-subtotal" data-member-id="{{ $member->id }}">
+                                                    {{ (int) $member->poin_didapat }} ({{ (int) $member->menang }})
+                                                </span>
+                                                <span class="d-none mahjong-poin-babak" data-member-id="{{ $member->id }}">{{ (int) $member->poin_didapat }}</span>
+                                                <span class="d-none mahjong-menang" data-member-id="{{ $member->id }}">{{ (int) $member->menang }}</span>
+                                            </th>
+                                        @endforeach
+                                    </tr>
+                                    @if ($mahjongShowAkumulasi)
+                                        <tr class="mahjong-total-row">
+                                            <th>Total</th>
+                                            @foreach ($mahjongMembers as $member)
+                                                <th class="text-center">
+                                                    <span class="badge text-bg-primary mahjong-total-poin" data-member-id="{{ $member->id }}">
+                                                        {{ $member->total_poin }}
+                                                    </span>
+                                                </th>
+                                            @endforeach
+                                        </tr>
+                                    @endif
+                                </tfoot>
                             </table>
                         </div>
                         </div>
@@ -906,6 +1002,34 @@
     .group-member-swap-source:focus {
         background-color: rgba(13, 110, 253, 0.08);
         outline: none;
+    }
+    .mahjong-group-score-table .mahjong-ronde-head {
+        width: 4.5rem;
+        white-space: nowrap;
+    }
+    .mahjong-group-score-table .mahjong-player-head {
+        min-width: 7.5rem;
+        vertical-align: bottom;
+    }
+    .mahjong-group-score-table .mahjong-player-name {
+        text-wrap: balance;
+    }
+    .mahjong-group-score-table .mahjong-subtotal {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .mahjong-group-score-table tfoot th {
+        font-weight: 600;
+    }
+    .mahjong-group-score-table thead th.group-member-swap-source {
+        border-radius: 0;
+    }
+    .mahjong-group-score-table .btn-mahjong-edit-ronde {
+        color: inherit;
+    }
+    .mahjong-group-score-table .btn-mahjong-edit-ronde:hover,
+    .mahjong-group-score-table .btn-mahjong-edit-ronde:focus {
+        color: var(--bs-primary, #0d6efd);
     }
 </style>
 @endpush
