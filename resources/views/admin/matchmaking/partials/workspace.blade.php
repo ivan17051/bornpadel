@@ -64,11 +64,14 @@
                             @elseif ($isPairingOpen && $requiresPairRegistration)
                                 Pendaftaran masih dibuka. Pemain boleh daftar individu, lalu dipasangkan sebelum close — {{ $pairingSummary['complete_pairs'] ?? 0 }} pasangan lengkap saat ini.
                             @elseif ($isMahjongTeam)
+                                @php
+                                    $ppt = max(1, (int) ($mahjongPlayersPerTeam ?? 4));
+                                @endphp
                                 @if (! ($canCloseRegistration ?? false))
-                                    Pendaftaran masih dibuka. <strong class="text-danger">Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).</strong>
+                                    Pendaftaran masih dibuka. <strong class="text-danger">Jumlah tim awal harus 4 atau 8 ({{ $ppt * 4 }} atau {{ $ppt * 8 }} pemain).</strong>
                                     Saat ini ada {{ $approvedCount }} pemain approved.
                                 @else
-                                    Pendaftaran masih dibuka. Siap ditutup dengan {{ $approvedCount }} pemain approved ({{ (int) ($approvedCount / 4) }} tim).
+                                    Pendaftaran masih dibuka. Siap ditutup dengan {{ $approvedCount }} pemain approved ({{ (int) ($approvedCount / $ppt) }} tim).
                                 @endif
                             @else
                                 Pendaftaran masih dibuka. Tutup pendaftaran sebelum membuat grup.
@@ -92,7 +95,7 @@
                         @elseif ($canRandomGrup && $isMahjong)
                             Pendaftaran ditutup. Buat grup Mahjong (4 pemain per grup, jumlah approved harus kelipatan 4).
                         @elseif ($canRandomGrup && $isMahjongTeam)
-                            Pendaftaran ditutup. Buat tim Mahjong Tim (4 atau 8 tim × 4 pemain = 16/32 approved).
+                            Pendaftaran ditutup. Buat tim Mahjong Tim (4 atau 8 tim × {{ $mahjongPlayersPerTeam ?? 4 }} pemain).
                         @elseif ($groupsEditable)
                             Grup sudah dibuat dan masih dapat diubah. Klik {{ $unitLabel }} di daftar anggota untuk menukar, atau buka "Random Grup" untuk acak ulang, lalu klik "Buat Matchmaking" untuk mengunci grup dan membuat jadwal.
                         @elseif ($canRandomGrup)
@@ -119,15 +122,21 @@
                                      data-mahjong="{{ $isMahjong ? '1' : '0' }}"
                                      data-mahjong-team="{{ $isMahjongTeam ? '1' : '0' }}"
                                      data-friendly="{{ $isFriendly ? '1' : '0' }}"
-                                     data-players-per-group="{{ $isFriendly ? ($friendlyPlayersPerGroup ?? 4) : 4 }}">
+                                     data-players-per-group="{{ $isMahjongTeam ? ($mahjongPlayersPerTeam ?? 4) : ($isFriendly ? ($friendlyPlayersPerGroup ?? 4) : 4) }}">
                                     @if ($groupSplitPreview)
                                         {{ $approvedCount }} pemain → {{ $groupSplitPreview['group_count'] }} {{ $isMahjongTeam ? 'tim' : 'grup' }} ({{ $groupSplitPreview['label'] }})
                                     @else
                                         @php
-                                            $ppg = $isFriendly ? ($friendlyPlayersPerGroup ?? 4) : 4;
-                                            $minApproved = $isFriendly ? ($ppg * 2) : 4;
+                                            $ppg = $isMahjongTeam
+                                                ? ($mahjongPlayersPerTeam ?? 4)
+                                                : ($isFriendly ? ($friendlyPlayersPerGroup ?? 4) : 4);
+                                            $minApproved = $isMahjongTeam ? ($ppg * 4) : ($isFriendly ? ($ppg * 2) : 4);
                                         @endphp
-                                        Jumlah pemain approved harus minimal {{ $minApproved }} dan kelipatan {{ $ppg }}.
+                                        @if ($isMahjongTeam)
+                                            Jumlah tim awal harus 4 atau 8 ({{ $ppg * 4 }} atau {{ $ppg * 8 }} pemain).
+                                        @else
+                                            Jumlah pemain approved harus minimal {{ $minApproved }} dan kelipatan {{ $ppg }}.
+                                        @endif
                                     @endif
                                 </div>
                             </div>
@@ -167,10 +176,11 @@
                                 <h6 class="text-muted text-uppercase small mb-2">Syarat Mahjong Tim</h6>
                                 <ul class="small text-muted mb-0 ps-3">
                                     <li>{{ $approvedCount }} pemain approved</li>
-                                    <li>Dibutuhkan tepat 16 atau 32 pemain (4 atau 8 tim × 4)</li>
-                                    <li>Tim lengkap yang daftar bersama (4 pemain) dipertahankan saat buat tim</li>
+                                    <li>Dibutuhkan 4 atau 8 tim ({{ ($mahjongPlayersPerTeam ?? 4) * 4 }} atau {{ ($mahjongPlayersPerTeam ?? 4) * 8 }} pemain, {{ $mahjongPlayersPerTeam ?? 4 }} per tim)</li>
+                                    <li>Tim lengkap yang daftar bersama ({{ $mahjongPlayersPerTeam ?? 4 }} pemain) dipertahankan saat buat tim</li>
+                                    <li>Meja tetap 4 pemain dari 4 tim; pemain ekstra duduk di luar setiap ronde</li>
                                     @if (! ($canCloseRegistration ?? false))
-                                        <li class="text-danger">Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).</li>
+                                        <li class="text-danger">Jumlah tim awal harus 4 atau 8 ({{ ($mahjongPlayersPerTeam ?? 4) * 4 }} atau {{ ($mahjongPlayersPerTeam ?? 4) * 8 }} pemain).</li>
                                     @endif
                                 </ul>
                             </div>

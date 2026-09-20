@@ -7,6 +7,7 @@ use App\Models\GrupMember;
 use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenMeja;
+use App\Models\TurnamenMejaSeat;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\MahjongTeamMatchmakingService;
@@ -151,7 +152,66 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertSame('ongoing', $turnamen->fresh()->status);
     }
 
-    protected function prepareTournament(int $playerCount): Turnamen
+    public function test_generate_five_player_teams_sits_out_one_per_team(): void
+    {
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(20, 5);
+        $result = $service->generateTeams($turnamen, 'random');
+
+        $this->assertCount(4, $result['teams']);
+        $this->assertCount(4, $result['meja']);
+
+        $teams = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->get();
+
+        $this->assertCount(4, $teams);
+        foreach ($teams as $team) {
+            $this->assertCount(5, $team->members);
+        }
+
+        $seatedIds = TurnamenMejaSeat::query()
+            ->whereHas('meja', function ($query) use ($turnamen) {
+                $query->where('id_turnamen', $turnamen->id)->where('is_aktif', true);
+            })
+            ->pluck('id_grup_member');
+
+        $this->assertCount(16, $seatedIds);
+        foreach ($teams as $team) {
+            $this->assertSame(4, $team->members->whereIn('id', $seatedIds)->count());
+        }
+    }
+
+    public function test_close_registration_uses_custom_team_size(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->prepareTournament(15, 5);
+        $turnamen->update(['status' => 'open']);
+        $turnamen->resolveKategori()->update(['status' => 'open']);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.close-registration'), [
+                'id_turnamen' => $turnamen->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Jumlah tim awal harus 4 atau 8 (20 atau 40 pemain).');
+
+        $turnamenOk = $this->prepareTournament(20, 5);
+        $turnamenOk->update(['status' => 'open']);
+        $turnamenOk->resolveKategori()->update(['status' => 'open']);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.close-registration'), [
+                'id_turnamen' => $turnamenOk->id,
+            ])
+            ->assertOk();
+
+        $this->assertSame('ongoing', $turnamenOk->fresh()->status);
+    }
+
+    protected function prepareTournament(int $playerCount, int $playersPerTeam = 4): Turnamen
     {
         $turnamen = Turnamen::create([
             'nama' => 'Mahjong Team Test '.uniqid(),
@@ -159,6 +219,7 @@ class MahjongTeamMatchmakingTest extends TestCase
             'harga' => 100000,
             'maks_peserta' => $playerCount,
             'jenis' => 'mahjong_team',
+            'players_per_group' => $playersPerTeam,
             'status' => 'ongoing',
         ]);
 

@@ -82,6 +82,21 @@ class TurnamenKategori extends Model
         return max(Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP, $value);
     }
 
+    public function mahjongPlayersPerTeam(): int
+    {
+        $turnamen = $this->relationLoaded('turnamen')
+            ? $this->turnamen
+            : $this->turnamen()->first();
+
+        $fallback = $turnamen && $turnamen->isMahjongTeam()
+            ? $turnamen->mahjongPlayersPerTeam()
+            : Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM;
+
+        $value = (int) ($this->players_per_group ?: $fallback);
+
+        return Turnamen::clampMahjongPlayersPerTeam($value);
+    }
+
     public function registrationRosterSize(): int
     {
         $turnamen = $this->relationLoaded('turnamen')
@@ -89,7 +104,7 @@ class TurnamenKategori extends Model
             : $this->turnamen()->first();
 
         if ($turnamen && $turnamen->isMahjongTeam()) {
-            return Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM;
+            return $this->mahjongPlayersPerTeam();
         }
 
         return $this->friendlyPlayersPerGroup();

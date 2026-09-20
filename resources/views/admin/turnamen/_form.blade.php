@@ -124,7 +124,7 @@
         Single: daftar individu, pasangan diacak saat pendaftaran ditutup.
         Double: daftar individu atau berpasangan; semua harus berpasangan sebelum pendaftaran ditutup.
         Mahjong: grup 4 pemain tanpa head-to-head.
-        Mahjong Tim: daftar individu atau satu tim lengkap (4 pemain + nama tim); tim lengkap yang sudah disetujui dipertahankan saat matchmaking.
+        Mahjong Tim: daftar individu atau satu tim lengkap (ukuran tim diatur di bawah); tim lengkap yang sudah disetujui dipertahankan saat matchmaking. Meja tetap 4 pemain dari 4 tim.
         Group Match: liga antar grup (ukuran grup diatur di bawah), tanding pasangan dinamis, tanpa total poin pemain.
         Tamu dapat daftar individu atau satu grup lengkap sesuai ukuran yang ditentukan; grup lengkap yang sudah disetujui dipertahankan saat matchmaking.
     </div>
@@ -134,29 +134,53 @@
 </div>
 
 @php
-    $canEditPlayersPerGroup = ! $turnamenModel || $turnamenModel->canEditFriendlyPlayersPerGroup();
+    $canEditPlayersPerGroup = ! $turnamenModel || $turnamenModel->canEditRegistrationRosterSize();
+    $currentJenis = old('jenis', optional($turnamenModel)->jenis ?? 'single');
+    $isMahjongTeamForm = $currentJenis === 'mahjong_team';
+    $isFriendlyForm = $currentJenis === 'friendly';
+    $showPlayersPerGroup = $isFriendlyForm || $isMahjongTeamForm;
     $playersPerGroupValue = old(
         'players_per_group',
         optional($turnamenModel)->players_per_group
-            ?? \App\Models\Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP
+            ?? ($isMahjongTeamForm
+                ? \App\Models\Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM
+                : \App\Models\Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP)
     );
-    $showPlayersPerGroup = old('jenis', optional($turnamenModel)->jenis ?? 'single') === 'friendly';
+    $rosterMin = $isMahjongTeamForm
+        ? \App\Models\Turnamen::MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM
+        : \App\Models\Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP;
+    $rosterMax = $isMahjongTeamForm
+        ? \App\Models\Turnamen::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM
+        : 255;
+    $rosterNoun = $isMahjongTeamForm ? 'tim' : 'grup';
 @endphp
-<div class="mb-3 {{ $showPlayersPerGroup ? '' : 'd-none' }}" id="players-per-group-wrap">
-    <label for="players_per_group" class="form-label">
-        Pemain per Grup <span class="text-danger">*</span>
+<div class="mb-3 {{ $showPlayersPerGroup ? '' : 'd-none' }}"
+     id="players-per-group-wrap"
+     data-friendly-min="{{ \App\Models\Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP }}"
+     data-friendly-max="255"
+     data-team-min="{{ \App\Models\Turnamen::MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM }}"
+     data-team-max="{{ \App\Models\Turnamen::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM }}"
+     data-friendly-default="{{ \App\Models\Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP }}"
+     data-team-default="{{ \App\Models\Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM }}">
+    <label for="players_per_group" class="form-label" id="players-per-group-label">
+        Pemain per {{ ucfirst($rosterNoun) }} <span class="text-danger">*</span>
     </label>
     <input type="number"
            name="players_per_group"
            id="players_per_group"
            class="form-control @error('players_per_group') is-invalid @enderror"
            value="{{ $playersPerGroupValue }}"
-           min="{{ \App\Models\Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP }}"
-           max="255"
+           min="{{ $rosterMin }}"
+           max="{{ $rosterMax }}"
            @if (! $canEditPlayersPerGroup) readonly @endif
            @if ($showPlayersPerGroup && $canEditPlayersPerGroup) required @endif>
-    <div class="form-text">
-        Minimal {{ \App\Models\Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP }} pemain per grup.
+    <div class="form-text" id="players-per-group-help">
+        @if ($isMahjongTeamForm)
+            Minimal {{ \App\Models\Turnamen::MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM }} pemain per tim (meja tetap 4; pemain ekstra duduk di luar).
+            Maksimal {{ \App\Models\Turnamen::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM }}.
+        @else
+            Minimal {{ \App\Models\Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP }} pemain per grup.
+        @endif
         @if ($canEditPlayersPerGroup)
             Bisa diubah selama status draft/open dan belum ada pendaftaran.
         @else
@@ -175,13 +199,44 @@ document.addEventListener('DOMContentLoaded', function () {
     const jenisSelect = document.getElementById('jenis');
     const wrap = document.getElementById('players-per-group-wrap');
     const input = document.getElementById('players_per_group');
+    const label = document.getElementById('players-per-group-label');
+    const help = document.getElementById('players-per-group-help');
     if (!jenisSelect || !wrap || !input) return;
+
+    const lockHint = @json($canEditPlayersPerGroup
+        ? 'Bisa diubah selama status draft/open dan belum ada pendaftaran.'
+        : 'Terkunci karena sudah ada pendaftaran atau status bukan draft/open.');
 
     const sync = () => {
         const isFriendly = jenisSelect.value === 'friendly';
-        wrap.classList.toggle('d-none', !isFriendly);
+        const isMahjongTeam = jenisSelect.value === 'mahjong_team';
+        const show = isFriendly || isMahjongTeam;
+        wrap.classList.toggle('d-none', !show);
         if (!input.readOnly) {
-            input.required = isFriendly;
+            input.required = show;
+        }
+        if (!show) {
+            return;
+        }
+
+        const min = isMahjongTeam ? wrap.dataset.teamMin : wrap.dataset.friendlyMin;
+        const max = isMahjongTeam ? wrap.dataset.teamMax : wrap.dataset.friendlyMax;
+        const fallback = isMahjongTeam ? wrap.dataset.teamDefault : wrap.dataset.friendlyDefault;
+        input.min = min;
+        input.max = max;
+        const current = parseInt(input.value, 10);
+        const minN = parseInt(min, 10);
+        const maxN = parseInt(max, 10);
+        if (!input.value || Number.isNaN(current) || current < minN || current > maxN) {
+            input.value = fallback;
+        }
+        if (label) {
+            label.innerHTML = (isMahjongTeam ? 'Pemain per Tim' : 'Pemain per Grup') + ' <span class="text-danger">*</span>';
+        }
+        if (help) {
+            help.textContent = isMahjongTeam
+                ? ('Minimal ' + min + ' pemain per tim (meja tetap 4; pemain ekstra duduk di luar). Maksimal ' + max + '. ' + lockHint)
+                : ('Minimal ' + min + ' pemain per grup. ' + lockHint);
         }
     };
 

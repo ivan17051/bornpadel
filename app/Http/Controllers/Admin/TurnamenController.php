@@ -77,12 +77,14 @@ class TurnamenController extends Controller
     {
         $data = collect($request->validated())->except(['foto', 'remove_foto'])->all();
 
-        if (($data['jenis'] ?? $turnamen->jenis) !== 'friendly') {
-            $data['players_per_group'] = null;
-        } elseif ($turnamen->canEditFriendlyPlayersPerGroup()) {
-            $data = $this->normalizePlayersPerGroup($data);
+        if (($data['jenis'] ?? $turnamen->jenis) === 'friendly' || ($data['jenis'] ?? $turnamen->jenis) === 'mahjong_team') {
+            if ($turnamen->canEditRegistrationRosterSize()) {
+                $data = $this->normalizePlayersPerGroup($data);
+            } else {
+                unset($data['players_per_group']);
+            }
         } else {
-            unset($data['players_per_group']);
+            $data['players_per_group'] = null;
         }
 
         if ($request->boolean('remove_foto') && ! $request->hasFile('foto')) {
@@ -131,6 +133,10 @@ class TurnamenController extends Controller
             $data['players_per_group'] = max(
                 Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP,
                 (int) ($data['players_per_group'] ?? Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP)
+            );
+        } elseif (($data['jenis'] ?? null) === 'mahjong_team') {
+            $data['players_per_group'] = Turnamen::clampMahjongPlayersPerTeam(
+                (int) ($data['players_per_group'] ?? Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM)
             );
         } else {
             $data['players_per_group'] = null;

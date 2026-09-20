@@ -2965,16 +2965,29 @@ const BornPadelAdmin = (function () {
             btn.addEventListener('click', async () => {
                 const mode = btn.dataset.mode || 'random';
                 const isMahjong = btn.dataset.mahjong === '1';
+                const isMahjongTeam = btn.dataset.mahjongTeam === '1';
                 const isFriendly = btn.dataset.friendly === '1';
                 const total = parseInt(previewEl?.dataset.approved || '0', 10);
                 const playersPerGroup = parseInt(
-                    previewEl?.dataset.playersPerGroup || (isFriendly ? '4' : '4'),
+                    previewEl?.dataset.playersPerGroup || '4',
                     10
                 ) || 4;
-                const minApproved = isFriendly ? playersPerGroup * 2 : 4;
+                const minApproved = isMahjongTeam
+                    ? playersPerGroup * 4
+                    : (isFriendly ? playersPerGroup * 2 : 4);
 
                 let previewText;
-                if (isMahjong || isFriendly) {
+                if (isMahjongTeam) {
+                    const teamCount = playersPerGroup > 0 ? total / playersPerGroup : 0;
+                    if (!Number.isInteger(teamCount) || (teamCount !== 4 && teamCount !== 8)) {
+                        showAlert(
+                            `Jumlah tim awal harus 4 atau 8 (${playersPerGroup * 4} atau ${playersPerGroup * 8} pemain).`,
+                            'error'
+                        );
+                        return;
+                    }
+                    previewText = `${total} pemain → ${teamCount} tim (${playersPerGroup} pemain per tim)`;
+                } else if (isMahjong || isFriendly) {
                     if (total < minApproved || total % playersPerGroup !== 0) {
                         showAlert(
                             isFriendly
@@ -3001,8 +3014,17 @@ const BornPadelAdmin = (function () {
                     previewText = `${total} pemain → ${sizes.length} grup (${sizes.join(' + ')})`;
                 }
 
-                const confirmed = await confirmAction(mode === 'by_rating'
-                    ? {
+                let confirmConfig;
+                if (isMahjongTeam) {
+                    confirmConfig = {
+                        title: mode === 'by_rating'
+                            ? 'Buat tim Mahjong Tim berdasarkan rating?'
+                            : 'Buat tim Mahjong Tim + meja?',
+                        text: `${previewText}. Meja tetap 4 pemain dari 4 tim; pemain ekstra duduk di luar.`,
+                        confirmText: 'Ya, lanjutkan',
+                    };
+                } else if (mode === 'by_rating') {
+                    confirmConfig = {
                         title: isFriendly
                             ? 'Isi grup Group Match berdasarkan rating?'
                             : (isMahjong ? 'Buat grup berdasarkan rating?' : 'Kelompokkan pemain berdasarkan rating?'),
@@ -3012,8 +3034,9 @@ const BornPadelAdmin = (function () {
                                 ? `${previewText}. Hanya pemain belum digrup yang diacak (jika kerangka sudah ada).`
                                 : `${previewText}. Grup dapat diubah kembali sebelum matchmaking dibuat.`),
                         confirmText: isFriendly || isMahjong ? 'Ya, lanjutkan' : 'Ya, buat grup rating',
-                    }
-                    : {
+                    };
+                } else {
+                    confirmConfig = {
                         title: isFriendly
                             ? 'Acak pemain Group Match ke grup?'
                             : (isMahjong ? 'Buat grup Mahjong?' : 'Acak pemain ke grup?'),
@@ -3023,7 +3046,10 @@ const BornPadelAdmin = (function () {
                                 ? `${previewText}. Hanya pemain belum digrup yang diacak (jika kerangka sudah ada).`
                                 : `${previewText}. Grup dapat diubah kembali sebelum matchmaking dibuat.`),
                         confirmText: isFriendly || isMahjong ? 'Ya, lanjutkan' : 'Ya, random grup',
-                    });
+                    };
+                }
+
+                const confirmed = await confirmAction(confirmConfig);
                 if (!confirmed) return;
 
                 const original = btn.innerHTML;
@@ -3035,7 +3061,7 @@ const BornPadelAdmin = (function () {
                         mode,
                     };
 
-                    if (!isMahjong && !isFriendly) {
+                    if (!isMahjong && !isMahjongTeam && !isFriendly) {
                         Object.assign(payload, getGroupSettings());
                     }
 

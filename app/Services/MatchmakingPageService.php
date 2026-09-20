@@ -180,6 +180,16 @@ class MatchmakingPageService
 
                 : \App\Models\Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP);
 
+        $mahjongPlayersPerTeam = $kategori && $isMahjongTeam
+
+            ? $kategori->mahjongPlayersPerTeam()
+
+            : ($turnamen && $isMahjongTeam
+
+                ? $turnamen->mahjongPlayersPerTeam()
+
+                : \App\Models\Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM);
+
 
 
         if ($turnamen && $kategori) {
@@ -228,7 +238,23 @@ class MatchmakingPageService
 
 
 
-            if ($isMahjong || $isMahjongTeam) {
+            if ($isMahjongTeam) {
+
+                $perTeam = max(1, (int) $mahjongPlayersPerTeam);
+                $teamCount = intdiv($approvedCount, $perTeam);
+                $validStart = $approvedCount > 0
+                    && $approvedCount % $perTeam === 0
+                    && in_array($teamCount, \App\Services\MahjongTeamMatchmakingService::ALLOWED_START_TEAM_COUNTS, true);
+
+                $groupSplitPreview = $validStart
+                    ? [
+                        'group_count' => $teamCount,
+                        'sizes' => array_fill(0, $teamCount, $perTeam),
+                        'label' => implode(' + ', array_fill(0, $teamCount, $perTeam)),
+                    ]
+                    : null;
+
+            } elseif ($isMahjong) {
 
                 $mahjongGroupCount = $approvedCount >= 4 ? intdiv($approvedCount, 4) : 0;
 
@@ -405,6 +431,8 @@ class MatchmakingPageService
             'isFriendly' => $isFriendly,
 
             'friendlyPlayersPerGroup' => $friendlyPlayersPerGroup,
+
+            'mahjongPlayersPerTeam' => $mahjongPlayersPerTeam,
 
             'friendlyMatches' => $friendlyMatches,
 

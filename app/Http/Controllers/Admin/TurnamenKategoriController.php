@@ -54,12 +54,19 @@ class TurnamenKategoriController extends Controller
     {
         $this->assertBelongsToTurnamen($turnamen, $kategori);
 
+        $ppgMin = $turnamen->isMahjongTeam()
+            ? Turnamen::MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM
+            : Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP;
+        $ppgMax = $turnamen->isMahjongTeam()
+            ? Turnamen::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM
+            : 255;
+
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'nama' => ['required', 'string', 'max:255'],
             'harga' => ['required', 'numeric', 'min:0'],
             'maks_peserta' => ['nullable', 'integer', 'min:1'],
             'urutan' => ['nullable', 'integer', 'min:1'],
-            'players_per_group' => ['nullable', 'integer', 'min:' . Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP],
+            'players_per_group' => ['nullable', 'integer', 'min:'.$ppgMin, 'max:'.$ppgMax],
         ]);
 
         if ($validator->fails()) {

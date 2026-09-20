@@ -17,7 +17,7 @@ class UpdateTurnamenRequest extends FormRequest
     {
         /** @var Turnamen|null $turnamen */
         $turnamen = $this->route('turnamen');
-        $canEditSize = ! $turnamen || $turnamen->canEditFriendlyPlayersPerGroup();
+        $canEditSize = ! $turnamen || $turnamen->canEditRegistrationRosterSize();
         $jenis = $this->input('jenis', optional($turnamen)->jenis);
 
         $rules = [
@@ -40,6 +40,13 @@ class UpdateTurnamenRequest extends FormRequest
                 'min:' . Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP,
                 'max:255',
             ];
+        } elseif ($jenis === 'mahjong_team' && $canEditSize) {
+            $rules['players_per_group'] = [
+                'required',
+                'integer',
+                'min:' . Turnamen::MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM,
+                'max:' . Turnamen::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM,
+            ];
         }
 
         return $rules;
@@ -51,29 +58,32 @@ class UpdateTurnamenRequest extends FormRequest
             /** @var Turnamen|null $turnamen */
             $turnamen = $this->route('turnamen');
 
-            if (! $turnamen || $this->input('jenis') !== 'friendly') {
+            if (! $turnamen || ! in_array($this->input('jenis'), ['friendly', 'mahjong_team'], true)) {
                 return;
             }
 
-            if (! $turnamen->canEditFriendlyPlayersPerGroup()) {
+            $isTeam = $this->input('jenis') === 'mahjong_team';
+            $currentSize = $isTeam
+                ? $turnamen->mahjongPlayersPerTeam()
+                : $turnamen->friendlyPlayersPerGroup();
+            $lockMessage = $isTeam
+                ? 'Jumlah pemain per tim hanya bisa diubah saat status draft/open dan belum ada pendaftaran.'
+                : 'Jumlah pemain per grup hanya bisa diubah saat status draft/open dan belum ada pendaftaran.';
+            $requiredMessage = $isTeam
+                ? 'Jumlah pemain per tim wajib diisi untuk Mahjong Tim.'
+                : 'Jumlah pemain per grup wajib diisi untuk Group Match.';
+
+            if (! $turnamen->canEditRegistrationRosterSize()) {
                 $incoming = $this->input('players_per_group');
-                if ($incoming !== null
-                    && (int) $incoming !== (int) $turnamen->friendlyPlayersPerGroup()
-                ) {
-                    $validator->errors()->add(
-                        'players_per_group',
-                        'Jumlah pemain per grup hanya bisa diubah saat status draft/open dan belum ada pendaftaran.'
-                    );
+                if ($incoming !== null && (int) $incoming !== (int) $currentSize) {
+                    $validator->errors()->add('players_per_group', $lockMessage);
                 }
 
                 return;
             }
 
             if (! $this->filled('players_per_group')) {
-                $validator->errors()->add(
-                    'players_per_group',
-                    'Jumlah pemain per grup wajib diisi untuk Group Match.'
-                );
+                $validator->errors()->add('players_per_group', $requiredMessage);
             }
         });
     }
@@ -88,9 +98,15 @@ class UpdateTurnamenRequest extends FormRequest
             'harga.min' => 'Biaya pendaftaran tidak boleh negatif.',
             'status.in' => 'Status turnamen tidak valid.',
             'jenis.in' => 'Jenis turnamen tidak valid.',
-            'players_per_group.required' => 'Jumlah pemain per grup wajib diisi untuk Group Match.',
-            'players_per_group.min' => 'Jumlah pemain per grup minimal ' . Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP . '.',
-            'players_per_group.max' => 'Jumlah pemain per grup maksimal 255.',
+            'players_per_group.required' => $this->input('jenis') === 'mahjong_team'
+                ? 'Jumlah pemain per tim wajib diisi untuk Mahjong Tim.'
+                : 'Jumlah pemain per grup wajib diisi untuk Group Match.',
+            'players_per_group.min' => $this->input('jenis') === 'mahjong_team'
+                ? 'Jumlah pemain per tim minimal ' . Turnamen::MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM . '.'
+                : 'Jumlah pemain per grup minimal ' . Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP . '.',
+            'players_per_group.max' => $this->input('jenis') === 'mahjong_team'
+                ? 'Jumlah pemain per tim maksimal ' . Turnamen::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM . '.'
+                : 'Jumlah pemain per grup maksimal 255.',
             'foto.image' => 'Foto harus berupa gambar.',
             'foto.mimes' => 'Foto harus berformat JPG, PNG, atau WebP.',
             'foto.max' => 'Ukuran foto maksimal 5 MB.',

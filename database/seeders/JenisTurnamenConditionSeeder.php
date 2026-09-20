@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Hash;
  * - single: even approved solos (16) — siap tutup pendaftaran / random pair
  * - double: 8 pasangan lengkap approved — siap tutup tanpa solo
  * - mahjong: 16 approved (kelipatan 4)
- * - mahjong_team: 16 approved (4 tim × 4)
+ * - mahjong_team: 16 approved (4 tim × players_per_group, default 4)
  * - friendly: 16 approved, players_per_group = 4 (4 grup)
  *
  * Run:
@@ -283,6 +283,9 @@ class JenisTurnamenConditionSeeder extends Seeder
         if ($jenis === 'friendly') {
             $payload['players_per_group'] = $playersPerGroup
                 ?? Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP;
+        } elseif ($jenis === 'mahjong_team') {
+            $payload['players_per_group'] = $playersPerGroup
+                ?? Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM;
         }
 
         return Turnamen::create($payload);

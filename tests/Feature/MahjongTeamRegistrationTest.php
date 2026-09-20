@@ -6,10 +6,12 @@ use App\Models\Grup;
 use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
+use App\Models\User;
 use App\Services\GroupMatchmakingService;
 use App\Services\MahjongTeamMatchmakingService;
 use App\Services\PemainRegistrationService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class MahjongTeamRegistrationTest extends TestCase
@@ -186,15 +188,161 @@ class MahjongTeamRegistrationTest extends TestCase
         );
     }
 
-    protected function createOpenMahjongTeam(): Turnamen
+    public function test_custom_team_size_registration_and_edit_lock(): void
+    {
+        $turnamen = $this->createOpenMahjongTeam(5);
+        $this->assertSame(5, $turnamen->registrationRosterSize());
+        $this->assertTrue($turnamen->canEditRegistrationRosterSize());
+
+        $result = app(PemainRegistrationService::class)->registerGroup(
+            $turnamen,
+            'Five Dragons',
+            $this->playerPayloads(20, 5),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false,
+            'approved'
+        );
+
+        $this->assertCount(5, $result['players']);
+        $this->assertSame(5, $result['grup_pendaftaran']->members()->count());
+        $this->assertFalse($turnamen->fresh()->canEditRegistrationRosterSize());
+    }
+
+    public function test_team_registration_rejects_wrong_custom_size(): void
+    {
+        $turnamen = $this->createOpenMahjongTeam(5);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Pendaftaran tim harus berisi tepat 5 pemain.');
+
+        app(PemainRegistrationService::class)->registerGroup(
+            $turnamen,
+            'Too Small',
+            $this->playerPayloads(21, 4),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false
+        );
+    }
+
+    public function test_guest_register_page_uses_custom_team_size(): void
+    {
+        $turnamen = $this->createOpenMahjongTeam(5);
+
+        $this->get(route('guest.register', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->assertSee('Satu Tim (5 pemain)')
+            ->assertSee('daftar satu tim lengkap (5 pemain');
+    }
+
+    public function test_admin_can_create_mahjong_team_with_custom_size_and_rejects_below_four(): void
+    {
+        $admin = $this->makeAdmin();
+
+        $this->actingAs($admin)
+            ->get(route('admin.turnamen.create'))
+            ->assertOk()
+            ->assertSee('Pemain per Tim', false)
+            ->assertSee('data-team-min="4"', false)
+            ->assertSee('data-team-max="8"', false)
+            ->assertSee('pemain ekstra duduk di luar', false);
+
+        $this->actingAs($admin)
+            ->post(route('admin.turnamen.store'), [
+                'nama' => 'Mahjong Tim Size Check',
+                'tanggal' => now()->addDays(3)->toDateString(),
+                'harga' => 75000,
+                'maks_peserta' => 40,
+                'jenis' => 'mahjong_team',
+                'status' => 'open',
+                'players_per_group' => 5,
+            ])
+            ->assertRedirect(route('admin.turnamen.index'));
+
+        $turnamen = Turnamen::where('nama', 'Mahjong Tim Size Check')->first();
+        $this->assertNotNull($turnamen);
+        $this->assertSame(5, $turnamen->mahjongPlayersPerTeam());
+        $this->assertSame(5, $turnamen->resolveKategori()->mahjongPlayersPerTeam());
+
+        $this->actingAs($admin)
+            ->get(route('admin.turnamen.edit', $turnamen))
+            ->assertOk()
+            ->assertSee('Pemain per Tim', false)
+            ->assertSee('value="5"', false)
+            ->assertSee('Pemain / tim', false);
+
+        $this->actingAs($admin)
+            ->from(route('admin.turnamen.create'))
+            ->post(route('admin.turnamen.store'), [
+                'nama' => 'Mahjong Tim Too Small',
+                'tanggal' => now()->addDays(3)->toDateString(),
+                'harga' => 75000,
+                'maks_peserta' => 16,
+                'jenis' => 'mahjong_team',
+                'status' => 'open',
+                'players_per_group' => 3,
+            ])
+            ->assertRedirect(route('admin.turnamen.create'))
+            ->assertSessionHasErrors('players_per_group');
+    }
+
+    public function test_players_per_team_is_locked_after_registration(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->createOpenMahjongTeam(5);
+
+        app(PemainRegistrationService::class)->registerGroup(
+            $turnamen,
+            'Locked Squad',
+            $this->playerPayloads(30, 5),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false,
+            'approved'
+        );
+
+        $this->actingAs($admin)
+            ->from(route('admin.turnamen.edit', $turnamen))
+            ->put(route('admin.turnamen.update', $turnamen), [
+                'nama' => $turnamen->nama,
+                'tanggal' => $turnamen->tanggal->toDateString(),
+                'harga' => $turnamen->harga,
+                'maks_peserta' => $turnamen->maks_peserta,
+                'jenis' => 'mahjong_team',
+                'status' => 'open',
+                'players_per_group' => 6,
+            ])
+            ->assertRedirect(route('admin.turnamen.edit', $turnamen))
+            ->assertSessionHasErrors('players_per_group');
+
+        $this->assertSame(5, $turnamen->fresh()->mahjongPlayersPerTeam());
+    }
+
+    protected function createOpenMahjongTeam(int $playersPerTeam = 4): Turnamen
     {
         return Turnamen::create([
             'nama' => 'Mahjong Team Reg '.uniqid(),
             'tanggal' => now()->toDateString(),
             'harga' => 100000,
-            'maks_peserta' => 32,
+            'maks_peserta' => 40,
             'jenis' => 'mahjong_team',
+            'players_per_group' => $playersPerTeam,
             'status' => 'open',
+        ]);
+    }
+
+    protected function makeAdmin(): User
+    {
+        return User::create([
+            'name' => 'Team Reg Admin',
+            'username' => 'team-reg-admin-'.uniqid(),
+            'email' => uniqid().'@example.test',
+            'password' => Hash::make('12345678'),
+            'role' => 'admin',
         ]);
     }
 

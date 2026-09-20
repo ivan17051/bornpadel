@@ -17,6 +17,10 @@ class Turnamen extends Model
 
     public const MAHJONG_TEAM_PLAYERS_PER_TEAM = 4;
 
+    public const MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM = 4;
+
+    public const MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM = 8;
+
     protected $fillable = [
         'nama',
         'tanggal',
@@ -161,10 +165,34 @@ class Turnamen extends Model
     public function registrationRosterSize(): int
     {
         if ($this->isMahjongTeam()) {
-            return self::MAHJONG_TEAM_PLAYERS_PER_TEAM;
+            return $this->mahjongPlayersPerTeam();
         }
 
         return $this->friendlyPlayersPerGroup();
+    }
+
+    public function mahjongPlayersPerTeam(): int
+    {
+        if (! $this->isMahjongTeam()) {
+            return self::MAHJONG_TEAM_PLAYERS_PER_TEAM;
+        }
+
+        $value = (int) ($this->players_per_group ?: self::MAHJONG_TEAM_PLAYERS_PER_TEAM);
+
+        return self::clampMahjongPlayersPerTeam($value);
+    }
+
+    public static function clampMahjongPlayersPerTeam(int $value): int
+    {
+        return max(
+            self::MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM,
+            min(self::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM, $value)
+        );
+    }
+
+    public function usesRosterSizeSetting(): bool
+    {
+        return $this->isFriendly() || $this->isMahjongTeam();
     }
 
     public function registrationRosterNoun(bool $titleCase = false): string
@@ -189,9 +217,9 @@ class Turnamen extends Model
     }
 
     /**
-     * Group size may change only while draft/open and nobody has registered yet.
+     * Roster size may change only while draft/open and nobody has registered yet.
      */
-    public function canEditFriendlyPlayersPerGroup(): bool
+    public function canEditRegistrationRosterSize(): bool
     {
         if (! $this->exists) {
             return true;
@@ -202,6 +230,14 @@ class Turnamen extends Model
         }
 
         return ! $this->hasRegistrations();
+    }
+
+    /**
+     * Group size may change only while draft/open and nobody has registered yet.
+     */
+    public function canEditFriendlyPlayersPerGroup(): bool
+    {
+        return $this->canEditRegistrationRosterSize();
     }
 
     public function hasRegistrations(): bool

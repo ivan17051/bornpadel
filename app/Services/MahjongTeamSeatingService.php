@@ -37,10 +37,10 @@ class MahjongTeamSeatingService
                 ? $team->members->count()
                 : $team->members()->count();
 
-            if ($memberCount !== self::PLAYERS_PER_TEAM) {
+            if ($memberCount < self::TABLE_SIZE) {
                 throw new RuntimeException(sprintf(
-                    'Setiap tim harus berisi tepat %d pemain.',
-                    self::PLAYERS_PER_TEAM
+                    'Setiap tim harus berisi minimal %d pemain.',
+                    self::TABLE_SIZE
                 ));
             }
         }
@@ -50,7 +50,7 @@ class MahjongTeamSeatingService
                 ? $team->members
                 : $team->members()->get();
 
-            return $members->shuffle()->values();
+            return $members->shuffle()->values()->take(self::TABLE_SIZE)->values();
         })->values();
 
         if ($teamCount === 8) {
@@ -216,8 +216,8 @@ class MahjongTeamSeatingService
             }
         }
 
-        if (count($seenMembers) !== $teamCount * self::PLAYERS_PER_TEAM) {
-            throw new RuntimeException('Semua pemain tim aktif harus mendapat kursi.');
+        if (count($seenMembers) !== $teamCount * self::TABLE_SIZE) {
+            throw new RuntimeException('Setiap tim aktif harus mendapat 4 kursi di meja.');
         }
     }
 

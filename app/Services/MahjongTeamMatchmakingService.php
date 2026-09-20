@@ -61,15 +61,20 @@ class MahjongTeamMatchmakingService
     {
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
         $count = $this->approvedEntries($turnamen, $kategori->id)->count();
+        $perTeam = $this->playersPerTeam($turnamen, $kategori->id);
 
-        if ($count % self::PLAYERS_PER_TEAM !== 0) {
-            throw new RuntimeException('Jumlah pemain approved harus kelipatan 4.');
+        if ($perTeam < 1 || $count % $perTeam !== 0) {
+            throw new RuntimeException('Jumlah pemain approved harus kelipatan '.$perTeam.'.');
         }
 
-        $teamCount = (int) ($count / self::PLAYERS_PER_TEAM);
+        $teamCount = (int) ($count / $perTeam);
 
         if (! in_array($teamCount, self::ALLOWED_START_TEAM_COUNTS, true)) {
-            throw new RuntimeException('Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).');
+            throw new RuntimeException(sprintf(
+                'Jumlah tim awal harus 4 atau 8 (%d atau %d pemain).',
+                $perTeam * 4,
+                $perTeam * 8
+            ));
         }
     }
 
@@ -143,8 +148,9 @@ class MahjongTeamMatchmakingService
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
         $entries = $this->approvedEntries($turnamen, $kategori->id);
         $this->assertValidStartingRoster($turnamen, $kategori->id);
+        $perTeam = $this->playersPerTeam($turnamen, $kategori->id);
 
-        return DB::transaction(function () use ($turnamen, $kategori, $entries, $mode) {
+        return DB::transaction(function () use ($turnamen, $kategori, $entries, $mode, $perTeam) {
             $this->deleteAllMeja($kategori->id);
             $kategori->grup()->delete();
 
@@ -166,7 +172,7 @@ class MahjongTeamMatchmakingService
                     $teamEntries->push($entry);
                 }
 
-                if ($teamEntries->count() !== self::PLAYERS_PER_TEAM) {
+                if ($teamEntries->count() !== $perTeam) {
                     continue;
                 }
 
@@ -207,7 +213,7 @@ class MahjongTeamMatchmakingService
                 ? $remaining->sortByDesc(fn (TurnamenPeserta $e) => optional($e->pemain1)->rating ?? 0)->values()
                 : $remaining->shuffle()->values();
 
-            $chunks = $ordered->chunk(self::PLAYERS_PER_TEAM)->values();
+            $chunks = $ordered->chunk($perTeam)->values();
             $generatedIndex = 0;
 
             foreach ($chunks as $teamEntries) {
@@ -738,6 +744,11 @@ class MahjongTeamMatchmakingService
             ->sum('poin');
 
         $member->update(['poin_didapat' => $sum]);
+    }
+
+    protected function playersPerTeam(Turnamen $turnamen, $idKategori = null): int
+    {
+        return $this->resolveCompetitionKategori($turnamen, $idKategori)->mahjongPlayersPerTeam();
     }
 
     /**

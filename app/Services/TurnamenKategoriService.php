@@ -136,15 +136,17 @@ class TurnamenKategoriService
             $kategori->urutan = max(1, (int) $data['urutan']);
         }
 
-        if ($turnamen->isFriendly()
+        if (($turnamen->isFriendly() || $turnamen->isMahjongTeam())
             && array_key_exists('players_per_group', $data)
             && $data['players_per_group'] !== null
             && $data['players_per_group'] !== ''
             && $this->canEditPlayersPerGroup($kategori)) {
-            $kategori->players_per_group = max(
-                Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP,
-                (int) $data['players_per_group']
-            );
+            $kategori->players_per_group = $turnamen->isMahjongTeam()
+                ? Turnamen::clampMahjongPlayersPerTeam((int) $data['players_per_group'])
+                : max(
+                    Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP,
+                    (int) $data['players_per_group']
+                );
         }
 
         $kategori->save();

@@ -723,12 +723,14 @@ class MatchmakingController extends Controller
             }
 
             $modeLabel = $mode === 'by_rating' ? 'berdasarkan rating' : 'secara acak';
+            $perTeam = $turnamen->resolveKategori($kategoriId)->mahjongPlayersPerTeam();
 
             return response()->json([
                 'success' => true,
                 'message' => sprintf(
-                    'Berhasil membuat %d tim dan %d meja silang (%s).',
+                    'Berhasil membuat %d tim (%d pemain per tim) dan %d meja silang (%s).',
                     count($result['teams']),
+                    $perTeam,
                     count($result['meja']),
                     $modeLabel
                 ),

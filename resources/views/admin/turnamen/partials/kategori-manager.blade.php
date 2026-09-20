@@ -4,16 +4,31 @@
         : $turnamen->kategori()->ordered()->get());
     $kategoriService = app(\App\Services\TurnamenKategoriService::class);
     $isFriendly = $turnamen->isFriendly();
+    $isMahjongTeam = $turnamen->isMahjongTeam();
+    $showPpg = $isFriendly || $isMahjongTeam;
     $openAddModal = session('open_kategori_modal') === true;
     $openEditId = session('open_kategori_edit_id') ? (int) session('open_kategori_edit_id') : null;
     $minFriendlyPpg = \App\Models\Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP;
     $defaultFriendlyPpg = \App\Models\Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP;
+    $minPpg = $isMahjongTeam
+        ? \App\Models\Turnamen::MAHJONG_TEAM_MIN_PLAYERS_PER_TEAM
+        : $minFriendlyPpg;
+    $maxPpg = $isMahjongTeam
+        ? \App\Models\Turnamen::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM
+        : 255;
+    $defaultPpg = $isMahjongTeam
+        ? \App\Models\Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM
+        : $defaultFriendlyPpg;
+    $ppgNoun = $isMahjongTeam ? 'tim' : 'grup';
 @endphp
 
 <div class="card h-100" id="kategori-manager"
      data-is-friendly="{{ $isFriendly ? '1' : '0' }}"
-     data-min-ppg="{{ $minFriendlyPpg }}"
-     data-default-ppg="{{ $defaultFriendlyPpg }}">
+     data-is-mahjong-team="{{ $isMahjongTeam ? '1' : '0' }}"
+     data-show-ppg="{{ $showPpg ? '1' : '0' }}"
+     data-min-ppg="{{ $minPpg }}"
+     data-max-ppg="{{ $maxPpg }}"
+     data-default-ppg="{{ $defaultPpg }}">
     <div class="card-header d-flex align-items-center gap-2">
         <h5 class="card-title mb-0">Kategori</h5>
         <div class="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
@@ -57,7 +72,7 @@
                             } else {
                                 $statusBadge = 'secondary';
                             }
-                            $ppg = $kat->players_per_group ?? $defaultFriendlyPpg;
+                            $ppg = $kat->players_per_group ?? $defaultPpg;
                         @endphp
                         <tr>
                             <td class="ps-3 text-muted">{{ $kat->urutan }}</td>
@@ -269,14 +284,15 @@
                                    min="1"
                                    placeholder="Tanpa batas">
                         </div>
-                        <div class="col-md-6 {{ $isFriendly ? '' : 'd-none' }}" id="modal-edit-ppg-wrap">
-                            <label for="modal-edit-kategori-ppg" class="form-label">Pemain / grup</label>
+                        <div class="col-md-6 {{ $showPpg ? '' : 'd-none' }}" id="modal-edit-ppg-wrap">
+                            <label for="modal-edit-kategori-ppg" class="form-label">Pemain / {{ $ppgNoun }}</label>
                             <input type="number"
                                    name="players_per_group"
                                    id="modal-edit-kategori-ppg"
                                    class="form-control"
                                    value="{{ $openEditId ? old('players_per_group') : '' }}"
-                                   min="{{ $minFriendlyPpg }}">
+                                   min="{{ $minPpg }}"
+                                   max="{{ $maxPpg }}">
                         </div>
                     </div>
                     <div class="form-text mt-3" id="modal-edit-kategori-status-hint"></div>
@@ -321,8 +337,12 @@ document.addEventListener('DOMContentLoaded', function () {
             ppgInput.value = btn.dataset.ppg || manager.dataset.defaultPpg || '4';
             var canEditPpg = btn.dataset.canEditPpg === '1';
             ppgInput.readOnly = !canEditPpg;
+            ppgInput.min = manager.dataset.minPpg || '2';
+            if (manager.dataset.maxPpg) {
+                ppgInput.max = manager.dataset.maxPpg;
+            }
             if (ppgWrap) {
-                ppgWrap.classList.toggle('d-none', manager.dataset.isFriendly !== '1');
+                ppgWrap.classList.toggle('d-none', manager.dataset.showPpg !== '1');
             }
         }
         if (titleEl) {
@@ -367,7 +387,7 @@ document.addEventListener('DOMContentLoaded', function () {
         @if (old('maks_peserta') !== null)
         maksInput.value = @json(old('maks_peserta'));
         @endif
-        @if (old('players_per_group') !== null && $isFriendly)
+        @if (old('players_per_group') !== null && $showPpg)
         if (ppgInput) {
             ppgInput.value = @json(old('players_per_group'));
         }
