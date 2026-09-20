@@ -126,7 +126,9 @@ class RegistrationController extends Controller
         }
 
         if ($registrationType === 'group') {
-            $message = 'Pendaftaran grup berhasil! Tim kami akan memverifikasi data Anda.';
+            $message = $turnamen->isMahjongTeam()
+                ? 'Pendaftaran tim berhasil! Tim kami akan memverifikasi data Anda.'
+                : 'Pendaftaran grup berhasil! Tim kami akan memverifikasi data Anda.';
         } elseif ($registrationType === 'pair') {
             $message = 'Pendaftaran berpasangan berhasil! Tim kami akan memverifikasi data Anda.';
         } else {

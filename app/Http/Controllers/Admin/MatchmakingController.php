@@ -507,6 +507,37 @@ class MatchmakingController extends Controller
         ]);
     }
 
+    public function updateMahjongGroupAdjustments(Request $request, Grup $grup)
+    {
+        $request->validate([
+            'scores' => ['required', 'array', 'size:4'],
+            'scores.*.id' => ['required', 'integer'],
+            'scores.*.poin' => ['required', 'integer'],
+        ]);
+
+        try {
+            $updatedMembers = $this->mahjongService->updateGroupAdjustments(
+                $grup,
+                $request->input('scores')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bonus/penalti babak berhasil disimpan.',
+            'data' => [
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
+                })->values(),
+            ],
+        ]);
+    }
+
     public function storeMahjongTeamMejaPointEntries(Request $request, TurnamenMeja $meja)
     {
         $request->validate([
@@ -585,6 +616,8 @@ class MatchmakingController extends Controller
             'id' => $member->id,
             'poin_didapat' => (int) $member->poin_didapat,
             'poin_akumulasi' => (int) $member->poin_akumulasi,
+            'poin_penyesuaian' => (int) $member->poin_penyesuaian,
+            'poin_babak' => (int) $member->poin_babak,
             'total_poin' => $member->total_poin,
             'menang' => (int) $member->menang,
             'entries' => $member->poinEntries->map(function ($entry) {

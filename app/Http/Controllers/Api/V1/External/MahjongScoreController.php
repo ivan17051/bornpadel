@@ -342,6 +342,7 @@ class MahjongScoreController extends Controller
             'nama' => $member->display_name,
             'poin_didapat' => (int) $member->poin_didapat,
             'poin_akumulasi' => (int) $member->poin_akumulasi,
+            'poin_penyesuaian' => (int) $member->poin_penyesuaian,
             'total_poin' => $member->total_poin,
             'menang' => (int) $member->menang,
             'entries' => $member->poinEntries->map(function (MahjongPoinEntry $entry) {

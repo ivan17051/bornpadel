@@ -129,6 +129,11 @@ class GroupMatchmakingService
             return ! $summary['odd_player_warning'];
         }
 
+        if ($turnamen->isMahjongTeam()) {
+            return app(MahjongTeamMatchmakingService::class)
+                ->hasValidStartingRoster($turnamen, $kategori->id);
+        }
+
         return true;
     }
 
@@ -138,6 +143,11 @@ class GroupMatchmakingService
 
         if (! $kategori->isRegistrationOpen()) {
             throw new RuntimeException('Pendaftaran sudah ditutup atau turnamen belum dibuka.');
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            app(MahjongTeamMatchmakingService::class)
+                ->assertValidStartingRoster($turnamen, $kategori->id);
         }
 
         $pairingResult = DB::transaction(function () use ($turnamen, $idKategori) {

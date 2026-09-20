@@ -10,9 +10,11 @@
     $friendlyRegistrationGroupTargets = collect($friendlyRegistrationGroupTargets ?? []);
     $friendlyPlayersPerGroup = $turnamen && $turnamen->allowsGroupRegistration()
         ? (isset($kategori) && $kategori
-            ? $kategori->friendlyPlayersPerGroup()
-            : $turnamen->friendlyPlayersPerGroup())
+            ? $kategori->registrationRosterSize()
+            : $turnamen->registrationRosterSize())
         : 4;
+    $rosterNoun = $turnamen ? $turnamen->registrationRosterNoun() : 'grup';
+    $rosterNounTitle = $turnamen ? $turnamen->registrationRosterNoun(true) : 'Grup';
     $sortThParams = compact('filterRoute', 'preserveTab');
 @endphp
 
@@ -281,8 +283,8 @@
                                                         class="btn btn-sm btn-outline-secondary friendly-reg-rename-open ms-auto"
                                                         data-group-id="{{ $friendlyGroup->id }}"
                                                         data-group-name="{{ $friendlyGroup->nama }}"
-                                                        title="Ubah nama grup"
-                                                        aria-label="Ubah nama grup">
+                                                        title="Ubah nama {{ $rosterNoun }}"
+                                                        aria-label="Ubah nama {{ $rosterNoun }}">
                                                     <i class="bi bi-pencil"></i>
                                                 </button>
                                             @endif
@@ -357,14 +359,14 @@
                                                     'peserta_id' => $pesertaRow->id,
                                                     'pemain_name' => $item->nama,
                                                     'from_group_id' => $fromGroupId ?: '',
-                                                    'label' => 'Pindah Grup',
+                                                    'label' => 'Pindah '.$rosterNounTitle,
                                                 ];
                                             }
                                             if ($friendlyGroup) {
                                                 $regGroupRemove = [
                                                     'peserta_id' => $pesertaRow->id,
                                                     'pemain_name' => $item->nama,
-                                                    'label' => 'Lepas dari grup',
+                                                    'label' => 'Lepas dari '.$rosterNoun,
                                                 ];
                                             }
                                         }
@@ -416,14 +418,14 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="friendlyRegGroupModalLabel">Pindah Grup</h5>
+                    <h5 class="modal-title" id="friendlyRegGroupModalLabel">Pindah {{ $rosterNounTitle }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        Pindahkan <strong id="friendly-reg-player-name">pemain</strong> ke grup yang masih ada slot kosong.
+                        Pindahkan <strong id="friendly-reg-player-name">pemain</strong> ke {{ $rosterNoun }} yang masih ada slot kosong.
                     </p>
-                    <label for="friendly-reg-target-group" class="form-label">Grup tujuan</label>
+                    <label for="friendly-reg-target-group" class="form-label">{{ $rosterNounTitle }} tujuan</label>
                     <select id="friendly-reg-target-group" class="form-select"></select>
                     <div class="form-text" id="friendly-reg-slots-hint"></div>
                 </div>
@@ -441,11 +443,11 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="friendlyRegRenameModalLabel">Ubah Nama Grup</h5>
+                    <h5 class="modal-title" id="friendlyRegRenameModalLabel">Ubah Nama {{ $rosterNounTitle }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
-                    <label for="friendly-reg-rename-input" class="form-label">Nama grup</label>
+                    <label for="friendly-reg-rename-input" class="form-label">Nama {{ $rosterNoun }}</label>
                     <input type="text" class="form-control" id="friendly-reg-rename-input" maxlength="255" autocomplete="off">
                 </div>
                 <div class="modal-footer">

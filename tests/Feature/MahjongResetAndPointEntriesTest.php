@@ -285,6 +285,86 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame(1, (int) GrupMember::findOrFail($newWinnerId)->menang);
     }
 
+    public function test_group_adjustments_change_babak_total_without_touching_ronde_entries(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $members = $grup->members->values();
+        $rondeScores = $members->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [8, -2, -3, -3][$index]];
+        })->all();
+        $service->addGroupPointEntries($grup, $rondeScores, (int) $members->first()->id);
+
+        $adjustments = $members->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [5, 0, -2, 0][$index]];
+        })->all();
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-group-point-adjustments.update', $grup), [
+                'scores' => $adjustments,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $winner = GrupMember::findOrFail($members->first()->id);
+        $this->assertSame(8, (int) $winner->poin_didapat);
+        $this->assertSame(5, (int) $winner->poin_penyesuaian);
+        $this->assertSame(13, (int) $winner->poin_babak);
+        $this->assertSame(13, $winner->total_poin);
+        $this->assertSame(1, (int) $winner->menang);
+        $this->assertSame(1, $winner->poinEntries()->count());
+
+        $penalized = GrupMember::findOrFail($members->get(2)->id);
+        $this->assertSame(-3, (int) $penalized->poin_didapat);
+        $this->assertSame(-2, (int) $penalized->poin_penyesuaian);
+        $this->assertSame(-5, (int) $penalized->poin_babak);
+    }
+
+    public function test_reshuffle_copies_babak_adjustment_and_keeps_ronde_points_in_akumulasi(): void
+    {
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+
+        $member = GrupMember::query()
+            ->whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->first();
+        $pesertaId = (int) $member->id_turnamen_peserta;
+        $grup = $member->grup()->with('members')->first();
+
+        $scores = $grup->members->values()->map(function (GrupMember $groupMember, int $index) use ($member) {
+            return ['id' => $groupMember->id, 'poin' => (int) $groupMember->id === (int) $member->id ? 10 : -3];
+        })->all();
+        $service->addGroupPointEntries($grup, $scores);
+
+        $adjustments = $grup->members->values()->map(function (GrupMember $groupMember) use ($member) {
+            return ['id' => $groupMember->id, 'poin' => (int) $groupMember->id === (int) $member->id ? 5 : 0];
+        })->all();
+        $service->updateGroupAdjustments($grup, $adjustments);
+
+        $service->reshuffleGroups($turnamen->fresh(), 'random');
+
+        $nextMember = GrupMember::query()
+            ->where('id_turnamen_peserta', $pesertaId)
+            ->whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->first();
+
+        $this->assertNotNull($nextMember);
+        $this->assertSame(10, (int) $nextMember->poin_akumulasi);
+        $this->assertSame(0, (int) $nextMember->poin_didapat);
+        $this->assertSame(5, (int) $nextMember->poin_penyesuaian);
+        $this->assertSame(15, $nextMember->total_poin);
+    }
+
     public function test_reshuffle_carries_summed_ronde_points_into_akumulasi(): void
     {
         $service = app(MahjongMatchmakingService::class);
@@ -777,6 +857,8 @@ class MahjongResetAndPointEntriesTest extends TestCase
         }
 
         $this->assertStringContainsString('btn-mahjong-edit-ronde', $html);
+        $this->assertStringContainsString('Bonus/Penalti', $html);
+        $this->assertStringContainsString('btn-mahjong-edit-adjustment', $html);
         $this->assertStringNotContainsString('btn-delete-mahjong-poin', $html);
         $this->assertStringContainsString('bi-trophy-fill', $html);
         $this->assertStringContainsString('btn-mahjong-input-poin', $html);

@@ -118,6 +118,39 @@ class MahjongTeamMatchmakingTest extends TestCase
         $service->generateTeams($turnamen, 'random');
     }
 
+    public function test_close_registration_rejects_invalid_starting_roster(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->prepareTournament(12);
+        $turnamen->update(['status' => 'open']);
+        $turnamen->resolveKategori()->update(['status' => 'open']);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.close-registration'), [
+                'id_turnamen' => $turnamen->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).');
+
+        $this->assertFalse(app(\App\Services\GroupMatchmakingService::class)->canCloseRegistration($turnamen->fresh()));
+    }
+
+    public function test_close_registration_allows_sixteen_players(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->prepareTournament(16);
+        $turnamen->update(['status' => 'open']);
+        $turnamen->resolveKategori()->update(['status' => 'open']);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.close-registration'), [
+                'id_turnamen' => $turnamen->id,
+            ])
+            ->assertOk();
+
+        $this->assertSame('ongoing', $turnamen->fresh()->status);
+    }
+
     protected function prepareTournament(int $playerCount): Turnamen
     {
         $turnamen = Turnamen::create([

@@ -584,7 +584,7 @@ class LeaderboardService
                 return null;
             }
 
-            $totalBabak = array_sum($roundScores);
+            $totalBabak = array_sum($roundScores) + (int) $latestMember->poin_penyesuaian;
 
             return array_merge($this->formatMahjongStandingRow($latestMember, 0), [
                 'round_scores' => $roundScores,
@@ -783,15 +783,7 @@ class LeaderboardService
 
     protected function resolveMahjongTotalPoints(GrupMember $member, int $babakPoints, int $babak, Turnamen $turnamen): int
     {
-        if ($member->grup && $member->grup->is_aktif) {
-            return $member->total_poin;
-        }
-
-        if ((int) $member->poin_didapat !== 0) {
-            return (int) $member->poin_akumulasi + (int) $member->poin_didapat;
-        }
-
-        return (int) $member->poin_akumulasi;
+        return $member->total_poin;
     }
 
     protected function collectMahjongStandingMembers(Turnamen $turnamen): Collection
@@ -840,7 +832,8 @@ class LeaderboardService
             'grup_nama' => optional($member->grup)->nama,
             'poin_akumulasi' => (int) $member->poin_akumulasi,
             'poin_didapat' => (int) $member->poin_didapat,
-            'poin_babak' => (int) $member->poin_didapat,
+            'poin_penyesuaian' => (int) $member->poin_penyesuaian,
+            'poin_babak' => (int) $member->poin_babak,
             'total_poin' => $member->total_poin,
             'menang' => (int) $member->menang,
         ];

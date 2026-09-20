@@ -24,7 +24,7 @@ class LookupPemainRegistrationRequest extends FormRequest
         $turnamen = $this->resolveTurnamen();
         $kategori = $this->resolveKategori($turnamen);
         $size = $turnamen && $turnamen->allowsGroupRegistration()
-            ? ($kategori ? $kategori->friendlyPlayersPerGroup() : $turnamen->friendlyPlayersPerGroup())
+            ? ($kategori ? $kategori->registrationRosterSize() : $turnamen->registrationRosterSize())
             : 4;
 
         for ($n = 2; $n <= max(4, $size); $n++) {
@@ -68,8 +68,8 @@ class LookupPemainRegistrationRequest extends FormRequest
             if ($this->input('registration_mode') === 'group') {
                 $rules['nama_grup'] = ['required', 'string', 'max:255'];
                 $size = $kategori
-                    ? $kategori->friendlyPlayersPerGroup()
-                    : $turnamen->friendlyPlayersPerGroup();
+                    ? $kategori->registrationRosterSize()
+                    : $turnamen->registrationRosterSize();
                 $previous = ['no_hp'];
 
                 for ($n = 2; $n <= $size; $n++) {
@@ -120,7 +120,7 @@ class LookupPemainRegistrationRequest extends FormRequest
             if ($this->input('registration_mode') === 'group' && ! $turnamen->allowsGroupRegistration()) {
                 $validator->errors()->add(
                     'registration_mode',
-                    'Pendaftaran satu grup hanya tersedia untuk Group Match.'
+                    'Pendaftaran satu grup atau tim hanya tersedia untuk Group Match atau Mahjong Tim.'
                 );
             }
 
@@ -168,12 +168,19 @@ class LookupPemainRegistrationRequest extends FormRequest
         }
     }
 
+    protected function rosterNoun(): string
+    {
+        $turnamen = $this->resolveTurnamen();
+
+        return $turnamen ? $turnamen->registrationRosterNoun() : 'grup';
+    }
+
     public function messages()
     {
         $messages = [
             'no_hp.required' => 'Nomor HP pemain 1 wajib diisi.',
             'no_hp.regex' => 'Format nomor HP pemain 1 tidak valid.',
-            'nama_grup.required' => 'Nama grup wajib diisi.',
+            'nama_grup.required' => 'Nama '.$this->rosterNoun().' wajib diisi.',
             'id_kategori.required' => 'Pilih kategori kompetisi terlebih dahulu.',
         ];
 

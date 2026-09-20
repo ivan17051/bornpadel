@@ -6,6 +6,7 @@ use App\Models\Grup;
 use App\Models\GrupMember;
 use App\Models\MahjongPoinEntry;
 use App\Models\Turnamen;
+use App\Models\TurnamenGrupPendaftaran;
 use App\Models\TurnamenKategori;
 use App\Models\TurnamenMeja;
 use App\Models\TurnamenMejaSeat;
@@ -43,6 +44,33 @@ class MahjongTeamMatchmakingService
         return $turnamen->isMahjongTeam()
             && $this->isCompetitionOngoing($turnamen, $kategori->id)
             && ! $kategori->activeGrup()->exists();
+    }
+
+    public function hasValidStartingRoster(Turnamen $turnamen, $idKategori = null): bool
+    {
+        try {
+            $this->assertValidStartingRoster($turnamen, $idKategori);
+
+            return true;
+        } catch (RuntimeException $e) {
+            return false;
+        }
+    }
+
+    public function assertValidStartingRoster(Turnamen $turnamen, $idKategori = null): void
+    {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+        $count = $this->approvedEntries($turnamen, $kategori->id)->count();
+
+        if ($count % self::PLAYERS_PER_TEAM !== 0) {
+            throw new RuntimeException('Jumlah pemain approved harus kelipatan 4.');
+        }
+
+        $teamCount = (int) ($count / self::PLAYERS_PER_TEAM);
+
+        if (! in_array($teamCount, self::ALLOWED_START_TEAM_COUNTS, true)) {
+            throw new RuntimeException('Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).');
+        }
     }
 
     public function canReshuffleMeja(Turnamen $turnamen, $idKategori = null): bool
@@ -114,35 +142,80 @@ class MahjongTeamMatchmakingService
 
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
         $entries = $this->approvedEntries($turnamen, $kategori->id);
-        $count = $entries->count();
-
-        if ($count % self::PLAYERS_PER_TEAM !== 0) {
-            throw new RuntimeException('Jumlah pemain approved harus kelipatan 4.');
-        }
-
-        $teamCount = (int) ($count / self::PLAYERS_PER_TEAM);
-
-        if (! in_array($teamCount, self::ALLOWED_START_TEAM_COUNTS, true)) {
-            throw new RuntimeException('Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).');
-        }
+        $this->assertValidStartingRoster($turnamen, $kategori->id);
 
         return DB::transaction(function () use ($turnamen, $kategori, $entries, $mode) {
             $this->deleteAllMeja($kategori->id);
             $kategori->grup()->delete();
 
-            $ordered = $mode === 'by_rating'
-                ? $entries->sortByDesc(fn (TurnamenPeserta $e) => optional($e->pemain1)->rating ?? 0)->values()
-                : $entries->shuffle()->values();
-
-            $chunks = $ordered->chunk(self::PLAYERS_PER_TEAM)->values();
+            $entryById = $entries->keyBy(fn (TurnamenPeserta $entry) => (int) $entry->id);
+            $usedPesertaIds = [];
+            $usedNamesLower = [];
             $babak = 1;
             $teams = [];
 
-            foreach ($chunks as $index => $teamEntries) {
+            foreach ($this->completeRegistrationTeams($turnamen, $kategori) as $preTeam) {
+                $teamEntries = collect();
+
+                foreach ($preTeam->members as $member) {
+                    $entry = $entryById->get((int) $member->id_peserta);
+                    if (! $entry) {
+                        $teamEntries = collect();
+                        break;
+                    }
+                    $teamEntries->push($entry);
+                }
+
+                if ($teamEntries->count() !== self::PLAYERS_PER_TEAM) {
+                    continue;
+                }
+
                 $grup = Grup::create([
                     'id_turnamen' => $turnamen->id,
                     'id_kategori' => $kategori->id,
-                    'nama' => 'Tim '.$this->teamLabel($index + 1),
+                    'nama' => $preTeam->nama,
+                    'babak' => $babak,
+                    'ronde' => 1,
+                    'is_aktif' => true,
+                ]);
+
+                foreach ($teamEntries as $entry) {
+                    GrupMember::create([
+                        'id_grup' => $grup->id,
+                        'id_pemain' => $entry->id_pemain1,
+                        'id_turnamen_peserta' => $entry->id,
+                        'poin_didapat' => 0,
+                        'poin_akumulasi' => 0,
+                    ]);
+                    $usedPesertaIds[] = (int) $entry->id;
+                }
+
+                $usedNamesLower[mb_strtolower(trim($grup->nama))] = true;
+                $teams[] = [
+                    'id' => $grup->id,
+                    'nama' => $grup->nama,
+                    'pemain_count' => $teamEntries->count(),
+                    'from_registration' => true,
+                ];
+            }
+
+            $remaining = $entries
+                ->reject(fn (TurnamenPeserta $entry) => in_array((int) $entry->id, $usedPesertaIds, true))
+                ->values();
+
+            $ordered = $mode === 'by_rating'
+                ? $remaining->sortByDesc(fn (TurnamenPeserta $e) => optional($e->pemain1)->rating ?? 0)->values()
+                : $remaining->shuffle()->values();
+
+            $chunks = $ordered->chunk(self::PLAYERS_PER_TEAM)->values();
+            $generatedIndex = 0;
+
+            foreach ($chunks as $teamEntries) {
+                $nama = $this->nextUnusedTeamName($usedNamesLower, $generatedIndex);
+                $grup = Grup::create([
+                    'id_turnamen' => $turnamen->id,
+                    'id_kategori' => $kategori->id,
+                    'nama' => $nama,
                     'babak' => $babak,
                     'ronde' => 1,
                     'is_aktif' => true,
@@ -162,6 +235,7 @@ class MahjongTeamMatchmakingService
                     'id' => $grup->id,
                     'nama' => $grup->nama,
                     'pemain_count' => $teamEntries->count(),
+                    'from_registration' => false,
                 ];
             }
 
@@ -664,6 +738,36 @@ class MahjongTeamMatchmakingService
             ->sum('poin');
 
         $member->update(['poin_didapat' => $sum]);
+    }
+
+    /**
+     * @return Collection<int, TurnamenGrupPendaftaran>
+     */
+    protected function completeRegistrationTeams(Turnamen $turnamen, TurnamenKategori $kategori): Collection
+    {
+        return TurnamenGrupPendaftaran::query()
+            ->forKategori($kategori->id)
+            ->with(['members.peserta.pemain1'])
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (TurnamenGrupPendaftaran $group) => $group->isFullyApproved($turnamen))
+            ->values();
+    }
+
+    /**
+     * @param  array<string, true>  $usedNamesLower
+     */
+    protected function nextUnusedTeamName(array &$usedNamesLower, int &$sequence): string
+    {
+        do {
+            $sequence++;
+            $name = 'Tim '.$this->teamLabel($sequence);
+            $lower = mb_strtolower($name);
+        } while (isset($usedNamesLower[$lower]));
+
+        $usedNamesLower[$lower] = true;
+
+        return $name;
     }
 
     protected function approvedEntries(Turnamen $turnamen, $idKategori): Collection

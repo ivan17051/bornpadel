@@ -27,8 +27,8 @@ class StorePemainRegistrationRequest extends FormRequest
         $maxExtra = 4;
         if ($turnamen && $turnamen->allowsGroupRegistration()) {
             $maxExtra = max(4, $kategori
-                ? $kategori->friendlyPlayersPerGroup()
-                : $turnamen->friendlyPlayersPerGroup());
+                ? $kategori->registrationRosterSize()
+                : $turnamen->registrationRosterSize());
         }
 
         for ($n = 2; $n <= $maxExtra; $n++) {
@@ -90,8 +90,8 @@ class StorePemainRegistrationRequest extends FormRequest
                 if ($this->input('registration_mode') === 'group') {
                     $rules['nama_grup'] = ['required', 'string', 'max:255'];
                     $size = $kategori
-                        ? $kategori->friendlyPlayersPerGroup()
-                        : $turnamen->friendlyPlayersPerGroup();
+                        ? $kategori->registrationRosterSize()
+                        : $turnamen->registrationRosterSize();
 
                     for ($n = 2; $n <= $size; $n++) {
                         $prefix = 'player_' . $n;
@@ -139,7 +139,7 @@ class StorePemainRegistrationRequest extends FormRequest
             if ($this->input('registration_mode') === 'group' && ! $turnamen->allowsGroupRegistration()) {
                 $validator->errors()->add(
                     'registration_mode',
-                    'Pendaftaran satu grup hanya tersedia untuk Group Match.'
+                    'Pendaftaran satu grup atau tim hanya tersedia untuk Group Match atau Mahjong Tim.'
                 );
             }
 
@@ -154,8 +154,8 @@ class StorePemainRegistrationRequest extends FormRequest
 
             if ($turnamen->allowsGroupRegistration() && $this->input('registration_mode') === 'group') {
                 $size = $kategori
-                    ? $kategori->friendlyPlayersPerGroup()
-                    : $turnamen->friendlyPlayersPerGroup();
+                    ? $kategori->registrationRosterSize()
+                    : $turnamen->registrationRosterSize();
                 $phones = [
                     'no_hp' => trim((string) $this->input('no_hp')),
                 ];
@@ -170,7 +170,7 @@ class StorePemainRegistrationRequest extends FormRequest
                         continue;
                     }
                     if (in_array($phone, $seen, true)) {
-                        $validator->errors()->add($field, 'Nomor HP harus unik untuk setiap pemain dalam grup.');
+                        $validator->errors()->add($field, 'Nomor HP harus unik untuk setiap pemain dalam '.$turnamen->registrationRosterNoun().'.');
                     }
                     $seen[] = $phone;
                 }
@@ -228,8 +228,8 @@ class StorePemainRegistrationRequest extends FormRequest
         $turnamen = $this->resolveTurnamen();
         $kategori = $this->resolveKategori($turnamen);
         $size = $kategori
-            ? $kategori->friendlyPlayersPerGroup()
-            : ($turnamen ? $turnamen->friendlyPlayersPerGroup() : Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP);
+            ? $kategori->registrationRosterSize()
+            : ($turnamen ? $turnamen->registrationRosterSize() : Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP);
         $players = [$this->playerOnePayload()];
 
         for ($n = 2; $n <= $size; $n++) {
@@ -247,8 +247,8 @@ class StorePemainRegistrationRequest extends FormRequest
         $turnamen = $this->resolveTurnamen();
         $kategori = $this->resolveKategori($turnamen);
         $size = $kategori
-            ? $kategori->friendlyPlayersPerGroup()
-            : ($turnamen ? $turnamen->friendlyPlayersPerGroup() : Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP);
+            ? $kategori->registrationRosterSize()
+            : ($turnamen ? $turnamen->registrationRosterSize() : Turnamen::DEFAULT_FRIENDLY_PLAYERS_PER_GROUP);
         $fotos = [$this->file('foto')];
 
         for ($n = 2; $n <= $size; $n++) {
@@ -362,6 +362,13 @@ class StorePemainRegistrationRequest extends FormRequest
         }
     }
 
+    protected function rosterNoun(): string
+    {
+        $turnamen = $this->resolveTurnamen();
+
+        return $turnamen ? $turnamen->registrationRosterNoun() : 'grup';
+    }
+
     public function resolvedKategoriId(): ?int
     {
         return optional($this->resolveKategori($this->resolveTurnamen()))->id;
@@ -376,7 +383,7 @@ class StorePemainRegistrationRequest extends FormRequest
             'gender.in' => 'Jenis kelamin tidak valid.',
             'no_hp.required' => 'Nomor HP wajib diisi.',
             'no_hp.regex' => 'Format nomor HP tidak valid.',
-            'nama_grup.required' => 'Nama grup wajib diisi.',
+            'nama_grup.required' => 'Nama '.$this->rosterNoun().' wajib diisi.',
             'id_kategori.required' => 'Pilih kategori kompetisi terlebih dahulu.',
             'rating.numeric' => 'Rating harus berupa angka.',
             'rating.max' => 'Rating maksimal 10.',

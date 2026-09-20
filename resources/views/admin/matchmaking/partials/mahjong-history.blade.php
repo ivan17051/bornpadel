@@ -89,20 +89,21 @@
                                                                     $entries = $member->relationLoaded('poinEntries')
                                                                         ? $member->poinEntries
                                                                         : $member->poinEntries()->get();
-                                                                    $sum = (int) $entries->sum('poin');
+                                                                    $sum = (int) $entries->sum('poin') + (int) $member->poin_penyesuaian;
 
-                                                                    return $sum !== 0 ? $sum : (int) $member->poin_didapat;
+                                                                    return $sum !== (int) $member->poin_penyesuaian ? $sum : (int) $member->poin_babak;
                                                                 })->values() as $member)
                                                                     @php
                                                                         $memberEntries = $member->relationLoaded('poinEntries')
                                                                             ? $member->poinEntries
                                                                             : $member->poinEntries()->get();
-                                                                        $poinBabak = (int) $memberEntries->sum('poin');
-                                                                        if ($poinBabak === 0 && (int) $member->poin_didapat !== 0) {
-                                                                            $poinBabak = (int) $member->poin_didapat;
+                                                                        $poinBabak = (int) $memberEntries->sum('poin') + (int) $member->poin_penyesuaian;
+                                                                        if ($poinBabak === (int) $member->poin_penyesuaian && (int) $member->poin_didapat !== 0) {
+                                                                            $poinBabak = (int) $member->poin_babak;
                                                                         }
                                                                         $wins = (int) $memberEntries->where('is_winner', true)->count();
                                                                         $totalAkhir = $member->total_poin;
+                                                                        $penyesuaian = (int) $member->poin_penyesuaian;
                                                                     @endphp
                                                                     <tr>
                                                                         <td class="fw-semibold">{{ $member->display_name }}</td>
@@ -124,6 +125,11 @@
                                                                                 @empty
                                                                                     <span class="text-muted small">—</span>
                                                                                 @endforelse
+                                                                                @if ($penyesuaian !== 0)
+                                                                                    <span class="badge text-bg-secondary" title="Bonus/penalti babak">
+                                                                                        {{ $penyesuaian > 0 ? '+' : '' }}{{ $penyesuaian }}
+                                                                                    </span>
+                                                                                @endif
                                                                             </div>
                                                                         </td>
                                                                         <td class="text-center">

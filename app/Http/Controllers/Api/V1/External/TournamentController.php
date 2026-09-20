@@ -30,7 +30,7 @@ class TournamentController extends Controller
         ]);
 
         $query = Turnamen::query()
-            ->where('jenis', 'mahjong')
+            ->whereIn('jenis', ['mahjong', 'mahjong_team'])
             ->orderByDesc('tanggal')
             ->orderByDesc('id');
 
@@ -70,11 +70,29 @@ class TournamentController extends Controller
             ], 404);
         }
 
-        if (! $turnamen->isMahjong()) {
+        if (! $turnamen->isMahjongFormat()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Endpoint ini hanya tersedia untuk turnamen Mahjong.',
+                'message' => 'Endpoint ini hanya tersedia untuk turnamen Mahjong atau Mahjong Tim.',
             ], 422);
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            $groups = $this->leaderboardService->getMahjongTeamStandings($turnamen);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'turnamen' => [
+                        'id' => $turnamen->id,
+                        'nama' => $turnamen->nama,
+                        'jenis' => $turnamen->jenis,
+                        'status' => $turnamen->status,
+                        'mahjong_is_final' => (bool) $turnamen->mahjong_is_final,
+                    ],
+                    'groups' => $groups,
+                ],
+            ]);
         }
 
         $standings = $this->leaderboardService->getMahjongStandingsByBabak($turnamen->id);
@@ -107,10 +125,10 @@ class TournamentController extends Controller
             ], 404);
         }
 
-        if (! $turnamen->isMahjong()) {
+        if (! $turnamen->isMahjongFormat()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Endpoint ini hanya tersedia untuk turnamen Mahjong.',
+                'message' => 'Endpoint ini hanya tersedia untuk turnamen Mahjong atau Mahjong Tim.',
             ], 422);
         }
 

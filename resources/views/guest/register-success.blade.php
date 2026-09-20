@@ -20,6 +20,7 @@
     $randomizesPartners = $turnamen && $turnamen->randomizesPartners();
     $isGroupRegistration = $isGroupRegistration ?? false;
     $namaGrup = $namaGrup ?? null;
+    $rosterNounTitle = $turnamen ? $turnamen->registrationRosterNoun(true) : 'Grup';
     $playerLabels = $isGroupRegistration
         ? ['Pemain 1', 'Pemain 2', 'Pemain 3', 'Pemain 4']
         : ($isDouble ? ['Pemain 1', 'Pemain 2'] : ['Peserta']);
@@ -52,7 +53,7 @@
                 @if ($isGroupRegistration && $namaGrup)
                     <div class="alert alert-light border text-start mb-4">
                         <i class="bi bi-people-fill me-2"></i>
-                        Grup <strong>{{ $namaGrup }}</strong> berhasil didaftarkan ({{ count($players) }} pemain).
+                        {{ $rosterNounTitle }} <strong>{{ $namaGrup }}</strong> berhasil didaftarkan ({{ count($players) }} pemain).
                     </div>
                 @elseif ($randomizesPartners)
                     <div class="alert alert-light border text-start mb-4">

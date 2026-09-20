@@ -15,6 +15,8 @@ class Turnamen extends Model
 
     public const MIN_FRIENDLY_PLAYERS_PER_GROUP = 2;
 
+    public const MAHJONG_TEAM_PLAYERS_PER_TEAM = 4;
+
     protected $fillable = [
         'nama',
         'tanggal',
@@ -138,6 +140,11 @@ class Turnamen extends Model
         return $this->jenis === 'mahjong_team';
     }
 
+    public function isMahjongFormat(): bool
+    {
+        return $this->isMahjong() || $this->isMahjongTeam();
+    }
+
     public function isFriendly(): bool
     {
         return $this->jenis === 'friendly';
@@ -145,7 +152,26 @@ class Turnamen extends Model
 
     public function allowsGroupRegistration(): bool
     {
-        return $this->isFriendly();
+        return $this->isFriendly() || $this->isMahjongTeam();
+    }
+
+    /**
+     * Roster size when registering as a full group (Group Match) or team (Mahjong Tim).
+     */
+    public function registrationRosterSize(): int
+    {
+        if ($this->isMahjongTeam()) {
+            return self::MAHJONG_TEAM_PLAYERS_PER_TEAM;
+        }
+
+        return $this->friendlyPlayersPerGroup();
+    }
+
+    public function registrationRosterNoun(bool $titleCase = false): string
+    {
+        $noun = $this->isMahjongTeam() ? 'tim' : 'grup';
+
+        return $titleCase ? ucfirst($noun) : $noun;
     }
 
     /**

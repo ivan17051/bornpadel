@@ -124,7 +124,7 @@
         Single: daftar individu, pasangan diacak saat pendaftaran ditutup.
         Double: daftar individu atau berpasangan; semua harus berpasangan sebelum pendaftaran ditutup.
         Mahjong: grup 4 pemain tanpa head-to-head.
-        Mahjong Tim: tim tetap + meja silang antar tim; lolos per tim.
+        Mahjong Tim: daftar individu atau satu tim lengkap (4 pemain + nama tim); tim lengkap yang sudah disetujui dipertahankan saat matchmaking.
         Group Match: liga antar grup (ukuran grup diatur di bawah), tanding pasangan dinamis, tanpa total poin pemain.
         Tamu dapat daftar individu atau satu grup lengkap sesuai ukuran yang ditentukan; grup lengkap yang sudah disetujui dipertahankan saat matchmaking.
     </div>

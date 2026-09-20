@@ -168,6 +168,7 @@
                                 <ul class="small text-muted mb-0 ps-3">
                                     <li>{{ $approvedCount }} pemain approved</li>
                                     <li>Dibutuhkan tepat 16 atau 32 pemain (4 atau 8 tim × 4)</li>
+                                    <li>Tim lengkap yang daftar bersama (4 pemain) dipertahankan saat buat tim</li>
                                     @if (! ($canCloseRegistration ?? false))
                                         <li class="text-danger">Jumlah tim awal harus 4 atau 8 (16 atau 32 pemain).</li>
                                     @endif
@@ -476,7 +477,8 @@
                             <table class="table table-sm table-bordered table-hover mb-0 align-middle mahjong-group-score-table"
                                    data-grup-id="{{ $g->id }}"
                                    data-grup-name="{{ $g->nama }}"
-                                   data-update-url="{{ route('admin.matchmaking.mahjong-group-point-entries.update', $g) }}">
+                                   data-update-url="{{ route('admin.matchmaking.mahjong-group-point-entries.update', $g) }}"
+                                   data-adjust-url="{{ route('admin.matchmaking.mahjong-group-point-adjustments.update', $g) }}">
                                 <thead class="table-light">
                                     <tr>
                                         <th class="text-center mahjong-ronde-head">Ronde</th>
@@ -560,14 +562,31 @@
                                     @endforelse
                                 </tbody>
                                 <tfoot class="table-light">
+                                    <tr class="mahjong-adjustment-row">
+                                        <th class="mahjong-adjustment-label-cell">
+                                            <button type="button"
+                                                    class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-adjustment"
+                                                    title="Edit bonus/penalti babak">
+                                                Bonus/Penalti
+                                                <i class="bi bi-pencil-square ms-1"></i>
+                                            </button>
+                                        </th>
+                                        @foreach ($mahjongMembers as $member)
+                                            <th class="text-center">
+                                                <span class="mahjong-penyesuaian" data-member-id="{{ $member->id }}" data-poin="{{ (int) $member->poin_penyesuaian }}">
+                                                    {{ (int) $member->poin_penyesuaian > 0 ? '+' : '' }}{{ (int) $member->poin_penyesuaian }}
+                                                </span>
+                                            </th>
+                                        @endforeach
+                                    </tr>
                                     <tr class="mahjong-subtotal-row">
                                         <th>Subtotal</th>
                                         @foreach ($mahjongMembers as $member)
                                             <th class="text-center">
                                                 <span class="mahjong-subtotal" data-member-id="{{ $member->id }}">
-                                                    {{ (int) $member->poin_didapat }} ({{ (int) $member->menang }})
+                                                    {{ (int) $member->poin_babak }} ({{ (int) $member->menang }})
                                                 </span>
-                                                <span class="d-none mahjong-poin-babak" data-member-id="{{ $member->id }}">{{ (int) $member->poin_didapat }}</span>
+                                                <span class="d-none mahjong-poin-babak" data-member-id="{{ $member->id }}">{{ (int) $member->poin_babak }}</span>
                                                 <span class="d-none mahjong-menang" data-member-id="{{ $member->id }}">{{ (int) $member->menang }}</span>
                                             </th>
                                         @endforeach
@@ -1031,6 +1050,13 @@
     .mahjong-group-score-table .btn-mahjong-edit-ronde:focus {
         color: var(--bs-primary, #0d6efd);
     }
+    .mahjong-group-score-table .btn-mahjong-edit-adjustment {
+        color: inherit;
+    }
+    .mahjong-group-score-table .btn-mahjong-edit-adjustment:hover,
+    .mahjong-group-score-table .btn-mahjong-edit-adjustment:focus {
+        color: var(--bs-primary, #0d6efd);
+    }
 </style>
 @endpush
 @endonce
@@ -1343,6 +1369,31 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
                         <button type="button" class="btn btn-primary" id="btn-save-mahjong-group-points">
+                            <i class="bi bi-check-lg me-1"></i> Simpan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="mahjongGroupAdjustmentModal" tabindex="-1" aria-labelledby="mahjongGroupAdjustmentModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="mahjongGroupAdjustmentModalLabel">
+                            <i class="bi bi-plus-slash-minus me-1"></i> Bonus/Penalti
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3" id="mahjong-group-adjustment-help">
+                            Isi bonus (positif) atau penalti (negatif) untuk babak ini. Tidak dihitung sebagai ronde menang.
+                        </p>
+                        <div id="mahjong-group-adjustment-fields" class="d-grid gap-3"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-primary" id="btn-save-mahjong-group-adjustment">
                             <i class="bi bi-check-lg me-1"></i> Simpan
                         </button>
                     </div>

@@ -27,8 +27,9 @@
     $isPairMode = $isDouble && ($registrationMode ?? 'single') === 'pair';
     $isGroupMode = $turnamen->allowsGroupRegistration() && ($registrationMode ?? 'single') === 'group';
     $groupSize = $groupSize ?? ($isGroupMode
-        ? ($kategori ? $kategori->friendlyPlayersPerGroup() : $turnamen->friendlyPlayersPerGroup())
+        ? ($kategori ? $kategori->registrationRosterSize() : $turnamen->registrationRosterSize())
         : 4);
+    $rosterNounTitle = $turnamen->registrationRosterNoun(true);
     $phones = $phones ?? array_filter([
         $noHp ?? '',
         $noHp2 ?? null,
@@ -71,7 +72,7 @@
                 <span class="badge text-bg-primary mt-2">Pendaftaran Berpasangan</span>
             @endif
             @if ($isGroupMode)
-                <span class="badge text-bg-primary mt-2">Pendaftaran Satu Grup ({{ $groupSize }})</span>
+                <span class="badge text-bg-primary mt-2">Pendaftaran Satu {{ $rosterNounTitle }} ({{ $groupSize }})</span>
             @endif
         </div>
 
@@ -141,7 +142,7 @@
                     @if ($isGroupMode)
                         <input type="hidden" name="nama_grup" value="{{ old('nama_grup', $namaGrup) }}">
                         <div class="mb-4">
-                            <label class="form-label fw-semibold">Nama Grup</label>
+                            <label class="form-label fw-semibold">Nama {{ $rosterNounTitle }}</label>
                             <input type="text" class="form-control" value="{{ $namaGrup }}" readonly>
                             @error('nama_grup')
                                 <div class="text-danger small mt-1">{{ $message }}</div>

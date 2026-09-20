@@ -492,11 +492,12 @@ class MahjongMatchmakingService
                     'nama' => $member->display_name,
                     'id_grup' => (int) $grup->id,
                     'grup_nama' => $grup->nama,
-                    'total_babak' => (int) $member->poin_didapat,
+                    'total_babak' => (int) $member->poin_babak,
                     'total_poin' => $member->total_poin,
                     'menang' => (int) $member->menang,
                     'poin_akumulasi' => (int) $member->poin_akumulasi,
                     'poin_didapat' => (int) $member->poin_didapat,
+                    'poin_penyesuaian' => (int) $member->poin_penyesuaian,
                 ];
             })->values();
 
@@ -654,6 +655,46 @@ class MahjongMatchmakingService
         });
     }
 
+    /**
+     * Set bonus/penalty for every member in the active group (one value per player per babak seating).
+     *
+     * @param  array<int, array{id: int, poin: int}>  $scores
+     * @return Collection<int, GrupMember>
+     */
+    public function updateGroupAdjustments(Grup $grup, array $scores): Collection
+    {
+        return DB::transaction(function () use ($grup, $scores) {
+            $this->assertActiveMahjongGroup($grup);
+
+            $grup->loadMissing('members');
+            $membersById = $grup->members->keyBy('id');
+
+            if ($membersById->count() !== self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Grup Mahjong harus berisi tepat 4 pemain.');
+            }
+
+            if (count($scores) !== self::PLAYERS_PER_GROUP) {
+                throw new RuntimeException('Bonus/penalti harus diisi untuk keempat pemain dalam grup.');
+            }
+
+            $scoreIds = collect($scores)->pluck('id')->map(fn ($id) => (int) $id)->sort()->values();
+            $memberIds = $membersById->keys()->map(fn ($id) => (int) $id)->sort()->values();
+
+            if ($scoreIds->all() !== $memberIds->all()) {
+                throw new RuntimeException('Daftar pemain tidak cocok dengan anggota grup.');
+            }
+
+            foreach ($scores as $score) {
+                $member = $membersById->get((int) $score['id']);
+                $member->update(['poin_penyesuaian' => (int) $score['poin']]);
+            }
+
+            return $membersById->values()->map(function (GrupMember $member) {
+                return $member->fresh(['poinEntries', 'grup.turnamen']);
+            })->values();
+        });
+    }
+
     public function deleteMemberPointEntry(GrupMember $member, MahjongPoinEntry $entry): GrupMember
     {
         $this->assertActiveMahjongMember($member);
@@ -797,8 +838,9 @@ class MahjongMatchmakingService
                             'id_pemain' => $member->id_pemain,
                             'id_peserta' => $member->id_turnamen_peserta,
                             'nama' => $member->display_name,
-                            'poin_babak' => (int) $member->poin_didapat,
+                            'poin_babak' => (int) $member->poin_babak,
                             'poin_akumulasi' => (int) $member->poin_akumulasi,
+                            'poin_penyesuaian' => (int) $member->poin_penyesuaian,
                             'total_poin' => $member->total_poin,
                         ];
                     })->values(),
@@ -870,6 +912,7 @@ class MahjongMatchmakingService
             foreach ($groupEntries as $entry) {
                 /** @var TurnamenPeserta $entry */
                 $akumulasi = $resetRoundPoints ? 0 : (int) ($entry->mahjong_carry_points ?? 0);
+                $penyesuaian = $resetRoundPoints ? 0 : (int) ($entry->mahjong_carry_adjustment ?? 0);
 
                 GrupMember::create([
                     'id_grup' => $grup->id,
@@ -877,6 +920,7 @@ class MahjongMatchmakingService
                     'id_turnamen_peserta' => $entry->id,
                     'poin_didapat' => 0,
                     'poin_akumulasi' => $akumulasi,
+                    'poin_penyesuaian' => $penyesuaian,
                 ]);
             }
 
@@ -899,7 +943,8 @@ class MahjongMatchmakingService
                 continue;
             }
 
-            $member->turnamenPeserta->mahjong_carry_points = $member->total_poin;
+            $member->turnamenPeserta->mahjong_carry_points = (int) $member->poin_akumulasi + (int) $member->poin_didapat;
+            $member->turnamenPeserta->mahjong_carry_adjustment = (int) $member->poin_penyesuaian;
             $entries->push($member->turnamenPeserta);
         }
 
@@ -912,7 +957,7 @@ class MahjongMatchmakingService
     {
         foreach ($this->getActiveMembers($turnamen, $idKategori) as $member) {
             $member->update([
-                'poin_akumulasi' => $member->total_poin,
+                'poin_akumulasi' => (int) $member->poin_akumulasi + (int) $member->poin_didapat,
                 'poin_didapat' => 0,
             ]);
         }

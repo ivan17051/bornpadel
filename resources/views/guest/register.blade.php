@@ -30,8 +30,10 @@
     $isDouble = $turnamen->requiresPairRegistration();
     $allowsGroup = $turnamen->allowsGroupRegistration();
     $groupSize = $allowsGroup
-        ? ($kategori ? $kategori->friendlyPlayersPerGroup() : $turnamen->friendlyPlayersPerGroup())
+        ? ($kategori ? $kategori->registrationRosterSize() : $turnamen->registrationRosterSize())
         : 4;
+    $rosterNoun = $turnamen->registrationRosterNoun();
+    $rosterNounTitle = $turnamen->registrationRosterNoun(true);
     $registrationMode = old('registration_mode', 'single');
     $isPairMode = $isDouble && $registrationMode === 'pair';
     $isGroupMode = $allowsGroup && $registrationMode === 'group';
@@ -111,6 +113,8 @@
                 <p class="text-muted small mb-4">
                     @if ($isDouble)
                         Turnamen double: daftar sendiri dulu, lalu pasangan diatur kemudian. Opsional: daftar langsung berpasangan.
+                    @elseif ($allowsGroup && $turnamen->isMahjongTeam())
+                        Mahjong Tim: daftar individu, atau daftar satu tim lengkap ({{ $groupSize }} pemain + nama tim).
                     @elseif ($allowsGroup)
                         Group Match: daftar individu, atau daftar satu grup lengkap ({{ $groupSize }} pemain + nama grup).
                     @elseif ($turnamen->randomizesPartners())
@@ -163,7 +167,7 @@
                                            value="group"
                                            autocomplete="off"
                                            {{ $registrationMode === 'group' ? 'checked' : '' }}>
-                                    <label class="btn btn-outline-primary" for="registration-mode-group">Satu Grup ({{ $groupSize }} pemain)</label>
+                                    <label class="btn btn-outline-primary" for="registration-mode-group">Satu {{ $rosterNounTitle }} ({{ $groupSize }} pemain)</label>
                                 @endif
                             </div>
                             @error('registration_mode')
@@ -175,14 +179,14 @@
                     @endif
 
                     <div class="mb-4" id="nama-grup-section" style="{{ $isGroupMode ? '' : 'display:none' }}">
-                        <label for="nama_grup" class="form-label fw-semibold">Nama Grup <span class="text-danger">*</span></label>
+                        <label for="nama_grup" class="form-label fw-semibold">Nama {{ $rosterNounTitle }} <span class="text-danger">*</span></label>
                         <input type="text"
                                name="nama_grup"
                                id="nama_grup"
                                class="form-control form-control-lg @error('nama_grup') is-invalid @enderror"
                                value="{{ old('nama_grup') }}"
                                maxlength="255"
-                               placeholder="Contoh: Smash Brothers">
+                               placeholder="{{ $turnamen->isMahjongTeam() ? 'Contoh: Dragon Squad' : 'Contoh: Smash Brothers' }}">
                         @error('nama_grup')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror

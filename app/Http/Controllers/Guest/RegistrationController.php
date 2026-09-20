@@ -93,7 +93,7 @@ class RegistrationController extends Controller
         $registrationMode = $validated['registration_mode'] ?? 'single';
         $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
         $isGroupMode = $turnamen->allowsGroupRegistration() && $registrationMode === 'group';
-        $groupSize = $isGroupMode ? $kategori->friendlyPlayersPerGroup() : 0;
+        $groupSize = $isGroupMode ? $kategori->registrationRosterSize() : 0;
         $namaGrup = $isGroupMode ? trim($validated['nama_grup'] ?? '') : null;
 
         $phones = ['no_hp' => $noHp];
@@ -158,7 +158,7 @@ class RegistrationController extends Controller
         $registrationMode = request('registration_mode', old('registration_mode', 'single'));
         $isPairMode = $turnamen->requiresPairRegistration() && $registrationMode === 'pair';
         $isGroupMode = $turnamen->allowsGroupRegistration() && $registrationMode === 'group';
-        $groupSize = $isGroupMode ? $kategori->friendlyPlayersPerGroup() : 0;
+        $groupSize = $isGroupMode ? $kategori->registrationRosterSize() : 0;
         $namaGrup = $isGroupMode ? trim((string) request('nama_grup', old('nama_grup', ''))) : '';
         $queryBase = $this->publicTurnamenQuery($turnamen, $kategori);
 
@@ -189,7 +189,7 @@ class RegistrationController extends Controller
             if ($missingPhone || $namaGrup === '') {
                 return redirect()->route('guest.register', $queryBase)
                     ->withErrors([
-                        'no_hp' => "Lengkapi {$groupSize} nomor HP dan nama grup untuk pendaftaran satu grup.",
+                        'no_hp' => "Lengkapi {$groupSize} nomor HP dan nama ".$turnamen->registrationRosterNoun()." untuk pendaftaran satu ".$turnamen->registrationRosterNoun().".",
                     ]);
             }
         }
@@ -234,7 +234,7 @@ class RegistrationController extends Controller
             'noHp' => $noHp,
             'noHp2' => $phones[1] ?? '',
             'namaGrup' => $namaGrup,
-            'groupSize' => $groupSize ?: $kategori->friendlyPlayersPerGroup(),
+            'groupSize' => $groupSize ?: $kategori->registrationRosterSize(),
             'existingPlayers' => $existingPlayers,
             'existingPemain' => $existingPlayers[0] ?? null,
             'isExisting' => (bool) ($existingPlayers[0] ?? null),
@@ -327,7 +327,7 @@ class RegistrationController extends Controller
 
             if (str_contains($e->getMessage(), 'gambar') || str_contains($e->getMessage(), 'WebP') || str_contains($e->getMessage(), 'Foto')) {
                 $field = 'foto';
-            } elseif (str_contains($e->getMessage(), 'Nama grup')) {
+            } elseif (str_contains($e->getMessage(), 'Nama grup') || str_contains($e->getMessage(), 'Nama tim')) {
                 $field = 'nama_grup';
             }
 
@@ -338,7 +338,7 @@ class RegistrationController extends Controller
                     'registration_mode' => $request->input('registration_mode'),
                     'id_turnamen' => $turnamen->id,
                     'id_kategori' => $kategoriId,
-                ], collect(range(2, $kategori->friendlyPlayersPerGroup()))
+                ], collect(range(2, $kategori->registrationRosterSize()))
                     ->mapWithKeys(fn ($n) => ['no_hp_' . $n => $request->input('player_' . $n . '.no_hp')])
                     ->all())))
                 ->withInput()

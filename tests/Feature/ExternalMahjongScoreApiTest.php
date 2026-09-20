@@ -243,6 +243,52 @@ class ExternalMahjongScoreApiTest extends TestCase
         $this->assertArrayHasKey('id_grup_member', $groups[0]['members'][0]);
     }
 
+    public function test_external_api_lists_mahjong_and_mahjong_team_tournaments(): void
+    {
+        $mahjong = $this->prepareMahjongTournament(8);
+        $mahjongTeam = Turnamen::create([
+            'nama' => 'External Mahjong Team ' . uniqid(),
+            'tanggal' => now()->toDateString(),
+            'harga' => 100000,
+            'maks_peserta' => 16,
+            'jenis' => 'mahjong_team',
+            'status' => 'ongoing',
+        ]);
+        $padel = Turnamen::create([
+            'nama' => 'External Padel ' . uniqid(),
+            'tanggal' => now()->toDateString(),
+            'harga' => 100000,
+            'maks_peserta' => 16,
+            'jenis' => 'single',
+            'status' => 'ongoing',
+        ]);
+
+        $response = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/mahjong')
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $ids = collect($response->json('data'))->pluck('id')->all();
+        $this->assertContains($mahjong->id, $ids);
+        $this->assertContains($mahjongTeam->id, $ids);
+        $this->assertNotContains($padel->id, $ids);
+
+        $teamRow = collect($response->json('data'))->firstWhere('id', $mahjongTeam->id);
+        $this->assertSame('mahjong_team', $teamRow['jenis']);
+        $this->assertSame('Mahjong Tim', $teamRow['jenis_label']);
+
+        $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$mahjongTeam->id.'/participants')
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$mahjongTeam->id.'/group-standings')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.turnamen.jenis', 'mahjong_team');
+    }
+
     protected function prepareMahjongTournament(int $playerCount): Turnamen
     {
         $turnamen = Turnamen::create([

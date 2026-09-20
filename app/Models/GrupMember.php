@@ -15,6 +15,7 @@ class GrupMember extends Model
         'id_turnamen_peserta',
         'poin_didapat',
         'poin_akumulasi',
+        'poin_penyesuaian',
         'set_menang',
         'games_menang',
         'stats_reached_at',
@@ -22,11 +23,19 @@ class GrupMember extends Model
 
     protected $casts = [
         'stats_reached_at' => 'datetime',
+        'poin_didapat' => 'integer',
+        'poin_akumulasi' => 'integer',
+        'poin_penyesuaian' => 'integer',
     ];
+
+    public function getPoinBabakAttribute(): int
+    {
+        return (int) $this->poin_didapat + (int) $this->poin_penyesuaian;
+    }
 
     public function getTotalPoinAttribute(): int
     {
-        return (int) $this->poin_akumulasi + (int) $this->poin_didapat;
+        return (int) $this->poin_akumulasi + (int) $this->poin_didapat + (int) $this->poin_penyesuaian;
     }
 
     public function getMenangAttribute(): int

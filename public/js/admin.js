@@ -2045,6 +2045,20 @@ const BornPadelAdmin = (function () {
             return `${parseInt(poin, 10) || 0} (${parseInt(menang, 10) || 0})`;
         }
 
+        function mahjongBabakTotal(data) {
+            if (!data) return 0;
+            if (data.poin_babak != null && data.poin_babak !== '') {
+                return parseInt(data.poin_babak, 10) || 0;
+            }
+
+            return (parseInt(data.poin_didapat, 10) || 0) + (parseInt(data.poin_penyesuaian, 10) || 0);
+        }
+
+        function formatMahjongAdjustment(poin) {
+            const value = parseInt(poin, 10) || 0;
+            return (value > 0 ? '+' : '') + value;
+        }
+
         function mahjongTableForMember(memberId) {
             return document.querySelector(
                 `.mahjong-group-score-table thead th[data-member-id="${memberId}"]`
@@ -2090,18 +2104,24 @@ const BornPadelAdmin = (function () {
             const babakBadge = document.querySelector(`.mahjong-poin-babak[data-member-id="${memberId}"]`);
             const totalBadge = document.querySelector(`.mahjong-total-poin[data-member-id="${memberId}"]`);
             const menangBadge = document.querySelector(`.mahjong-menang[data-member-id="${memberId}"]`);
+            const adjustment = document.querySelector(`.mahjong-penyesuaian[data-member-id="${memberId}"]`);
+            const babakTotal = mahjongBabakTotal(data);
 
             if (subtotal) {
-                subtotal.textContent = formatMahjongSubtotal(data.poin_didapat, data.menang);
+                subtotal.textContent = formatMahjongSubtotal(babakTotal, data.menang);
             }
             if (babakBadge) {
-                babakBadge.textContent = data.poin_didapat;
+                babakBadge.textContent = babakTotal;
             }
             if (totalBadge) {
                 totalBadge.textContent = data.total_poin;
             }
             if (menangBadge) {
                 menangBadge.textContent = data.menang ?? 0;
+            }
+            if (adjustment && data.poin_penyesuaian != null) {
+                adjustment.dataset.poin = String(parseInt(data.poin_penyesuaian, 10) || 0);
+                adjustment.textContent = formatMahjongAdjustment(data.poin_penyesuaian);
             }
         }
 
@@ -2516,36 +2536,178 @@ const BornPadelAdmin = (function () {
         }
 
         document.addEventListener('click', (event) => {
-            const btn = event.target.closest('.btn-mahjong-edit-ronde');
-            if (!btn) {
+            const editRoundBtn = event.target.closest('.btn-mahjong-edit-ronde');
+            if (editRoundBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const row = editRoundBtn.closest('tr.mahjong-round-row');
+                const table = editRoundBtn.closest('table.mahjong-group-score-table');
+                if (!row || !table) {
+                    return;
+                }
+
+                const members = collectMahjongRoundMembers(table, row);
+                if (!members) {
+                    showToast('Ronde ini belum lengkap untuk diedit.', 'error');
+                    return;
+                }
+
+                openMahjongGroupPointsModal({
+                    url: table.dataset.updateUrl,
+                    method: 'PATCH',
+                    groupName: table.dataset.grupName || 'Grup',
+                    members,
+                    roundLabel: row.dataset.round || row.querySelector('.mahjong-round-label')?.textContent.trim(),
+                    winnerMemberId: members.find((member) => member.is_winner)?.id || null,
+                    editRow: row,
+                });
                 return;
             }
 
-            event.preventDefault();
-            event.stopPropagation();
-
-            const row = btn.closest('tr.mahjong-round-row');
-            const table = btn.closest('table.mahjong-group-score-table');
-            if (!row || !table) {
-                return;
+            const editAdjustmentBtn = event.target.closest('.btn-mahjong-edit-adjustment');
+            if (editAdjustmentBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                openMahjongGroupAdjustmentModal(editAdjustmentBtn.closest('table.mahjong-group-score-table'));
             }
-
-            const members = collectMahjongRoundMembers(table, row);
-            if (!members) {
-                showToast('Ronde ini belum lengkap untuk diedit.', 'error');
-                return;
-            }
-
-            openMahjongGroupPointsModal({
-                url: table.dataset.updateUrl,
-                method: 'PATCH',
-                groupName: table.dataset.grupName || 'Grup',
-                members,
-                roundLabel: row.dataset.round || row.querySelector('.mahjong-round-label')?.textContent.trim(),
-                winnerMemberId: members.find((member) => member.is_winner)?.id || null,
-                editRow: row,
-            });
         });
+
+        const mahjongAdjustmentModalEl = document.getElementById('mahjongGroupAdjustmentModal');
+        const mahjongAdjustmentFields = document.getElementById('mahjong-group-adjustment-fields');
+        const mahjongAdjustmentTitle = document.getElementById('mahjongGroupAdjustmentModalLabel');
+        const mahjongAdjustmentHelp = document.getElementById('mahjong-group-adjustment-help');
+        const saveMahjongAdjustmentBtn = document.getElementById('btn-save-mahjong-group-adjustment');
+        let mahjongAdjustmentModal = null;
+        let activeMahjongAdjustmentUrl = null;
+
+        if (mahjongAdjustmentModalEl && typeof bootstrap !== 'undefined') {
+            mahjongAdjustmentModal = bootstrap.Modal.getOrCreateInstance(mahjongAdjustmentModalEl);
+        }
+
+        function openMahjongGroupAdjustmentModal(table) {
+            if (!mahjongAdjustmentModal || !mahjongAdjustmentFields || !table) {
+                return;
+            }
+
+            const escapeHtml = (value) => {
+                const div = document.createElement('div');
+                div.textContent = value == null ? '' : String(value);
+                return div.innerHTML;
+            };
+
+            const groupName = table.dataset.grupName || 'Grup';
+            activeMahjongAdjustmentUrl = table.dataset.adjustUrl || null;
+            if (!activeMahjongAdjustmentUrl) {
+                showToast('URL bonus/penalti tidak ditemukan.', 'error');
+                return;
+            }
+
+            const members = Array.from(table.querySelectorAll('thead th[data-member-id]')).map((th) => {
+                const memberId = th.dataset.memberId;
+                const cell = table.querySelector(`.mahjong-penyesuaian[data-member-id="${memberId}"]`);
+                return {
+                    id: parseInt(memberId, 10),
+                    name: th.dataset.label
+                        || th.querySelector('.mahjong-player-name')?.textContent.trim()
+                        || 'Pemain',
+                    poin: parseInt(cell?.dataset.poin, 10) || 0,
+                };
+            });
+
+            if (members.length === 0) {
+                showToast('Anggota grup tidak ditemukan.', 'error');
+                return;
+            }
+
+            if (mahjongAdjustmentTitle) {
+                mahjongAdjustmentTitle.innerHTML = `<i class="bi bi-plus-slash-minus me-1"></i> Bonus/Penalti — ${escapeHtml(groupName)}`;
+            }
+            if (mahjongAdjustmentHelp) {
+                mahjongAdjustmentHelp.textContent = `Isi bonus (positif) atau penalti (negatif) untuk babak ini di ${groupName}. Tidak dihitung sebagai ronde menang.`;
+            }
+
+            mahjongAdjustmentFields.innerHTML = members.map((member) => `
+                <div class="row g-2 align-items-center">
+                    <div class="col-7">
+                        <label class="form-label mb-0 fw-semibold" for="mahjong-adjust-${member.id}">${escapeHtml(member.name)}</label>
+                    </div>
+                    <div class="col-5">
+                        <input type="number"
+                               class="form-control text-center mahjong-group-adjust-input"
+                               id="mahjong-adjust-${member.id}"
+                               data-member-id="${member.id}"
+                               value="${member.poin}"
+                               placeholder="0"
+                               required>
+                    </div>
+                </div>
+            `).join('');
+
+            mahjongAdjustmentModal.show();
+            const firstInput = mahjongAdjustmentFields.querySelector('.mahjong-group-adjust-input');
+            if (firstInput) {
+                setTimeout(() => firstInput.focus(), 150);
+            }
+        }
+
+        if (saveMahjongAdjustmentBtn) {
+            saveMahjongAdjustmentBtn.addEventListener('click', async () => {
+                if (!activeMahjongAdjustmentUrl || !mahjongAdjustmentFields) {
+                    return;
+                }
+
+                const inputs = Array.from(mahjongAdjustmentFields.querySelectorAll('.mahjong-group-adjust-input'));
+                const scores = [];
+
+                for (const input of inputs) {
+                    if (input.value === '' || input.value === null) {
+                        showToast('Isi bonus/penalti untuk semua pemain.', 'error');
+                        input.focus();
+                        return;
+                    }
+
+                    const poin = parseInt(input.value, 10);
+                    if (Number.isNaN(poin)) {
+                        showToast('Bonus/penalti harus berupa angka.', 'error');
+                        input.focus();
+                        return;
+                    }
+
+                    scores.push({
+                        id: parseInt(input.dataset.memberId, 10),
+                        poin,
+                    });
+                }
+
+                const original = saveMahjongAdjustmentBtn.innerHTML;
+                setButtonLoading(saveMahjongAdjustmentBtn, true);
+
+                try {
+                    const data = await apiRequest(activeMahjongAdjustmentUrl, 'PATCH', { scores });
+                    const members = data?.data?.members || [];
+                    members.forEach((member) => updateMahjongMemberFooter(member.id, member));
+                    mahjongAdjustmentModal?.hide();
+                    showToast(data.message);
+                } catch (e) {
+                    showToast(e.message, 'error');
+                } finally {
+                    setButtonLoading(saveMahjongAdjustmentBtn, false, original);
+                }
+            });
+        }
+
+        if (mahjongAdjustmentFields) {
+            mahjongAdjustmentFields.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') {
+                    return;
+                }
+
+                event.preventDefault();
+                saveMahjongAdjustmentBtn?.click();
+            });
+        }
+
         const initFriendlyMatchActions = () => {
             const panel = document.getElementById('friendly-matches-panel');
             if (!panel) return;

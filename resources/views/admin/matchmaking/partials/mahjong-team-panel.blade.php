@@ -33,7 +33,7 @@
                             <td class="text-muted">{{ $index + 1 }}</td>
                             <td class="fw-semibold">{{ $row['nama'] }}</td>
                             <td class="small text-muted">
-                                {{ collect($row['members'])->pluck('nama')->join(', ') }}
+                                {{ collect($row['members'])->pluck('nama')->implode(', ') }}
                             </td>
                             <td class="text-center">
                                 <span class="badge text-bg-primary">{{ (int) $row['total_poin'] }}</span>
@@ -106,16 +106,21 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                @php
+                                    $mejaSeatsPayload = $meja->seats->map(function ($s) {
+                                        return [
+                                            'id' => (int) $s->id_grup_member,
+                                            'nama' => optional($s->grupMember)->display_name,
+                                            'tim' => optional(optional($s->grupMember)->grup)->nama,
+                                        ];
+                                    })->values();
+                                @endphp
                                 <button type="button"
                                         class="btn btn-sm btn-outline-primary btn-mahjong-team-meja-points"
                                         data-meja-id="{{ $meja->id }}"
                                         data-meja-nama="{{ $meja->nama }}"
                                         data-url="{{ route('admin.matchmaking.mahjong-team-meja-point-entries.store', $meja) }}"
-                                        data-seats='@json($meja->seats->map(fn ($s) => [
-                                            'id' => (int) $s->id_grup_member,
-                                            'nama' => optional($s->grupMember)->display_name,
-                                            'tim' => optional(optional($s->grupMember)->grup)->nama,
-                                        ])->values())'>
+                                        data-seats='@json($mejaSeatsPayload)'>
                                     <i class="bi bi-pencil-square me-1"></i> Input Poin Meja
                                 </button>
                             </div>
@@ -174,7 +179,7 @@
                 <label class="form-label" for="mahjong-team-jumlah-lolos">Jumlah tim lolos</label>
                 <select id="mahjong-team-jumlah-lolos" class="form-select">
                     @foreach ($mahjongTeamAllowedAdvance as $n)
-                        <option value="{{ $n }}" @selected($n === ($mahjongTeamAllowedAdvance[0] ?? 1))>
+                        <option value="{{ $n }}" {{ $n === ($mahjongTeamAllowedAdvance[0] ?? 1) ? 'selected' : '' }}>
                             {{ $n === 1 ? '1 (juara)' : $n.' tim' }}
                         </option>
                     @endforeach

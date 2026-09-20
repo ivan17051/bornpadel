@@ -82,6 +82,19 @@ class TurnamenKategori extends Model
         return max(Turnamen::MIN_FRIENDLY_PLAYERS_PER_GROUP, $value);
     }
 
+    public function registrationRosterSize(): int
+    {
+        $turnamen = $this->relationLoaded('turnamen')
+            ? $this->turnamen
+            : $this->turnamen()->first();
+
+        if ($turnamen && $turnamen->isMahjongTeam()) {
+            return Turnamen::MAHJONG_TEAM_PLAYERS_PER_TEAM;
+        }
+
+        return $this->friendlyPlayersPerGroup();
+    }
+
     public function isRegistrationOpen(): bool
     {
         return $this->status === 'open';

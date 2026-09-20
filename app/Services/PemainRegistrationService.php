@@ -505,7 +505,7 @@ class PemainRegistrationService
     }
 
     /**
-     * Register a full group for Group Match (friendly). Size comes from the tournament.
+     * Register a full group for Group Match, or a full team for Mahjong Tim.
      *
      * @param  array<int, array<string, mixed>>  $players
      * @param  array<int, UploadedFile|null>  $fotos
@@ -524,15 +524,16 @@ class PemainRegistrationService
         $idKategori = null
     ): array {
         if (! $turnamen->allowsGroupRegistration()) {
-            throw new RuntimeException('Pendaftaran satu grup hanya tersedia untuk Group Match.');
+            throw new RuntimeException('Pendaftaran satu grup atau tim hanya tersedia untuk Group Match atau Mahjong Tim.');
         }
 
         $kategori = $turnamen->resolveKategori($idKategori);
-        $expectedSize = $kategori->friendlyPlayersPerGroup();
+        $expectedSize = $kategori->registrationRosterSize();
+        $noun = $turnamen->registrationRosterNoun();
 
         if (count($players) !== $expectedSize) {
             throw new RuntimeException(
-                "Pendaftaran grup harus berisi tepat {$expectedSize} pemain."
+                "Pendaftaran {$noun} harus berisi tepat {$expectedSize} pemain."
             );
         }
 
@@ -543,7 +544,7 @@ class PemainRegistrationService
                 throw new RuntimeException('Nomor HP pemain ' . ($index + 1) . ' wajib diisi.');
             }
             if (in_array($phone, $phones, true)) {
-                throw new RuntimeException('Nomor HP setiap pemain dalam grup harus berbeda satu sama lain.');
+                throw new RuntimeException('Nomor HP setiap pemain dalam '.$noun.' harus berbeda satu sama lain.');
             }
             $phones[] = $phone;
         }
@@ -626,13 +627,14 @@ class PemainRegistrationService
     public function assertGroupNameAvailable(Turnamen $turnamen, string $nama, $idKategori = null, $exceptGrupPendaftaranId = null): void
     {
         $nama = trim($nama);
+        $noun = $turnamen->registrationRosterNoun();
 
         if ($nama === '') {
-            throw new RuntimeException('Nama grup wajib diisi.');
+            throw new RuntimeException('Nama '.$noun.' wajib diisi.');
         }
 
         if (mb_strlen($nama) > 255) {
-            throw new RuntimeException('Nama grup maksimal 255 karakter.');
+            throw new RuntimeException('Nama '.$noun.' maksimal 255 karakter.');
         }
 
         $lower = mb_strtolower($nama);
@@ -654,7 +656,7 @@ class PemainRegistrationService
             ->exists();
 
         if ($existsPendaftaran || $existsGrup) {
-            throw new RuntimeException('Nama grup sudah digunakan pada kategori ini.');
+            throw new RuntimeException('Nama '.$noun.' sudah digunakan pada kategori ini.');
         }
     }
 
@@ -684,7 +686,7 @@ class PemainRegistrationService
     public function getRegistrationGroupTargets(Turnamen $turnamen, $idKategori = null): Collection
     {
         $kategori = $turnamen->resolveKategori($idKategori);
-        $capacity = $kategori->friendlyPlayersPerGroup();
+        $capacity = $kategori->registrationRosterSize();
 
         return TurnamenGrupPendaftaran::query()
             ->forKategori((int) $kategori->id)
@@ -715,7 +717,7 @@ class PemainRegistrationService
         }
 
         $kategori = $turnamen->resolveKategori($idKategori);
-        $capacity = $kategori->friendlyPlayersPerGroup();
+        $capacity = $kategori->registrationRosterSize();
 
         return DB::transaction(function () use ($turnamen, $kategori, $pesertaId, $groupId, $capacity) {
             $peserta = TurnamenPeserta::query()
