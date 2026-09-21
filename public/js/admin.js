@@ -1725,7 +1725,6 @@ const BornPadelAdmin = (function () {
             const endModalEl = document.getElementById('mahjongTeamEndBabakModal');
             const previewModalEl = document.getElementById('mahjongTeamAdvancePreviewModal');
             const tiebreakModalEl = document.getElementById('mahjongTeamTiebreakModal');
-            const pointsModalEl = document.getElementById('mahjongTeamMejaPointsModal');
             const jumlahSelect = document.getElementById('mahjong-team-jumlah-lolos');
             const confirmEndBtn = document.getElementById('btn-confirm-mahjong-team-end-babak');
             const previewHelp = document.getElementById('mahjong-team-advance-preview-help');
@@ -1735,19 +1734,13 @@ const BornPadelAdmin = (function () {
             const tiebreakAuto = document.getElementById('mahjong-team-tiebreak-auto');
             const tiebreakList = document.getElementById('mahjong-team-tiebreak-list');
             const tiebreakConfirmBtn = document.getElementById('btn-confirm-mahjong-team-tiebreak');
-            const pointsFields = document.getElementById('mahjong-team-meja-points-fields');
-            const pointsTitle = document.getElementById('mahjong-team-meja-points-title');
-            const savePointsBtn = document.getElementById('btn-save-mahjong-team-meja-points');
 
             const endModal = endModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(endModalEl) : null;
             const previewModal = previewModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(previewModalEl) : null;
             const tiebreakModal = tiebreakModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(tiebreakModalEl) : null;
-            const pointsModal = pointsModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(pointsModalEl) : null;
 
             let pendingJumlah = null;
             let pendingTiebreakIds = [];
-            let pendingMejaUrl = null;
-            let pendingWinnerId = null;
 
             const escapeHtml = (value) => {
                 const div = document.createElement('div');
@@ -1916,68 +1909,6 @@ const BornPadelAdmin = (function () {
                     } catch (e) {
                         showToast(e.message, 'error');
                         setButtonLoading(previewConfirmBtn, false, original);
-                    }
-                });
-            }
-
-            document.querySelectorAll('.btn-mahjong-team-meja-points').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    pendingMejaUrl = btn.dataset.url;
-                    pendingWinnerId = null;
-                    let seats = [];
-                    try {
-                        seats = JSON.parse(btn.dataset.seats || '[]');
-                    } catch (e) {
-                        seats = [];
-                    }
-                    if (pointsTitle) {
-                        pointsTitle.textContent = `Input Poin — ${btn.dataset.mejaNama || 'Meja'}`;
-                    }
-                    if (pointsFields) {
-                        pointsFields.innerHTML = seats.map((seat) => `
-                            <div class="border rounded p-2">
-                                <button type="button" class="btn btn-link btn-sm p-0 mb-1 mahjong-team-winner-pick" data-id="${seat.id}">
-                                    ${escapeHtml(seat.nama || 'Pemain')}
-                                </button>
-                                <div class="small text-muted mb-1">${escapeHtml(seat.tim || '')}</div>
-                                <input type="number" class="form-control mahjong-team-meja-poin" data-id="${seat.id}" value="0">
-                            </div>
-                        `).join('');
-
-                        pointsFields.querySelectorAll('.mahjong-team-winner-pick').forEach((pick) => {
-                            pick.addEventListener('click', () => {
-                                pendingWinnerId = parseInt(pick.dataset.id || '0', 10) || null;
-                                pointsFields.querySelectorAll('.mahjong-team-winner-pick').forEach((el) => {
-                                    el.classList.toggle('fw-bold', parseInt(el.dataset.id || '0', 10) === pendingWinnerId);
-                                });
-                            });
-                        });
-                    }
-                    pointsModal?.show();
-                });
-            });
-
-            if (savePointsBtn) {
-                savePointsBtn.addEventListener('click', async () => {
-                    if (!pendingMejaUrl) return;
-                    const scores = Array.from(document.querySelectorAll('.mahjong-team-meja-poin')).map((input) => ({
-                        id: parseInt(input.dataset.id || '0', 10),
-                        poin: parseInt(input.value || '0', 10),
-                    }));
-                    const original = savePointsBtn.innerHTML;
-                    setButtonLoading(savePointsBtn, true);
-                    try {
-                        const payload = { scores };
-                        if (pendingWinnerId) {
-                            payload.id_grup_member_pemenang = pendingWinnerId;
-                        }
-                        const data = await apiRequest(pendingMejaUrl, 'POST', payload);
-                        pointsModal?.hide();
-                        showToast(data.message);
-                        reloadPage();
-                    } catch (e) {
-                        showToast(e.message, 'error');
-                        setButtonLoading(savePointsBtn, false, original);
                     }
                 });
             }

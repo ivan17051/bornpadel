@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Grup;
 use App\Models\GrupMember;
+use App\Models\MahjongPoinEntry;
 use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenMeja;
@@ -209,6 +210,144 @@ class MahjongTeamMatchmakingTest extends TestCase
             ->assertOk();
 
         $this->assertSame('ongoing', $turnamenOk->fresh()->status);
+    }
+
+    public function test_matchmaking_workspace_renders_mahjong_team_meja_as_round_table(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $this->assertNotNull($meja);
+
+        $emptyHtml = $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('mahjong-group-score-table', $emptyHtml);
+        $this->assertStringContainsString('>Ronde<', $emptyHtml);
+        $this->assertStringContainsString('>Subtotal<', $emptyHtml);
+        $this->assertStringContainsString('Belum ada ronde.', $emptyHtml);
+        $this->assertStringContainsString('btn-mahjong-input-poin', $emptyHtml);
+        $this->assertStringContainsString('mahjongGroupPointsModal', $emptyHtml);
+        $this->assertStringNotContainsString('btn-mahjong-team-meja-points', $emptyHtml);
+
+        $members = $meja->seats->map->grupMember->filter()->values();
+        $firstScores = $members->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [8, -2, -3, -3][$index]];
+        })->all();
+        $secondScores = $members->map(function (GrupMember $member, int $index) {
+            return ['id' => $member->id, 'poin' => [12, -4, -4, -4][$index]];
+        })->all();
+        $winnerId = (int) $members->first()->id;
+
+        $service->addMejaPointEntries($meja, $firstScores, $winnerId);
+        $service->addMejaPointEntries($meja->fresh('seats.grupMember'), $secondScores, $winnerId);
+
+        $html = $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('mahjong-round-row', $html);
+        $this->assertStringContainsString('data-round="1"', $html);
+        $this->assertStringContainsString('data-round="2"', $html);
+        $this->assertStringContainsString('btn-mahjong-edit-ronde', $html);
+        $this->assertStringContainsString('Bonus/Penalti', $html);
+        $this->assertStringContainsString('btn-mahjong-edit-adjustment', $html);
+        $this->assertStringContainsString('20 (2)', $html);
+
+        foreach ($members as $member) {
+            $this->assertStringContainsString($member->display_name, $html);
+        }
+    }
+
+    public function test_can_update_mahjong_team_meja_round_and_keep_previous_winner(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $members = $meja->seats->map->grupMember->filter()->values();
+        $winnerA = (int) $members[0]->id;
+        $winnerB = (int) $members[1]->id;
+
+        $service->addMejaPointEntries($meja, $members->map(fn (GrupMember $member, int $index) => [
+            'id' => $member->id,
+            'poin' => [8, -2, -3, -3][$index],
+        ])->all(), $winnerA);
+
+        $service->addMejaPointEntries($meja->fresh('seats.grupMember'), $members->map(fn (GrupMember $member, int $index) => [
+            'id' => $member->id,
+            'poin' => [6, 2, -4, -4][$index],
+        ])->all(), $winnerB);
+
+        $roundOne = $members->mapWithKeys(function (GrupMember $member) use ($meja) {
+            $entry = MahjongPoinEntry::query()
+                ->where('id_grup_member', $member->id)
+                ->where('id_meja', $meja->id)
+                ->orderBy('id')
+                ->first();
+
+            return [$member->id => $entry];
+        });
+        $roundTwo = $members->mapWithKeys(function (GrupMember $member) use ($meja) {
+            $entry = MahjongPoinEntry::query()
+                ->where('id_grup_member', $member->id)
+                ->where('id_meja', $meja->id)
+                ->orderByDesc('id')
+                ->first();
+
+            return [$member->id => $entry];
+        });
+
+        $this->assertTrue((bool) $roundOne[$winnerA]->is_winner);
+        $this->assertTrue((bool) $roundTwo[$winnerB]->is_winner);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-team-meja-point-entries.update', $meja), [
+                'id_grup_member_pemenang' => $winnerB,
+                'scores' => $members->map(function (GrupMember $member, int $index) use ($roundTwo) {
+                    return [
+                        'id' => $member->id,
+                        'entry_id' => $roundTwo[$member->id]->id,
+                        'poin' => [10, 4, -7, -7][$index],
+                    ];
+                })->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.members.0.entries.1.poin', 10);
+
+        $this->assertTrue((bool) $roundOne[$winnerA]->fresh()->is_winner);
+        $this->assertSame(10, (int) $roundTwo[$winnerA]->fresh()->poin);
+        $this->assertTrue((bool) $roundTwo[$winnerB]->fresh()->is_winner);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-team-meja-point-adjustments.update', $meja), [
+                'scores' => $members->map(fn (GrupMember $member, int $index) => [
+                    'id' => $member->id,
+                    'poin' => [1, 0, 0, -1][$index],
+                ])->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(1, (int) $members[0]->fresh()->poin_penyesuaian);
+        $this->assertSame(-1, (int) $members[3]->fresh()->poin_penyesuaian);
     }
 
     protected function prepareTournament(int $playerCount, int $playersPerTeam = 4): Turnamen

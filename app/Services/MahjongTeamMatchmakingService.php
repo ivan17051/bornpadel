@@ -307,9 +307,11 @@ class MahjongTeamMatchmakingService
 
         $seatMemberIds = $meja->seats->pluck('id_grup_member')->map(fn ($id) => (int) $id)->all();
 
-        return DB::transaction(function () use ($meja, $scores, $winnerMemberId, $seatMemberIds) {
-            $entries = collect();
+        if ($winnerMemberId !== null && ! in_array($winnerMemberId, $seatMemberIds, true)) {
+            throw new RuntimeException('Pemenang harus salah satu pemain di meja.');
+        }
 
+        return DB::transaction(function () use ($meja, $scores, $winnerMemberId, $seatMemberIds) {
             foreach ($scores as $row) {
                 $memberId = (int) ($row['id'] ?? 0);
                 $poin = (int) ($row['poin'] ?? 0);
@@ -321,25 +323,149 @@ class MahjongTeamMatchmakingService
                 $member = GrupMember::findOrFail($memberId);
                 $isWinner = $winnerMemberId !== null && $memberId === $winnerMemberId;
 
-                if ($isWinner) {
-                    MahjongPoinEntry::query()
-                        ->where('id_meja', $meja->id)
-                        ->where('is_winner', true)
-                        ->update(['is_winner' => false]);
-                }
-
-                $entry = MahjongPoinEntry::create([
+                MahjongPoinEntry::create([
                     'id_grup_member' => $member->id,
                     'id_meja' => $meja->id,
                     'poin' => $poin,
                     'is_winner' => $isWinner,
                 ]);
-
-                $this->syncPoinDidapatFromEntries($member);
-                $entries->push($entry->fresh());
             }
 
-            return $entries;
+            return $meja->seats->map(function ($seat) {
+                $member = $seat->grupMember;
+                if (! $member) {
+                    return null;
+                }
+
+                $this->syncPoinDidapatFromEntries($member);
+
+                return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
+            })->filter()->values();
+        });
+    }
+
+    /**
+     * @param  list<array{id: int, entry_id: int, poin: int}>  $scores
+     * @return Collection<int, GrupMember>
+     */
+    public function updateMejaPointEntries(
+        TurnamenMeja $meja,
+        array $scores,
+        ?int $winnerMemberId = null
+    ): Collection {
+        $turnamen = $meja->turnamen ?? Turnamen::find($meja->id_turnamen);
+
+        if (! $turnamen || ! $turnamen->isMahjongTeam()) {
+            throw new RuntimeException('Input poin hanya untuk Mahjong Tim.');
+        }
+
+        if (! $meja->is_aktif) {
+            throw new RuntimeException('Meja tidak aktif.');
+        }
+
+        $meja->loadMissing(['seats.grupMember.poinEntries']);
+
+        $membersById = $meja->seats
+            ->map(fn ($seat) => $seat->grupMember)
+            ->filter()
+            ->keyBy('id');
+
+        if ($membersById->count() !== MahjongTeamSeatingService::TABLE_SIZE) {
+            throw new RuntimeException('Meja harus berisi 4 pemain.');
+        }
+
+        if (count($scores) !== MahjongTeamSeatingService::TABLE_SIZE) {
+            throw new RuntimeException('Harus mengisi poin untuk 4 pemain di meja.');
+        }
+
+        $scoreIds = collect($scores)->pluck('id')->map(fn ($id) => (int) $id)->sort()->values();
+        $memberIds = $membersById->keys()->map(fn ($id) => (int) $id)->sort()->values();
+
+        if ($scoreIds->all() !== $memberIds->all()) {
+            throw new RuntimeException('Daftar pemain tidak cocok dengan kursi meja.');
+        }
+
+        if ($winnerMemberId !== null && ! $membersById->has($winnerMemberId)) {
+            throw new RuntimeException('Pemenang harus salah satu pemain di meja.');
+        }
+
+        $entryIds = collect($scores)->pluck('entry_id')->map(fn ($id) => (int) $id)->filter()->unique();
+        if ($entryIds->count() !== MahjongTeamSeatingService::TABLE_SIZE) {
+            throw new RuntimeException('Setiap pemain harus punya entri poin yang valid untuk ronde ini.');
+        }
+
+        return DB::transaction(function () use ($meja, $scores, $winnerMemberId, $membersById) {
+            foreach ($scores as $score) {
+                $memberId = (int) $score['id'];
+                $entryId = (int) ($score['entry_id'] ?? 0);
+                $member = $membersById->get($memberId);
+                $entry = $member->poinEntries->firstWhere('id', $entryId);
+
+                if (! $entry || (int) $entry->id_meja !== (int) $meja->id) {
+                    throw new RuntimeException('Entri poin tidak ditemukan untuk pemain di meja ini.');
+                }
+
+                $entry->update([
+                    'poin' => (int) $score['poin'],
+                    'is_winner' => $winnerMemberId !== null && $memberId === $winnerMemberId,
+                ]);
+            }
+
+            return $membersById->values()->map(function (GrupMember $member) {
+                $this->syncPoinDidapatFromEntries($member);
+
+                return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
+            })->values();
+        });
+    }
+
+    /**
+     * @param  list<array{id: int, poin: int}>  $scores
+     * @return Collection<int, GrupMember>
+     */
+    public function updateMejaAdjustments(TurnamenMeja $meja, array $scores): Collection
+    {
+        $turnamen = $meja->turnamen ?? Turnamen::find($meja->id_turnamen);
+
+        if (! $turnamen || ! $turnamen->isMahjongTeam()) {
+            throw new RuntimeException('Bonus/penalti hanya untuk Mahjong Tim.');
+        }
+
+        if (! $meja->is_aktif) {
+            throw new RuntimeException('Meja tidak aktif.');
+        }
+
+        $meja->loadMissing('seats.grupMember');
+
+        $membersById = $meja->seats
+            ->map(fn ($seat) => $seat->grupMember)
+            ->filter()
+            ->keyBy('id');
+
+        if ($membersById->count() !== MahjongTeamSeatingService::TABLE_SIZE) {
+            throw new RuntimeException('Meja harus berisi 4 pemain.');
+        }
+
+        if (count($scores) !== MahjongTeamSeatingService::TABLE_SIZE) {
+            throw new RuntimeException('Bonus/penalti harus diisi untuk 4 pemain di meja.');
+        }
+
+        $scoreIds = collect($scores)->pluck('id')->map(fn ($id) => (int) $id)->sort()->values();
+        $memberIds = $membersById->keys()->map(fn ($id) => (int) $id)->sort()->values();
+
+        if ($scoreIds->all() !== $memberIds->all()) {
+            throw new RuntimeException('Daftar pemain tidak cocok dengan kursi meja.');
+        }
+
+        return DB::transaction(function () use ($scores, $membersById) {
+            foreach ($scores as $score) {
+                $member = $membersById->get((int) $score['id']);
+                $member->update(['poin_penyesuaian' => (int) $score['poin']]);
+            }
+
+            return $membersById->values()->map(function (GrupMember $member) {
+                return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
+            })->values();
         });
     }
 

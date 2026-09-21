@@ -551,7 +551,7 @@ class MatchmakingController extends Controller
             $winnerMemberId = $request->filled('id_grup_member_pemenang')
                 ? (int) $request->input('id_grup_member_pemenang')
                 : null;
-            $this->mahjongTeamService->addMejaPointEntries(
+            $updatedMembers = $this->mahjongTeamService->addMejaPointEntries(
                 $meja,
                 $request->input('scores'),
                 $winnerMemberId
@@ -563,28 +563,83 @@ class MatchmakingController extends Controller
             ], 422);
         }
 
-        $meja->load([
-            'seats.grupMember.pemain',
-            'seats.grupMember.turnamenPeserta.pemain1',
-            'seats.grupMember.grup',
-            'seats.grupMember.poinEntries',
-        ]);
-
         return response()->json([
             'success' => true,
             'message' => 'Poin meja berhasil disimpan.',
             'data' => [
                 'meja_id' => $meja->id,
-                'seats' => $meja->seats->map(function ($seat) {
-                    $member = $seat->grupMember;
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
+                })->values(),
+            ],
+        ]);
+    }
 
-                    return [
-                        'seat_id' => $seat->id,
-                        'id' => optional($member)->id,
-                        'nama' => optional($member)->display_name,
-                        'tim' => optional(optional($member)->grup)->nama,
-                        'poin_didapat' => (int) (optional($member)->poin_didapat ?? 0),
-                    ];
+    public function updateMahjongTeamMejaPointEntries(Request $request, TurnamenMeja $meja)
+    {
+        $request->validate([
+            'scores' => ['required', 'array', 'size:4'],
+            'scores.*.id' => ['required', 'integer'],
+            'scores.*.entry_id' => ['required', 'integer'],
+            'scores.*.poin' => ['required', 'integer'],
+            'id_grup_member_pemenang' => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $winnerMemberId = $request->filled('id_grup_member_pemenang')
+                ? (int) $request->input('id_grup_member_pemenang')
+                : null;
+            $updatedMembers = $this->mahjongTeamService->updateMejaPointEntries(
+                $meja,
+                $request->input('scores'),
+                $winnerMemberId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin ronde berhasil diperbarui.',
+            'data' => [
+                'meja_id' => $meja->id,
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
+                })->values(),
+            ],
+        ]);
+    }
+
+    public function updateMahjongTeamMejaAdjustments(Request $request, TurnamenMeja $meja)
+    {
+        $request->validate([
+            'scores' => ['required', 'array', 'size:4'],
+            'scores.*.id' => ['required', 'integer'],
+            'scores.*.poin' => ['required', 'integer'],
+        ]);
+
+        try {
+            $updatedMembers = $this->mahjongTeamService->updateMejaAdjustments(
+                $meja,
+                $request->input('scores')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bonus/penalti babak berhasil disimpan.',
+            'data' => [
+                'meja_id' => $meja->id,
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
                 })->values(),
             ],
         ]);

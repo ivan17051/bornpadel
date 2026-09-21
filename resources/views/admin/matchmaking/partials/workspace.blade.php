@@ -1360,7 +1360,7 @@
         </div>
     @endif
 
-    @if ($isMahjong ?? false)
+    @if (($isMahjong ?? false) || ($isMahjongTeam ?? false))
         <div class="modal fade" id="mahjongGroupPointsModal" tabindex="-1" aria-labelledby="mahjongGroupPointsModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
