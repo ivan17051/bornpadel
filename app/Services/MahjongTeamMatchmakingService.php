@@ -343,6 +343,42 @@ class MahjongTeamMatchmakingService
         });
     }
 
+    public function addMemberPointEntry(GrupMember $member, int $poin): GrupMember
+    {
+        $this->assertActiveMahjongTeamMember($member);
+
+        $meja = $this->activeMejaForMember($member);
+
+        if (! $meja) {
+            throw new RuntimeException('Pemain tidak duduk di meja aktif.');
+        }
+
+        MahjongPoinEntry::create([
+            'id_grup_member' => $member->id,
+            'id_meja' => $meja->id,
+            'poin' => $poin,
+            'is_winner' => false,
+        ]);
+
+        $this->syncPoinDidapatFromEntries($member);
+
+        return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
+    }
+
+    public function updateMemberPointEntry(GrupMember $member, MahjongPoinEntry $entry, int $poin): GrupMember
+    {
+        $this->assertActiveMahjongTeamMember($member);
+
+        if ((int) $entry->id_grup_member !== (int) $member->id) {
+            throw new RuntimeException('Entri poin tidak cocok dengan anggota tim.');
+        }
+
+        $entry->update(['poin' => $poin]);
+        $this->syncPoinDidapatFromEntries($member);
+
+        return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
+    }
+
     /**
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
@@ -744,6 +780,36 @@ class MahjongTeamMatchmakingService
             ->sum('poin');
 
         $member->update(['poin_didapat' => $sum]);
+    }
+
+    protected function assertActiveMahjongTeamMember(GrupMember $member): void
+    {
+        $member->loadMissing('grup.turnamen');
+
+        if (! $member->grup || ! $member->grup->turnamen || ! $member->grup->turnamen->isMahjongTeam()) {
+            throw new RuntimeException('Input poin hanya untuk Mahjong Tim.');
+        }
+
+        if (! $member->grup->is_aktif) {
+            throw new RuntimeException('Tim tidak aktif.');
+        }
+    }
+
+    protected function activeMejaForMember(GrupMember $member): ?TurnamenMeja
+    {
+        $seat = TurnamenMejaSeat::query()
+            ->where('id_grup_member', $member->id)
+            ->whereHas('meja', function ($query) use ($member) {
+                $query->where('is_aktif', true);
+
+                if ($member->grup) {
+                    $query->where('id_turnamen', $member->grup->id_turnamen);
+                }
+            })
+            ->with('meja')
+            ->first();
+
+        return $seat ? $seat->meja : null;
     }
 
     protected function playersPerTeam(Turnamen $turnamen, $idKategori = null): int

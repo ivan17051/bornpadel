@@ -10,17 +10,25 @@ use App\Models\Grup;
 use App\Models\GrupMember;
 use App\Models\MahjongPoinEntry;
 use App\Models\Turnamen;
+use App\Models\TurnamenMeja;
 use App\Services\MahjongMatchmakingService;
+use App\Services\MahjongTeamMatchmakingService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 use RuntimeException;
 
 class MahjongScoreController extends Controller
 {
     protected $mahjongService;
 
-    public function __construct(MahjongMatchmakingService $mahjongService)
-    {
+    protected $mahjongTeamService;
+
+    public function __construct(
+        MahjongMatchmakingService $mahjongService,
+        MahjongTeamMatchmakingService $mahjongTeamService
+    ) {
         $this->mahjongService = $mahjongService;
+        $this->mahjongTeamService = $mahjongTeamService;
     }
 
     public function groups(int $id): JsonResponse
@@ -31,17 +39,19 @@ class MahjongScoreController extends Controller
             return $turnamen;
         }
 
-        $groups = Grup::query()
-            ->where('id_turnamen', $turnamen->id)
-            ->where('is_aktif', true)
-            ->with(['members.pemain', 'members.poinEntries', 'members.turnamenPeserta.pemain1'])
-            ->orderBy('nama')
-            ->orderBy('id')
-            ->get()
-            ->map(function (Grup $grup) {
-                return $this->groupPayload($grup);
-            })
-            ->values();
+        $groups = $turnamen->isMahjongTeam()
+            ? $this->mahjongTeamGroupPayloads($turnamen)
+            : Grup::query()
+                ->where('id_turnamen', $turnamen->id)
+                ->where('is_aktif', true)
+                ->with(['members.pemain', 'members.poinEntries', 'members.turnamenPeserta.pemain1'])
+                ->orderBy('nama')
+                ->orderBy('id')
+                ->get()
+                ->map(function (Grup $grup) {
+                    return $this->groupPayload($grup);
+                })
+                ->values();
 
         return response()->json([
             'success' => true,
@@ -58,6 +68,10 @@ class MahjongScoreController extends Controller
 
         if ($turnamen instanceof JsonResponse) {
             return $turnamen;
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            return $this->storeMahjongTeamMejaScores($request, $turnamen);
         }
 
         $grup = Grup::with('members')->find($request->input('id_grup'));
@@ -77,12 +91,12 @@ class MahjongScoreController extends Controller
         }
 
         try {
-            $scores = $this->normalizeGroupScores($grup, $request->input('scores', []));
+            $scores = $this->normalizeScores($grup->members, $request->input('scores', []));
             $winnerMemberId = null;
 
             if ($request->filled('id_grup_member_pemenang')) {
                 $winnerMemberId = $this->resolveWinnerMemberId(
-                    $grup,
+                    $grup->members,
                     $scores,
                     (int) $request->input('id_grup_member_pemenang')
                 );
@@ -138,10 +152,15 @@ class MahjongScoreController extends Controller
         }
 
         try {
-            $updated = $this->mahjongService->addMemberPointEntry(
-                $member,
-                (int) $request->input('poin')
-            );
+            $updated = $turnamen->isMahjongTeam()
+                ? $this->mahjongTeamService->addMemberPointEntry(
+                    $member,
+                    (int) $request->input('poin')
+                )
+                : $this->mahjongService->addMemberPointEntry(
+                    $member,
+                    (int) $request->input('poin')
+                );
         } catch (RuntimeException $e) {
             return response()->json([
                 'success' => false,
@@ -181,11 +200,17 @@ class MahjongScoreController extends Controller
         }
 
         try {
-            $updated = $this->mahjongService->updateMemberPointEntry(
-                $member,
-                $entry,
-                (int) $request->input('poin')
-            );
+            $updated = $turnamen->isMahjongTeam()
+                ? $this->mahjongTeamService->updateMemberPointEntry(
+                    $member,
+                    $entry,
+                    (int) $request->input('poin')
+                )
+                : $this->mahjongService->updateMemberPointEntry(
+                    $member,
+                    $entry,
+                    (int) $request->input('poin')
+                );
         } catch (RuntimeException $e) {
             return response()->json([
                 'success' => false,
@@ -214,10 +239,10 @@ class MahjongScoreController extends Controller
             ], 404);
         }
 
-        if (! $turnamen->isMahjong()) {
+        if (! $turnamen->isMahjongFormat()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Endpoint ini hanya tersedia untuk turnamen Mahjong.',
+                'message' => 'Endpoint ini hanya tersedia untuk turnamen Mahjong atau Mahjong Tim.',
             ], 422);
         }
 
@@ -242,20 +267,111 @@ class MahjongScoreController extends Controller
         ], 403);
     }
 
+    protected function storeMahjongTeamMejaScores(StoreMahjongGroupScoresRequest $request, Turnamen $turnamen): JsonResponse
+    {
+        $mejaId = (int) ($request->input('id_meja') ?: $request->input('id_grup'));
+        $meja = TurnamenMeja::with('seats.grupMember')->find($mejaId);
+
+        if (! $meja || (int) $meja->id_turnamen !== (int) $turnamen->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Meja tidak ditemukan pada turnamen ini.',
+            ], 404);
+        }
+
+        if ($blocked = $this->rejectIfExternalScoringDisabled(
+            $turnamen,
+            $request->input('id_kategori') ?? $meja->id_kategori
+        )) {
+            return $blocked;
+        }
+
+        $members = $meja->seats
+            ->map(function ($seat) {
+                return $seat->grupMember;
+            })
+            ->filter()
+            ->values();
+
+        try {
+            $scores = $this->normalizeScores($members, $request->input('scores', []));
+            $winnerMemberId = null;
+
+            if ($request->filled('id_grup_member_pemenang')) {
+                $winnerMemberId = $this->resolveWinnerMemberId(
+                    $members,
+                    $scores,
+                    (int) $request->input('id_grup_member_pemenang')
+                );
+            }
+
+            $this->mahjongTeamService->addMejaPointEntries($meja, $scores, $winnerMemberId);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $payload = $this->mejaAsGroupPayload(
+            $meja->fresh([
+                'seats.grupMember.pemain',
+                'seats.grupMember.poinEntries',
+                'seats.grupMember.turnamenPeserta.pemain1',
+                'seats.grupMember.grup',
+            ])
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin meja berhasil disimpan.',
+            'data' => [
+                'turnamen' => $this->turnamenPayload($turnamen->fresh()),
+                'grup' => $payload,
+                'meja' => $payload,
+                'members' => $payload['members'],
+            ],
+        ], 201);
+    }
+
     /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    protected function mahjongTeamGroupPayloads(Turnamen $turnamen): Collection
+    {
+        return TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with([
+                'seats.grupMember.pemain',
+                'seats.grupMember.poinEntries',
+                'seats.grupMember.turnamenPeserta.pemain1',
+                'seats.grupMember.grup',
+            ])
+            ->orderBy('nama')
+            ->orderBy('id')
+            ->get()
+            ->map(function (TurnamenMeja $meja) {
+                return $this->mejaAsGroupPayload($meja);
+            })
+            ->values();
+    }
+
+    /**
+     * @param  iterable  $members
      * @param  array<int, array<string, mixed>>  $scores
      * @return array<int, array{id:int, poin:int}>
      */
-    protected function normalizeGroupScores(Grup $grup, array $scores): array
+    protected function normalizeScores($members, array $scores): array
     {
-        $members = $grup->members;
+        $memberList = collect($members)->filter();
         $normalized = [];
 
         foreach ($scores as $index => $score) {
-            $member = $this->resolveScoreMember($members, $score);
+            $member = $this->resolveScoreMember($memberList, $score);
 
             if (! $member) {
-                throw new RuntimeException('Pemain pada scores['.$index.'] tidak ditemukan di grup ini. Isi id_grup_member atau id_pemain.');
+                throw new RuntimeException('Pemain pada scores['.$index.'] tidak ditemukan. Isi id_grup_member atau id_pemain.');
             }
 
             $normalized[] = [
@@ -268,9 +384,10 @@ class MahjongScoreController extends Controller
     }
 
     /**
+     * @param  iterable  $members
      * @param  array<int, array{id:int, poin:int}>  $scores
      */
-    protected function resolveWinnerMemberId(Grup $grup, array $scores, int $winnerMemberId): int
+    protected function resolveWinnerMemberId($members, array $scores, int $winnerMemberId): int
     {
         $scoreIds = collect($scores)->pluck('id')->map(fn ($id) => (int) $id)->all();
 
@@ -278,8 +395,8 @@ class MahjongScoreController extends Controller
             throw new RuntimeException('id_grup_member_pemenang harus salah satu pemain di scores.');
         }
 
-        if (! $grup->members->firstWhere('id', $winnerMemberId)) {
-            throw new RuntimeException('Pemenang harus salah satu anggota grup.');
+        if (! collect($members)->firstWhere('id', $winnerMemberId)) {
+            throw new RuntimeException('Pemenang harus salah satu pemain di meja atau grup.');
         }
 
         return $winnerMemberId;
@@ -291,14 +408,15 @@ class MahjongScoreController extends Controller
      */
     protected function resolveScoreMember($members, array $score): ?GrupMember
     {
+        $memberList = collect($members);
         $memberId = $score['id_grup_member'] ?? $score['id'] ?? null;
 
         if ($memberId) {
-            return $members->firstWhere('id', (int) $memberId);
+            return $memberList->firstWhere('id', (int) $memberId);
         }
 
         if (! empty($score['id_pemain'])) {
-            return $members->firstWhere('id_pemain', (int) $score['id_pemain']);
+            return $memberList->firstWhere('id_pemain', (int) $score['id_pemain']);
         }
 
         return null;
@@ -328,6 +446,44 @@ class MahjongScoreController extends Controller
             'members' => $grup->members->map(function (GrupMember $member) {
                 return $this->memberPayload($member);
             })->values(),
+        ];
+    }
+
+    /**
+     * Shape a Mahjong Tim table as a "group" so Omahjong's Grup tab can reuse the same payload.
+     *
+     * @return array<string, mixed>
+     */
+    protected function mejaAsGroupPayload(TurnamenMeja $meja): array
+    {
+        $meja->loadMissing([
+            'seats.grupMember.pemain',
+            'seats.grupMember.poinEntries',
+            'seats.grupMember.turnamenPeserta.pemain1',
+            'seats.grupMember.grup',
+        ]);
+
+        return [
+            'id' => $meja->id,
+            'id_meja' => $meja->id,
+            'nama' => $meja->nama,
+            'babak' => (int) $meja->babak,
+            'ronde' => (int) $meja->ronde,
+            'is_aktif' => (bool) $meja->is_aktif,
+            'members' => $meja->seats->map(function ($seat) {
+                $member = $seat->grupMember;
+
+                if (! $member) {
+                    return null;
+                }
+
+                $payload = $this->memberPayload($member);
+                $payload['id_tim'] = $member->id_grup;
+                $payload['tim'] = optional($member->grup)->nama;
+                $payload['seat_order'] = (int) $seat->seat_order;
+
+                return $payload;
+            })->filter()->values(),
         ];
     }
 

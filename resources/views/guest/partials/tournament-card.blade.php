@@ -31,7 +31,7 @@
     $standingsBase = ['id_turnamen' => $item->id];
     $actionCount = $item->isRegistrationOpen()
         ? 3
-        : (($item->isMahjong() || $item->isFriendly()) ? 2 : 3);
+        : (($item->isMahjongFormat() || $item->isFriendly()) ? 2 : 3);
 @endphp
 <div class="col-12 col-md-6">
     <div class="card guest-card h-100">
@@ -116,7 +116,7 @@
                        class="btn btn-outline-success">
                         <i class="bi bi-bar-chart-steps me-1"></i> Klasemen
                     </a>
-                    @if (! $item->isMahjong() && ! $item->isFriendly())
+                    @if (! $item->isMahjongFormat() && ! $item->isFriendly())
                         <a href="{{ route('guest.bracket', array_filter(array_merge($standingsBase, [
                                 'id_kategori' => optional($defaultKategori)->id,
                             ]))) }}"

@@ -6,9 +6,11 @@ use App\Models\Grup;
 use App\Models\GrupMember;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenMeja;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\MahjongMatchmakingService;
+use App\Services\MahjongTeamMatchmakingService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -40,7 +42,7 @@ class ExternalMahjongScoreApiTest extends TestCase
                 ],
             ])
             ->assertStatus(422)
-            ->assertJsonPath('message', 'Endpoint ini hanya tersedia untuk turnamen Mahjong.');
+            ->assertJsonPath('message', 'Endpoint ini hanya tersedia untuk turnamen Mahjong atau Mahjong Tim.');
     }
 
     public function test_external_api_stores_group_scores_and_updates_entry(): void
@@ -289,6 +291,111 @@ class ExternalMahjongScoreApiTest extends TestCase
             ->assertJsonPath('data.turnamen.jenis', 'mahjong_team');
     }
 
+    public function test_external_api_lists_mahjong_team_tables_as_groups(): void
+    {
+        $turnamen = $this->prepareMahjongTeamTournament(16);
+        app(MahjongTeamMatchmakingService::class)->generateTeams($turnamen, 'random');
+
+        $response = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-groups')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.turnamen.jenis', 'mahjong_team');
+
+        $groups = $response->json('data.groups');
+        $this->assertCount(4, $groups);
+        $this->assertCount(4, $groups[0]['members']);
+        $this->assertArrayHasKey('id_grup_member', $groups[0]['members'][0]);
+        $this->assertArrayHasKey('id_meja', $groups[0]);
+        $this->assertSame($groups[0]['id'], $groups[0]['id_meja']);
+        $this->assertNotEmpty($groups[0]['members'][0]['tim']);
+    }
+
+    public function test_external_api_stores_and_updates_mahjong_team_table_scores(): void
+    {
+        $turnamen = $this->prepareMahjongTeamTournament(16);
+        app(MahjongTeamMatchmakingService::class)->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+
+        $this->assertNotNull($meja);
+        $this->assertCount(4, $meja->seats);
+
+        $points = [8, -2, -3, -3];
+        $scores = $meja->seats->values()->map(function ($seat, int $index) use ($points) {
+            return [
+                'id_grup_member' => (int) $seat->id_grup_member,
+                'poin' => $points[$index],
+            ];
+        })->all();
+
+        $winnerId = (int) $meja->seats->first()->id_grup_member;
+
+        $store = $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores', [
+                'id_grup' => $meja->id,
+                'id_grup_member_pemenang' => $winnerId,
+                'scores' => $scores,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.grup.id_meja', $meja->id);
+
+        $this->assertCount(4, $store->json('data.members'));
+        $this->assertSame(1, (int) collect($store->json('data.members'))->firstWhere('id_grup_member', $winnerId)['menang']);
+
+        foreach ($scores as $score) {
+            $member = GrupMember::findOrFail($score['id_grup_member']);
+            $this->assertSame($score['poin'], (int) $member->poin_didapat);
+            $this->assertSame(1, $member->poinEntries()->count());
+            $this->assertSame((int) $member->id === $winnerId, (bool) $member->poinEntries()->first()->is_winner);
+            $this->assertSame($meja->id, (int) $member->poinEntries()->first()->id_meja);
+        }
+
+        $firstMember = $meja->seats->first()->grupMember;
+        $entry = $firstMember->fresh()->poinEntries()->first();
+        $this->assertNotNull($entry);
+
+        $this->withHeaders($this->externalHeaders())
+            ->patchJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores/'.$entry->id, [
+                'poin' => 12,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.poin_didapat', 12);
+
+        $this->assertSame(12, (int) $entry->fresh()->poin);
+        $this->assertSame(12, (int) $firstMember->fresh()->poin_didapat);
+    }
+
+    public function test_external_api_stores_mahjong_team_single_member_score(): void
+    {
+        $turnamen = $this->prepareMahjongTeamTournament(16);
+        app(MahjongTeamMatchmakingService::class)->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats')
+            ->first();
+
+        $member = GrupMember::findOrFail($meja->seats->first()->id_grup_member);
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-members/'.$member->id.'/scores', [
+                'poin' => -5,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.poin_didapat', -5);
+
+        $this->assertSame(1, $member->fresh()->poinEntries()->count());
+        $this->assertSame($meja->id, (int) $member->fresh()->poinEntries()->first()->id_meja);
+    }
+
     protected function prepareMahjongTournament(int $playerCount): Turnamen
     {
         $turnamen = Turnamen::create([
@@ -305,6 +412,37 @@ class ExternalMahjongScoreApiTest extends TestCase
                 'nama' => "External MJ {$i}",
                 'gender' => $i % 2 ? 'male' : 'female',
                 'no_hp' => '+62821' . str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT) . $i,
+                'rating' => 2.5,
+            ]);
+
+            TurnamenPeserta::create([
+                'id_turnamen' => $turnamen->id,
+                'id_pemain1' => $pemain->id,
+                'status' => 'approved',
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+            ]);
+        }
+
+        return $turnamen;
+    }
+
+    protected function prepareMahjongTeamTournament(int $playerCount, int $playersPerTeam = 4): Turnamen
+    {
+        $turnamen = Turnamen::create([
+            'nama' => 'External Mahjong Team ' . uniqid(),
+            'tanggal' => now()->toDateString(),
+            'harga' => 100000,
+            'maks_peserta' => $playerCount,
+            'jenis' => 'mahjong_team',
+            'players_per_group' => $playersPerTeam,
+            'status' => 'ongoing',
+        ]);
+
+        for ($i = 1; $i <= $playerCount; $i++) {
+            $pemain = Pemain::create([
+                'nama' => "External Team MJ {$i}",
+                'gender' => $i % 2 ? 'male' : 'female',
+                'no_hp' => '+62822' . str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT) . $i,
                 'rating' => 2.5,
             ]);
 

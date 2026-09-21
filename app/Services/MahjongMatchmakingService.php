@@ -41,7 +41,7 @@ class MahjongMatchmakingService
 
     public function isExternalScoringEnabled(Turnamen $turnamen, $idKategori = null): bool
     {
-        if (! $turnamen->isMahjong()) {
+        if (! $turnamen->isMahjongFormat()) {
             return false;
         }
 
