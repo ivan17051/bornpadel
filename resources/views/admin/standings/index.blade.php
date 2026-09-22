@@ -26,10 +26,10 @@
 @endsection
 
 @push('scripts')
-@if ($turnamen && ! $turnamen->isMahjong() && ! $turnamen->isFriendly())
+@if ($turnamen && ! $turnamen->isMahjong() && ! $turnamen->isMahjongTeam() && ! $turnamen->isFriendly())
 <script src="{{ asset('public/js/group-stage-history.js') }}"></script>
 @endif
 @if ($turnamen)
-<script src="{{ asset('public/js/leaderboard.js') }}"></script>
+<script src="{{ asset('public/js/leaderboard.js') }}?v={{ @filemtime(base_path('public/js/leaderboard.js')) }}"></script>
 @endif
 @endpush

@@ -10,6 +10,7 @@ use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\GroupMatchmakingService;
+use App\Services\LeaderboardService;
 use App\Services\MahjongMatchmakingService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
@@ -227,6 +228,41 @@ class MahjongResetAndPointEntriesTest extends TestCase
                 'scores' => $partial,
             ])
             ->assertStatus(422);
+    }
+
+    public function test_group_point_entries_treat_empty_poin_as_zero(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $members = $grup->members->values();
+        $scores = [
+            ['id' => $members[0]->id, 'poin' => 8],
+            ['id' => $members[1]->id, 'poin' => ''],
+            ['id' => $members[2]->id],
+            ['id' => $members[3]->id, 'poin' => null],
+        ];
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-group-point-entries.store', $grup), [
+                'scores' => $scores,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(8, (int) $members[0]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[1]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[2]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[3]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[1]->fresh()->poinEntries()->first()->poin);
     }
 
     public function test_group_point_entries_can_be_updated_for_a_round(): void
@@ -862,6 +898,135 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertStringNotContainsString('btn-delete-mahjong-poin', $html);
         $this->assertStringContainsString('bi-trophy-fill', $html);
         $this->assertStringContainsString('btn-mahjong-input-poin', $html);
+    }
+
+    public function test_mahjong_standings_preview_marks_projected_qualifiers_and_ranking_columns(): void
+    {
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+        $this->seedDistinctMahjongGroupScores($service, $turnamen);
+
+        $standings = app(LeaderboardService::class)->getMahjongStandingsByBabak($turnamen->id);
+        $section = $standings['sections']->firstWhere('babak', 1);
+
+        $this->assertNotNull($section);
+        $this->assertSame('preview', $section['advance_kind']);
+        $this->assertTrue($section['is_active']);
+        $this->assertSame(4, $section['advance_count']);
+        $this->assertStringContainsString('Total babak', $section['ranking_note']);
+
+        $rows = collect($section['rows']);
+        $this->assertCount(4, $rows->where('advance_status', 'pratinjau'));
+        $this->assertSame(
+            $rows->sortBy('rank')->take(4)->pluck('id_peserta')->all(),
+            $rows->where('advances', true)->sortBy('rank')->pluck('id_peserta')->all()
+        );
+
+        $guestHtml = $this->get(route('guest.standings', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Cara peringkat', $guestHtml);
+        $this->assertStringContainsString('Total babak → Menang', $guestHtml);
+        $this->assertStringContainsString('Lolos*', $guestHtml);
+        $this->assertStringContainsString('Akumulasi', $guestHtml);
+
+        $admin = $this->makeAdmin();
+        $adminHtml = $this->actingAs($admin)
+            ->get(route('admin.standings.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Cara peringkat', $adminHtml);
+        $this->assertStringContainsString('Lolos*', $adminHtml);
+        $this->assertStringContainsString('>W<', $adminHtml);
+    }
+
+    public function test_mahjong_standings_marks_confirmed_advancers_after_advance(): void
+    {
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+        $this->seedDistinctMahjongGroupScores($service, $turnamen);
+
+        $before = app(LeaderboardService::class)->getMahjongStandingsByBabak($turnamen->id);
+        $qualifierIds = collect($before['sections']->first()['rows'])
+            ->where('advances', true)
+            ->pluck('id_peserta')
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        $service->advanceRound($turnamen->fresh(), 4);
+
+        $standings = app(LeaderboardService::class)->getMahjongStandingsByBabak($turnamen->id);
+        $babak1 = $standings['sections']->firstWhere('babak', 1);
+        $babak2 = $standings['sections']->firstWhere('babak', 2);
+
+        $this->assertSame('confirmed', $babak1['advance_kind']);
+        $this->assertSame(2, $babak1['next_babak']);
+        $this->assertSame('final', $babak2['advance_kind']);
+        $this->assertTrue($babak2['is_final']);
+
+        $confirmedIds = collect($babak1['rows'])
+            ->where('advance_status', 'lolos')
+            ->pluck('id_peserta')
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame($qualifierIds, $confirmedIds);
+
+        $html = $this->get(route('guest.standings', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Lolos ke Babak 2', $html);
+        $this->assertStringContainsString('>Lolos<', $html);
+        $this->assertStringContainsString('Final', $html);
+        $this->assertStringContainsString('Juara', $html);
+    }
+
+    public function test_mahjong_standings_do_not_mark_lolos_when_entire_field_is_tied(): void
+    {
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+
+        $section = app(LeaderboardService::class)
+            ->getMahjongStandingsByBabak($turnamen->id)['sections']
+            ->first();
+
+        $this->assertSame('preview', $section['advance_kind']);
+        $this->assertSame(4, $section['advance_count']);
+        $this->assertTrue(collect($section['rows'])->every(fn ($row) => empty($row['advance_status'])));
+        $this->assertStringContainsString('masih seri', $section['advance_note']);
+    }
+
+    protected function seedDistinctMahjongGroupScores(MahjongMatchmakingService $service, Turnamen $turnamen): void
+    {
+        $groups = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('id')
+            ->get();
+
+        $base = 40;
+        foreach ($groups as $grup) {
+            $members = $grup->members->values();
+            $scores = $members->map(function (GrupMember $member) use (&$base) {
+                $poin = $base;
+                $base -= 5;
+
+                return ['id' => $member->id, 'poin' => $poin];
+            })->all();
+
+            $service->addGroupPointEntries($grup, $scores, (int) $scores[0]['id']);
+        }
     }
 
     protected function prepareMahjongTournament(int $playerCount): Turnamen

@@ -1469,7 +1469,6 @@ const BornPadelAdmin = (function () {
                             pendingMahjongQualificationMode = mode;
                             pendingMahjongTiebreakIds = [];
                             await requestMahjongAdvancePreview(parsed, null);
-                            modal?.hide();
                             setButtonLoading(confirmBtn, false, original);
                             return;
                         }
@@ -1515,6 +1514,35 @@ const BornPadelAdmin = (function () {
                 const div = document.createElement('div');
                 div.textContent = value == null ? '' : String(value);
                 return div.innerHTML;
+            };
+
+            const modalIsShown = (instance) => {
+                const el = instance?._element;
+                return !!(el && el.classList.contains('show'));
+            };
+
+            const hideThenShowModal = (hideInstance, showInstance) => {
+                if (!showInstance) return;
+
+                if (!hideInstance || hideInstance === showInstance || !modalIsShown(hideInstance)) {
+                    showInstance.show();
+                    return;
+                }
+
+                const hideEl = hideInstance._element;
+                const onHidden = () => {
+                    hideEl.removeEventListener('hidden.bs.modal', onHidden);
+                    showInstance.show();
+                };
+                hideEl.addEventListener('hidden.bs.modal', onHidden);
+                hideInstance.hide();
+            };
+
+            const currentMahjongAdvanceModal = () => {
+                if (modalIsShown(previewModal)) return previewModal;
+                if (modalIsShown(tiebreakModal)) return tiebreakModal;
+                if (modalIsShown(modal)) return modal;
+                return null;
             };
 
             const openMahjongAdvanceTiebreakModal = (jumlahLolos, payload) => {
@@ -1566,7 +1594,7 @@ const BornPadelAdmin = (function () {
                 `).join('');
 
                 tiebreakList.dataset.slotsRemaining = String(slots);
-                tiebreakModal.show();
+                hideThenShowModal(currentMahjongAdvanceModal(), tiebreakModal);
             };
 
             const openMahjongAdvancePreviewModal = (payload) => {
@@ -1609,7 +1637,7 @@ const BornPadelAdmin = (function () {
                     </tr>
                 `).join('') || '<tr><td colspan="6" class="text-center text-muted">Tidak ada pemain.</td></tr>';
 
-                previewModal.show();
+                hideThenShowModal(currentMahjongAdvanceModal(), previewModal);
             };
 
             const requestMahjongAdvancePreview = async (jumlahLolos, tiebreakIds) => {
@@ -1623,9 +1651,9 @@ const BornPadelAdmin = (function () {
 
                 if (Array.isArray(tiebreakIds) && tiebreakIds.length) {
                     payload.tiebreak_peserta_ids = tiebreakIds;
-                        }
+                }
 
-                        const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
+                const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
 
                 if (data.needs_tiebreak) {
                     openMahjongAdvanceTiebreakModal(jumlahLolos, data.data || {});
@@ -1663,7 +1691,6 @@ const BornPadelAdmin = (function () {
                         ]));
                         pendingMahjongTiebreakIds = merged;
                         await requestMahjongAdvancePreview(pendingMahjongJumlahLolos, merged);
-                        tiebreakModal?.hide();
                         setButtonLoading(tiebreakConfirmBtn, false, original);
                     } catch (e) {
                         showToast(e.message, 'error');
@@ -1697,7 +1724,6 @@ const BornPadelAdmin = (function () {
                         const data = await apiRequest(endGroupBtn.dataset.url, 'POST', payload);
 
                         if (data.needs_tiebreak) {
-                            previewModal?.hide();
                             setButtonLoading(previewConfirmBtn, false, original);
                             openMahjongAdvanceTiebreakModal(pendingMahjongJumlahLolos, data.data || {});
                             return;
@@ -1705,7 +1731,7 @@ const BornPadelAdmin = (function () {
 
                         previewModal?.hide();
                         showToast(data.message);
-                            reloadPage();
+                        reloadPage();
                     } catch (e) {
                         showToast(e.message, 'error');
                         setButtonLoading(previewConfirmBtn, false, original);
@@ -1871,7 +1897,6 @@ const BornPadelAdmin = (function () {
                         const merged = Array.from(new Set([...(pendingTiebreakIds || []), ...picks]));
                         pendingTiebreakIds = merged;
                         await requestPreview(pendingJumlah, merged);
-                        tiebreakModal?.hide();
                         setButtonLoading(tiebreakConfirmBtn, false, original);
                     } catch (e) {
                         showToast(e.message, 'error');
@@ -2245,6 +2270,15 @@ const BornPadelAdmin = (function () {
         let activeMahjongWinnerMemberId = null;
         let activeMahjongEditRow = null;
 
+        function parseMahjongPoinInput(raw) {
+            if (raw === '' || raw === null || (typeof raw === 'string' && raw.trim() === '')) {
+                return 0;
+            }
+
+            const poin = parseInt(raw, 10);
+            return Number.isNaN(poin) ? NaN : poin;
+        }
+
         function setMahjongWinnerSelection(memberId) {
             activeMahjongWinnerMemberId = memberId ? parseInt(memberId, 10) : null;
             if (!mahjongGroupPointsFields) {
@@ -2308,8 +2342,8 @@ const BornPadelAdmin = (function () {
             }
             if (mahjongGroupPointsHelp) {
                 mahjongGroupPointsHelp.textContent = isEdit
-                    ? `Ubah poin ronde ${roundLabel || ''} di ${groupName}. Opsional: klik nama pemain untuk menandai pemenang ronde.`
-                    : `Opsional: klik nama pemain untuk menandai pemenang ronde, lalu isi poin keempat pemain di ${groupName} dan simpan.`;
+                    ? `Ubah poin ronde ${roundLabel || ''} di ${groupName}. Kolom kosong disimpan sebagai 0. Opsional: klik nama pemain untuk menandai pemenang ronde.`
+                    : `Opsional: klik nama pemain untuk menandai pemenang ronde, lalu isi poin di ${groupName}. Kolom yang dikosongkan disimpan sebagai 0.`;
             }
 
             mahjongGroupPointsFields.innerHTML = members.map((member) => {
@@ -2338,8 +2372,7 @@ const BornPadelAdmin = (function () {
                                id="mahjong-group-poin-${member.id}"
                                data-member-id="${member.id}"${entryAttr}
                                value="${escapeHtml(poinValue)}"
-                               placeholder="0"
-                               required>
+                               placeholder="0">
                     </div>
                 </div>
             `;
@@ -2400,13 +2433,7 @@ const BornPadelAdmin = (function () {
                 const scores = [];
 
                 for (const input of inputs) {
-                    if (input.value === '' || input.value === null) {
-                        showToast('Isi poin untuk semua pemain.', 'error');
-                        input.focus();
-                        return;
-                    }
-
-                    const poin = parseInt(input.value, 10);
+                    const poin = parseMahjongPoinInput(input.value);
                     if (Number.isNaN(poin)) {
                         showToast('Poin harus berupa angka.', 'error');
                         input.focus();
@@ -2555,7 +2582,7 @@ const BornPadelAdmin = (function () {
                 mahjongAdjustmentTitle.innerHTML = `<i class="bi bi-plus-slash-minus me-1"></i> Bonus/Penalti — ${escapeHtml(groupName)}`;
             }
             if (mahjongAdjustmentHelp) {
-                mahjongAdjustmentHelp.textContent = `Isi bonus (positif) atau penalti (negatif) untuk babak ini di ${groupName}. Tidak dihitung sebagai ronde menang.`;
+                mahjongAdjustmentHelp.textContent = `Isi bonus (positif) atau penalti (negatif) untuk babak ini di ${groupName}. Kolom kosong disimpan sebagai 0. Tidak dihitung sebagai ronde menang.`;
             }
 
             mahjongAdjustmentFields.innerHTML = members.map((member) => `
@@ -2569,8 +2596,7 @@ const BornPadelAdmin = (function () {
                                id="mahjong-adjust-${member.id}"
                                data-member-id="${member.id}"
                                value="${member.poin}"
-                               placeholder="0"
-                               required>
+                               placeholder="0">
                     </div>
                 </div>
             `).join('');
@@ -2592,13 +2618,7 @@ const BornPadelAdmin = (function () {
                 const scores = [];
 
                 for (const input of inputs) {
-                    if (input.value === '' || input.value === null) {
-                        showToast('Isi bonus/penalti untuk semua pemain.', 'error');
-                        input.focus();
-                        return;
-                    }
-
-                    const poin = parseInt(input.value, 10);
+                    const poin = parseMahjongPoinInput(input.value);
                     if (Number.isNaN(poin)) {
                         showToast('Bonus/penalti harus berupa angka.', 'error');
                         input.focus();

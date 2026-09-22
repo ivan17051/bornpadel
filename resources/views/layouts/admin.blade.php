@@ -222,7 +222,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.11.0/browser/overlayscrollbars.browser.es6.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/js/adminlte.min.js" crossorigin="anonymous"></script>
-    <script src="{{ asset('public/js/admin.js') }}"></script>
+    <script src="{{ asset('public/js/admin.js') }}?v={{ @filemtime(base_path('public/js/admin.js')) }}"></script>
     <script src="{{ asset('public/js/page-loader.js') }}"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function () {

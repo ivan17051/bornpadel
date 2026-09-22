@@ -4,6 +4,12 @@
         :turnamen="$turnamen"
         :refreshable="true"
     />
+@elseif ($turnamen->isMahjongTeam())
+    <x-mahjong-team-leaderboard
+        :standings="$standings"
+        :turnamen="$turnamen"
+        :refreshable="true"
+    />
 @elseif ($turnamen->isFriendly())
     <x-friendly-leaderboard
         :standings="$standings"

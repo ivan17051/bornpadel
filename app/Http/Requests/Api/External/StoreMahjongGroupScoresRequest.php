@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests\Api\External;
 
+use App\Http\Requests\Concerns\DefaultsEmptyMahjongPoin;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreMahjongGroupScoresRequest extends FormRequest
 {
+    use DefaultsEmptyMahjongPoin;
+
     public function authorize()
     {
         return true;

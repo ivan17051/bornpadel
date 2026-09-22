@@ -23,17 +23,25 @@
                     <tr>
                         <th style="width:3rem">#</th>
                         <th>Tim</th>
-                        <th>Pemain</th>
                         <th class="text-center" style="width:6rem">Total Babak</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($mahjongTeamStandings as $index => $row)
-                        <tr>
+                        <tr class="{{ $index === 0 ? 'table-success' : '' }}">
                             <td class="text-muted">{{ $index + 1 }}</td>
-                            <td class="fw-semibold">{{ $row['nama'] }}</td>
-                            <td class="small text-muted">
-                                {{ collect($row['members'])->pluck('nama')->implode(', ') }}
+                            <td>
+                                <div class="fw-semibold">{{ $row['nama'] }}</div>
+                                @if (! empty($row['members']))
+                                    <ul class="list-unstyled mb-0 mt-1 small text-muted">
+                                        @foreach ($row['members'] as $member)
+                                            <li>
+                                                {{ $member['nama'] ?? '—' }}
+                                                <span class="ms-1">{{ (int) ($member['poin_didapat'] ?? 0) }}</span>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @endif
                             </td>
                             <td class="text-center">
                                 <span class="badge text-bg-primary">{{ (int) $row['total_poin'] }}</span>
@@ -41,7 +49,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4" class="text-center text-muted py-3">Belum ada tim.</td>
+                            <td colspan="3" class="text-center text-muted py-3">Belum ada tim.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -282,32 +290,162 @@
 @endif
 
 @if ($mahjongTeamHistory->isNotEmpty())
-    <div class="card mb-3">
+    <div class="card mb-3" id="mahjong-team-history-card">
         <div class="card-header">
             <h6 class="mb-0"><i class="bi bi-clock-history me-1"></i> Riwayat Meja</h6>
         </div>
         <div class="card-body">
-            @foreach ($mahjongTeamHistory as $babakSection)
-                <h6 class="text-muted text-uppercase small">Babak {{ $babakSection['babak'] }}</h6>
-                @foreach ($babakSection['rondes'] as $rondeSection)
-                    <div class="mb-3">
-                        <div class="small text-muted mb-1">Ronde {{ $rondeSection['ronde'] }}</div>
-                        <ul class="list-group list-group-flush border rounded mb-2">
-                            @foreach ($rondeSection['meja'] as $histMeja)
-                                <li class="list-group-item">
-                                    <strong>{{ $histMeja->nama }}</strong>
-                                    <div class="small text-muted">
-                                        @foreach ($histMeja->seats as $seat)
-                                            {{ optional($seat->grupMember)->display_name }}
-                                            ({{ optional(optional($seat->grupMember)->grup)->nama }})@if (! $loop->last), @endif
-                                        @endforeach
+            <ul class="nav nav-tabs flex-wrap" id="mahjong-team-history-babak-tabs" role="tablist">
+                @foreach ($mahjongTeamHistory as $index => $babakSection)
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link {{ $index === 0 ? 'active' : '' }}"
+                                id="mahjong-team-history-babak-{{ $babakSection['babak'] }}-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#mahjong-team-history-babak-{{ $babakSection['babak'] }}"
+                                type="button"
+                                role="tab"
+                                aria-controls="mahjong-team-history-babak-{{ $babakSection['babak'] }}"
+                                aria-selected="{{ $index === 0 ? 'true' : 'false' }}">
+                            Babak {{ $babakSection['babak'] }}
+                        </button>
+                    </li>
+                @endforeach
+            </ul>
+
+            <div class="tab-content pt-3" id="mahjong-team-history-babak-content">
+                @foreach ($mahjongTeamHistory as $index => $babakSection)
+                    <div class="tab-pane fade {{ $index === 0 ? 'show active' : '' }}"
+                         id="mahjong-team-history-babak-{{ $babakSection['babak'] }}"
+                         role="tabpanel"
+                         aria-labelledby="mahjong-team-history-babak-{{ $babakSection['babak'] }}-tab">
+                        <div class="accordion mahjong-team-history-ronde-accordion"
+                             id="mahjong-team-history-b{{ $babakSection['babak'] }}">
+                            @foreach ($babakSection['rondes'] as $rondeIndex => $rondeSection)
+                                @php
+                                    $rondeCollapseId = 'mahjong-team-history-b'.$babakSection['babak'].'-r'.$rondeSection['ronde'];
+                                    $rondeExpanded = $rondeIndex === $babakSection['rondes']->count() - 1;
+                                @endphp
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="{{ $rondeCollapseId }}-heading">
+                                        <button class="accordion-button {{ $rondeExpanded ? '' : 'collapsed' }}"
+                                                type="button"
+                                                data-bs-toggle="collapse"
+                                                data-bs-target="#{{ $rondeCollapseId }}"
+                                                aria-expanded="{{ $rondeExpanded ? 'true' : 'false' }}"
+                                                aria-controls="{{ $rondeCollapseId }}">
+                                            <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
+                                                <span>
+                                                    <i class="bi bi-layers me-1"></i>Ronde {{ $rondeSection['ronde'] }}
+                                                </span>
+                                                <span class="badge text-bg-secondary ms-auto">
+                                                    {{ $rondeSection['meja']->count() }} meja
+                                                </span>
+                                            </span>
+                                        </button>
+                                    </h2>
+                                    <div id="{{ $rondeCollapseId }}"
+                                         class="accordion-collapse collapse {{ $rondeExpanded ? 'show' : '' }}"
+                                         aria-labelledby="{{ $rondeCollapseId }}-heading"
+                                         data-bs-parent="#mahjong-team-history-b{{ $babakSection['babak'] }}">
+                                        <div class="accordion-body">
+                                            @foreach ($rondeSection['meja'] as $histMeja)
+                                                @php
+                                                    $histMembers = $histMeja->seatedMembers();
+                                                    $histRounds = $histMeja->scoringRounds();
+                                                    $histColCount = 1 + $histMembers->count();
+                                                    $histTotals = [];
+                                                    $histWins = [];
+                                                    foreach ($histMembers as $histMember) {
+                                                        $histTotals[(int) $histMember->id] = 0;
+                                                        $histWins[(int) $histMember->id] = 0;
+                                                    }
+                                                    foreach ($histRounds as $histRound) {
+                                                        foreach ($histRound as $histMemberId => $histEntry) {
+                                                            if (! $histEntry) {
+                                                                continue;
+                                                            }
+                                                            $histTotals[(int) $histMemberId] = ($histTotals[(int) $histMemberId] ?? 0) + (int) $histEntry->poin;
+                                                            if ($histEntry->is_winner) {
+                                                                $histWins[(int) $histMemberId] = ($histWins[(int) $histMemberId] ?? 0) + 1;
+                                                            }
+                                                        }
+                                                    }
+                                                @endphp
+                                                <div class="mb-3 {{ $loop->last ? 'mb-0' : '' }}">
+                                                    <h6 class="small fw-semibold mb-2">
+                                                        <i class="bi bi-table me-1"></i>{{ $histMeja->nama }}
+                                                        <span class="text-muted fw-normal">— {{ $histMembers->count() }} pemain</span>
+                                                    </h6>
+                                                    <div class="table-responsive border rounded">
+                                                        <table class="table table-sm table-bordered table-hover mb-0 align-middle">
+                                                            <thead class="table-light">
+                                                                <tr>
+                                                                    <th class="text-center" style="width:4.5rem">Ronde</th>
+                                                                    @foreach ($histMembers as $histMember)
+                                                                        <th class="text-center">
+                                                                            <div class="fw-semibold">{{ $histMember->display_name }}</div>
+                                                                            @if (optional($histMember->grup)->nama)
+                                                                                <div class="small text-muted fw-normal">{{ $histMember->grup->nama }}</div>
+                                                                            @endif
+                                                                        </th>
+                                                                    @endforeach
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @forelse ($histRounds as $histRoundIndex => $histRound)
+                                                                    <tr>
+                                                                        <td class="text-center fw-semibold text-muted">{{ $histRoundIndex + 1 }}</td>
+                                                                        @foreach ($histMembers as $histMember)
+                                                                            @php
+                                                                                $histEntry = $histRound[(int) $histMember->id] ?? null;
+                                                                            @endphp
+                                                                            <td class="text-center">
+                                                                                @if ($histEntry)
+                                                                                    <span class="badge text-bg-light text-dark border {{ $histEntry->is_winner ? 'border-warning' : '' }}">
+                                                                                        @if ($histEntry->is_winner)
+                                                                                            <i class="bi bi-trophy-fill text-warning me-1" title="Pemenang ronde"></i>
+                                                                                        @endif
+                                                                                        {{ (int) $histEntry->poin > 0 ? '+' : '' }}{{ (int) $histEntry->poin }}
+                                                                                    </span>
+                                                                                @else
+                                                                                    <span class="text-muted">—</span>
+                                                                                @endif
+                                                                            </td>
+                                                                        @endforeach
+                                                                    </tr>
+                                                                @empty
+                                                                    <tr>
+                                                                        <td colspan="{{ $histColCount }}" class="text-center text-muted py-3">
+                                                                            Belum ada ronde poin.
+                                                                        </td>
+                                                                    </tr>
+                                                                @endforelse
+                                                            </tbody>
+                                                            @if ($histRounds !== [])
+                                                                <tfoot class="table-light">
+                                                                    <tr>
+                                                                        <th>Subtotal</th>
+                                                                        @foreach ($histMembers as $histMember)
+                                                                            <th class="text-center">
+                                                                                {{ (int) ($histTotals[(int) $histMember->id] ?? 0) }}
+                                                                                ({{ (int) ($histWins[(int) $histMember->id] ?? 0) }})
+                                                                            </th>
+                                                                        @endforeach
+                                                                    </tr>
+                                                                </tfoot>
+                                                            @endif
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
                                     </div>
-                                </li>
+                                </div>
                             @endforeach
-                        </ul>
+                        </div>
                     </div>
                 @endforeach
-            @endforeach
+            </div>
         </div>
     </div>
 @endif

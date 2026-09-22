@@ -525,11 +525,20 @@ class MahjongTeamMatchmakingService
                 'id_tim' => (int) $tim->id,
                 'nama' => $tim->nama,
                 'total_poin' => $total,
-                'members' => $tim->members->map(fn (GrupMember $m) => [
-                    'id' => (int) $m->id,
-                    'nama' => $m->display_name,
-                    'poin_didapat' => (int) $m->poin_didapat,
-                ])->values()->all(),
+                'members' => $tim->members
+                    ->sort(function (GrupMember $a, GrupMember $b) {
+                        $cmp = ((int) $b->poin_didapat) <=> ((int) $a->poin_didapat);
+
+                        return $cmp !== 0 ? $cmp : ((int) $a->id) <=> ((int) $b->id);
+                    })
+                    ->values()
+                    ->map(fn (GrupMember $m) => [
+                        'id' => (int) $m->id,
+                        'id_pemain' => $m->id_pemain ? (int) $m->id_pemain : null,
+                        'nama' => $m->display_name,
+                        'poin_didapat' => (int) $m->poin_didapat,
+                    ])
+                    ->all(),
             ];
         })->sort(function (array $a, array $b) {
             $cmp = ((int) $b['total_poin']) <=> ((int) $a['total_poin']);

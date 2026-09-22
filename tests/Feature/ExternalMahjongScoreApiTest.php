@@ -137,6 +137,45 @@ class ExternalMahjongScoreApiTest extends TestCase
         }
     }
 
+    public function test_external_api_treats_empty_poin_as_zero(): void
+    {
+        $turnamen = $this->prepareMahjongTournament(8);
+        app(MahjongMatchmakingService::class)->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+
+        $members = $grup->members->values();
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores', [
+                'id_grup' => $grup->id,
+                'scores' => [
+                    ['id_grup_member' => $members[0]->id, 'poin' => 8],
+                    ['id_grup_member' => $members[1]->id, 'poin' => ''],
+                    ['id_grup_member' => $members[2]->id],
+                    ['id_grup_member' => $members[3]->id, 'poin' => null],
+                ],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(8, (int) $members[0]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[1]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[2]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[3]->fresh()->poin_didapat);
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-members/'.$members[1]->id.'/scores', [
+                'poin' => '',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.poin_didapat', 0);
+    }
+
     public function test_external_api_rejects_writes_when_scoring_disabled(): void
     {
         $admin = User::create([

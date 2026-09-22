@@ -19,6 +19,7 @@ use App\Services\MatchmakingPageService;
 use App\Services\MatchScoringService;
 use App\Services\TournamentAccessService;
 use App\Services\TournamentCompletionService;
+use App\Support\MahjongScoreInput;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -388,6 +389,7 @@ class MatchmakingController extends Controller
 
     public function updateMahjongPoints(Request $request, GrupMember $member)
     {
+        $this->defaultEmptyMahjongPoin($request);
         $request->validate([
             'poin' => ['required_without:poin_didapat', 'integer'],
             'poin_didapat' => ['required_without:poin', 'integer'],
@@ -414,6 +416,7 @@ class MatchmakingController extends Controller
 
     public function storeMahjongPointEntry(Request $request, GrupMember $member)
     {
+        $this->defaultEmptyMahjongPoin($request);
         $request->validate([
             'poin' => ['required', 'integer'],
         ]);
@@ -436,6 +439,7 @@ class MatchmakingController extends Controller
 
     public function storeMahjongGroupPointEntries(Request $request, Grup $grup)
     {
+        $this->defaultEmptyMahjongPoin($request);
         $request->validate([
             'scores' => ['required', 'array', 'size:4'],
             'scores.*.id' => ['required', 'integer'],
@@ -472,6 +476,7 @@ class MatchmakingController extends Controller
 
     public function updateMahjongGroupPointEntries(Request $request, Grup $grup)
     {
+        $this->defaultEmptyMahjongPoin($request);
         $request->validate([
             'scores' => ['required', 'array', 'size:4'],
             'scores.*.id' => ['required', 'integer'],
@@ -509,6 +514,7 @@ class MatchmakingController extends Controller
 
     public function updateMahjongGroupAdjustments(Request $request, Grup $grup)
     {
+        $this->defaultEmptyMahjongPoin($request);
         $request->validate([
             'scores' => ['required', 'array', 'size:4'],
             'scores.*.id' => ['required', 'integer'],
@@ -540,6 +546,7 @@ class MatchmakingController extends Controller
 
     public function storeMahjongTeamMejaPointEntries(Request $request, TurnamenMeja $meja)
     {
+        $this->defaultEmptyMahjongPoin($request);
         $request->validate([
             'scores' => ['required', 'array', 'size:4'],
             'scores.*.id' => ['required', 'integer'],
@@ -577,6 +584,7 @@ class MatchmakingController extends Controller
 
     public function updateMahjongTeamMejaPointEntries(Request $request, TurnamenMeja $meja)
     {
+        $this->defaultEmptyMahjongPoin($request);
         $request->validate([
             'scores' => ['required', 'array', 'size:4'],
             'scores.*.id' => ['required', 'integer'],
@@ -615,6 +623,7 @@ class MatchmakingController extends Controller
 
     public function updateMahjongTeamMejaAdjustments(Request $request, TurnamenMeja $meja)
     {
+        $this->defaultEmptyMahjongPoin($request);
         $request->validate([
             'scores' => ['required', 'array', 'size:4'],
             'scores.*.id' => ['required', 'integer'],
@@ -1177,6 +1186,25 @@ class MatchmakingController extends Controller
             'message' => 'Nama grup berhasil diperbarui.',
             'data' => ['id' => $grup->id, 'nama' => $grup->nama],
         ]);
+    }
+
+    protected function defaultEmptyMahjongPoin(Request $request): void
+    {
+        $payload = [];
+
+        if (is_array($request->input('scores'))) {
+            $payload['scores'] = MahjongScoreInput::defaultEmptyPoin($request->input('scores'));
+        }
+
+        foreach (['poin', 'poin_didapat'] as $key) {
+            if ($request->exists($key) && MahjongScoreInput::isEmpty($request->input($key))) {
+                $payload[$key] = 0;
+            }
+        }
+
+        if ($payload !== []) {
+            $request->merge($payload);
+        }
     }
 
     protected function resolveTournament(Request $request): Turnamen

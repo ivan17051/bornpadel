@@ -7,6 +7,7 @@
 
     const refreshUrl = container.dataset.refreshUrl;
     const isMahjong = container.dataset.mahjong === '1';
+    const isMahjongTeam = container.dataset.mahjongTeam === '1';
     const isFriendly = container.dataset.friendly === '1';
     const showGroupHistory = container.dataset.showGroupHistory === '1';
     const profileBase = container.dataset.profileBase || '/pemain/';
@@ -74,12 +75,33 @@
             ?.addEventListener('click', fetchStandings);
     };
 
+    const mahjongStatusBadge = (status) => {
+        if (status === 'lolos') return '<span class="badge text-bg-success">Lolos</span>';
+        if (status === 'pratinjau') return '<span class="badge text-bg-success">Lolos*</span>';
+        if (status === 'seri') return '<span class="badge text-bg-warning text-dark">Seri</span>';
+        if (status === 'juara') return '<span class="badge text-bg-warning text-dark">Juara</span>';
+        if (status === 'runner_up') return '<span class="badge text-bg-light text-dark border">Ke-2</span>';
+        if (status === 'third') return '<span class="badge text-bg-light text-dark border">Ke-3</span>';
+        return '';
+    };
+
+    const mahjongRowClass = (status) => {
+        if (status === 'lolos' || status === 'pratinjau' || status === 'juara') return 'table-success';
+        if (status === 'seri') return 'table-warning';
+        return '';
+    };
+
     const renderMahjongBabakTable = (section) => {
         const rounds = section.rounds || [];
         const rows = section.rows || [];
+        const showGrup = rows.some((row) => !!row.grup_nama);
+        const colCount = 6 + rounds.length + (showGrup ? 1 : 0);
+        const rankingNote = section.ranking_note
+            || 'Peringkat berdasarkan Total babak, lalu Menang, lalu Akumulasi.';
+        const advanceNote = section.advance_note || '';
 
         const headerCells = rounds.map((round) => `
-            <th class="text-center">${round.label || ('Ronde ' + round.round)}</th>
+            <th class="text-center">${escapeHtml(round.label || ('Ronde ' + round.round))}</th>
         `).join('');
 
         const bodyRows = rows.length
@@ -90,24 +112,37 @@
                         <span class="badge text-bg-secondary">${roundScores[index] ?? 0}</span>
                     </td>
                 `).join('');
+                const status = row.advance_status || null;
+                const cutlineStyle = row.is_cutline
+                    ? ' style="border-bottom: 2px solid var(--bs-success);"'
+                    : '';
 
                 return `
-                    <tr class="${row.rank === 1 ? 'table-success' : ''}">
+                    <tr class="${mahjongRowClass(status)}"${cutlineStyle}>
                         <td class="text-center fw-bold">
-                            ${row.rank === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : row.rank}
+                            ${Number(row.rank) === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : (row.rank ?? '—')}
                         </td>
                         <td class="fw-semibold">${renderNameCell(row)}</td>
+                        ${showGrup ? `<td class="text-muted">${escapeHtml(row.grup_nama || '—')}</td>` : ''}
                         ${roundCells}
                         <td class="text-center">
                             <span class="badge text-bg-primary">${row.total_babak ?? 0}</span>
                         </td>
+                        <td class="text-center">${row.menang ?? 0}</td>
+                        <td class="text-center text-muted">${row.poin_akumulasi ?? 0}</td>
+                        <td class="text-center">${mahjongStatusBadge(status)}</td>
                     </tr>`;
             }).join('')
             : `<tr>
-                    <td colspan="${3 + rounds.length}" class="text-center text-muted py-4">
+                    <td colspan="${colCount}" class="text-center text-muted py-4">
                         Belum ada data pemain pada babak ini.
                     </td>
                </tr>`;
+
+        const hasPreviewBadge = rows.some((row) => row.advance_status === 'pratinjau');
+        const previewHint = hasPreviewBadge
+            ? '<span class="badge text-bg-success me-1">Lolos*</span> pratinjau berdasarkan total. '
+            : '';
 
         return `
             <div class="card border-0 shadow-sm">
@@ -118,12 +153,20 @@
                                 <tr>
                                     <th class="text-center" style="width:3rem">#</th>
                                     <th>Pemain</th>
+                                    ${showGrup ? '<th>Grup</th>' : ''}
                                     ${headerCells}
-                                    <th class="text-center">Total Babak</th>
+                                    <th class="text-center" title="Kriteria 1">Total Babak</th>
+                                    <th class="text-center" title="Kriteria 2: jumlah menang">W</th>
+                                    <th class="text-center" title="Kriteria 3">Akumulasi</th>
+                                    <th class="text-center" style="width:7rem">Status</th>
                                 </tr>
                             </thead>
                             <tbody>${bodyRows}</tbody>
                         </table>
+                    </div>
+                    <div class="px-3 py-2 border-top bg-light small text-muted">
+                        ${escapeHtml(rankingNote)}
+                        ${advanceNote ? `<div class="mt-1">${previewHint}${escapeHtml(advanceNote)}</div>` : ''}
                     </div>
                 </div>
             </div>`;
@@ -147,19 +190,102 @@
         }
 
         const sortedSections = [...sections].sort((a, b) => (b.babak || 0) - (a.babak || 0));
-        const sectionHtml = sortedSections.map((section) => `
+        const sectionHtml = sortedSections.map((section) => {
+            const advanceKind = section.advance_kind || 'none';
+            let extraBadge = '';
+            if (section.is_final) {
+                extraBadge = '<span class="badge text-bg-warning text-dark">Final</span>';
+            } else if (advanceKind === 'confirmed' && section.next_babak) {
+                extraBadge = `<span class="badge text-bg-primary">Lolos ke Babak ${section.next_babak}</span>`;
+            } else if (advanceKind === 'preview' && section.advance_count) {
+                extraBadge = `<span class="badge border text-secondary">Pratinjau ${section.advance_count} lolos</span>`;
+            }
+
+            return `
             <div class="mb-4">
-                <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
                     <h6 class="mb-0 fw-semibold">
                         <i class="bi bi-layers me-1 text-primary"></i>Babak ${section.babak}
                     </h6>
                     ${section.is_active ? '<span class="badge text-bg-success">Berlangsung</span>' : ''}
+                    ${extraBadge}
                 </div>
                 ${renderMahjongBabakTable(section)}
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
 
-        container.innerHTML = renderHeader('Klasemen Mahjong') + sectionHtml + `
+        container.innerHTML = renderHeader('Klasemen Mahjong') + `
+            <div class="alert alert-light border small mb-3">
+                <strong>Cara peringkat:</strong> Total babak → Menang (W) → Akumulasi.
+                Baris hijau menandai pemain yang lolos ke babak berikutnya.
+            </div>
+        ` + sectionHtml + `
+            <p class="text-muted small text-end mt-2 mb-0">
+                <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
+            </p>`;
+        bindRefreshButton();
+    };
+
+    const renderMahjongTeamStandings = (teams) => {
+        const rows = Array.isArray(teams) ? teams : [];
+
+        if (!rows.length) {
+            container.innerHTML = renderHeader('Klasemen Tim') + `
+            <div class="alert alert-light border text-center mb-0">
+                <i class="bi bi-trophy text-muted d-block mb-2 fs-4"></i>
+                Belum ada data klasemen tim.
+            </div>`;
+            bindRefreshButton();
+            return;
+        }
+
+        const bodyRows = rows.map((team) => {
+            const members = team.members || team.standings || [];
+            const memberList = members.length
+                ? `<ul class="list-unstyled mb-0 mt-1 small text-muted">${members.map((member) => {
+                    const name = member.id_pemain
+                        ? `<a href="${profileBase}${member.id_pemain}" class="pemain-profile-link">${member.nama || '—'}</a>`
+                        : (member.nama || '—');
+
+                    return `<li>${name} <span class="ms-1">${member.poin_didapat ?? 0}</span></li>`;
+                }).join('')}</ul>`
+                : '';
+
+            return `
+                <tr class="${Number(team.rank) === 1 ? 'table-success' : ''}">
+                    <td class="text-center fw-bold">
+                        ${Number(team.rank) === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : (team.rank ?? '')}
+                    </td>
+                    <td>
+                        <div class="fw-semibold">${team.nama || '—'}</div>
+                        ${memberList}
+                    </td>
+                    <td class="text-center">
+                        <span class="badge text-bg-primary">${team.total_poin ?? 0}</span>
+                    </td>
+                </tr>`;
+        }).join('');
+
+        container.innerHTML = renderHeader('Klasemen Tim') + `
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-center" style="width:3rem">#</th>
+                                    <th>Tim</th>
+                                    <th class="text-center" style="width:7rem">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>${bodyRows}</tbody>
+                        </table>
+                    </div>
+                    <div class="px-3 py-2 border-top bg-light small text-muted">
+                        Peringkat berdasarkan total poin tim. Poin tiap pemain tercantum di bawah nama tim.
+                    </div>
+                </div>
+            </div>
             <p class="text-muted small text-end mt-2 mb-0">
                 <i class="bi bi-broadcast me-1"></i> Diperbarui otomatis setiap 30 detik
             </p>`;
@@ -532,6 +658,9 @@
             if (json.type === 'mahjong' || isMahjong) {
                 if (!json.data) return;
                 renderMahjongStandings(json.data);
+            } else if (json.type === 'mahjong_team' || isMahjongTeam) {
+                if (!json.data) return;
+                renderMahjongTeamStandings(json.data);
             } else if (json.type === 'friendly' || isFriendly) {
                 renderFriendlyStandings(json.data || [], json.matches || []);
             } else {

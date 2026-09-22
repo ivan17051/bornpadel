@@ -35,14 +35,28 @@
             Belum ada data klasemen.
         </div>
     @else
+        <div class="alert alert-light border small mb-3">
+            <strong>Cara peringkat:</strong> Total babak → Menang (W) → Akumulasi.
+            Baris hijau menandai pemain yang lolos ke babak berikutnya.
+        </div>
         @foreach ($standings as $section)
+            @php
+                $advanceKind = $section['advance_kind'] ?? 'none';
+            @endphp
             <div class="mb-4">
-                <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
                     <h6 class="mb-0 fw-semibold">
                         <i class="bi bi-layers me-1 text-primary"></i>Babak {{ $section['babak'] }}
                     </h6>
                     @if (! empty($section['is_active']))
                         <span class="badge text-bg-success">Berlangsung</span>
+                    @endif
+                    @if (! empty($section['is_final']))
+                        <span class="badge text-bg-warning text-dark">Final</span>
+                    @elseif ($advanceKind === 'confirmed' && ! empty($section['next_babak']))
+                        <span class="badge text-bg-primary">Lolos ke Babak {{ $section['next_babak'] }}</span>
+                    @elseif ($advanceKind === 'preview' && ! empty($section['advance_count']))
+                        <span class="badge border text-secondary">Pratinjau {{ $section['advance_count'] }} lolos</span>
                     @endif
                 </div>
 
@@ -50,6 +64,9 @@
                     'babak' => $section['babak'],
                     'rounds' => collect($section['rounds'] ?? []),
                     'rows' => collect($section['rows'] ?? []),
+                    'advanceKind' => $advanceKind,
+                    'advanceNote' => $section['advance_note'] ?? null,
+                    'rankingNote' => $section['ranking_note'] ?? null,
                 ])
             </div>
         @endforeach

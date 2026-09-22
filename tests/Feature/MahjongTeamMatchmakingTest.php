@@ -269,6 +269,44 @@ class MahjongTeamMatchmakingTest extends TestCase
         }
     }
 
+    public function test_matchmaking_history_lists_meja_points_expandable_per_ronde(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $members = $meja->seats->map->grupMember->filter()->values();
+        $service->addMejaPointEntries($meja, $members->map(fn (GrupMember $member, int $index) => [
+            'id' => $member->id,
+            'poin' => [10, 5, 0, -5][$index],
+        ])->all(), (int) $members[0]->id);
+
+        $service->reshuffleMeja($turnamen);
+
+        $html = $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Riwayat Meja', $html);
+        $this->assertStringContainsString('mahjong-team-history-ronde-accordion', $html);
+        $this->assertStringContainsString('mahjong-team-history-b1-r1', $html);
+        $this->assertStringContainsString('Ronde 1', $html);
+        $this->assertStringContainsString('+10', $html);
+        $this->assertStringContainsString('-5', $html);
+        $this->assertStringContainsString($meja->nama, $html);
+
+        foreach ($members as $member) {
+            $this->assertStringContainsString($member->display_name, $html);
+        }
+    }
+
     public function test_can_update_mahjong_team_meja_round_and_keep_previous_winner(): void
     {
         $admin = $this->makeAdmin();
@@ -348,6 +386,98 @@ class MahjongTeamMatchmakingTest extends TestCase
 
         $this->assertSame(1, (int) $members[0]->fresh()->poin_penyesuaian);
         $this->assertSame(-1, (int) $members[3]->fresh()->poin_penyesuaian);
+    }
+
+    public function test_meja_point_entries_treat_empty_poin_as_zero(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $members = $meja->seats->map->grupMember->filter()->values();
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-team-meja-point-entries.store', $meja), [
+                'scores' => [
+                    ['id' => $members[0]->id, 'poin' => 8],
+                    ['id' => $members[1]->id, 'poin' => ''],
+                    ['id' => $members[2]->id],
+                    ['id' => $members[3]->id, 'poin' => null],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(8, (int) $members[0]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[1]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[2]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[3]->fresh()->poin_didapat);
+    }
+
+    public function test_guest_and_admin_standings_rank_teams_with_members_listed(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->prepareTournament(16);
+        app(MahjongTeamMatchmakingService::class)->generateTeams($turnamen, 'random');
+
+        $teams = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with(['members.pemain'])
+            ->orderBy('id')
+            ->get();
+
+        $this->assertGreaterThanOrEqual(2, $teams->count());
+
+        $leader = $teams[0];
+        $runnerUp = $teams[1];
+
+        foreach ($leader->members as $index => $member) {
+            $member->update(['poin_didapat' => 40 - $index]);
+        }
+
+        foreach ($runnerUp->members as $index => $member) {
+            $member->update(['poin_didapat' => 8 - $index]);
+        }
+
+        $leader->refresh()->load('members.pemain');
+        $topMember = $leader->members->sortByDesc('poin_didapat')->first();
+
+        $guest = $this->get(route('guest.standings', ['id_turnamen' => $turnamen->id]));
+        $guest->assertOk();
+        $guest->assertSee('Klasemen Tim', false);
+        $guest->assertSee('mahjong-team-leaderboard', false);
+        $guest->assertSee($leader->nama, false);
+        $guest->assertSee($topMember->display_name, false);
+        $guest->assertSee('40', false);
+        $guest->assertSee('Peringkat berdasarkan total poin tim', false);
+        $guest->assertDontSee('class="group-leaderboard"', false);
+
+        $adminPage = $this->actingAs($admin)
+            ->get(route('admin.standings.index', ['id_turnamen' => $turnamen->id]));
+        $adminPage->assertOk();
+        $adminPage->assertSee('Klasemen Tim', false);
+        $adminPage->assertSee($leader->nama, false);
+        $adminPage->assertSee($topMember->display_name, false);
+
+        $json = $this->getJson(route('api.guest.standings', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('type', 'mahjong_team')
+            ->json();
+
+        $this->assertSame($leader->nama, $json['data'][0]['nama']);
+        $this->assertSame(1, (int) $json['data'][0]['rank']);
+        $this->assertSame($runnerUp->nama, $json['data'][1]['nama']);
+        $this->assertSame($topMember->display_name, $json['data'][0]['members'][0]['nama']);
+        $this->assertSame(40, (int) $json['data'][0]['members'][0]['poin_didapat']);
+        $this->assertNotEmpty($json['data'][0]['members']);
     }
 
     protected function prepareTournament(int $playerCount, int $playersPerTeam = 4): Turnamen

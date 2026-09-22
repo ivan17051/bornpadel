@@ -62,6 +62,25 @@ class StandingsController extends Controller
             ]);
         }
 
+        if ($turnamen && $turnamen->isMahjongTeam()) {
+            $standings = $leaderboardService->getMahjongTeamStandings($turnamen, $kategoriId);
+
+            if ($standings->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Belum ada data klasemen.',
+                    'type' => 'mahjong_team',
+                    'data' => [],
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'type' => 'mahjong_team',
+                'data' => $standings,
+            ]);
+        }
+
         if ($turnamen && $turnamen->isFriendly()) {
             $standings = $leaderboardService->getFriendlyStandings($turnamen->id, $kategoriId);
             $matches = $friendlyService->getPublicMatchSessions($turnamen, $kategoriId);

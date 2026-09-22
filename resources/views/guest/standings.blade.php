@@ -30,6 +30,8 @@
             <h1 class="h3 fw-bold">
                 @if (optional($turnamen)->isMahjong())
                     Klasemen Mahjong
+                @elseif (optional($turnamen)->isMahjongTeam())
+                    Klasemen Tim
                 @elseif (optional($turnamen)->isFriendly())
                     Klasemen Group Match
                 @else
@@ -73,6 +75,13 @@
             @endif
 
             <x-mahjong-leaderboard
+                :standings="$standings"
+                :turnamen="$turnamen"
+                :kategori="$kategori"
+                :refreshable="true"
+            />
+        @elseif ($turnamen && $turnamen->isMahjongTeam())
+            <x-mahjong-team-leaderboard
                 :standings="$standings"
                 :turnamen="$turnamen"
                 :kategori="$kategori"
@@ -130,8 +139,8 @@
 @endsection
 
 @push('scripts')
-@if ($turnamen && ! $turnamen->isMahjong() && ! $turnamen->isFriendly())
+@if ($turnamen && ! $turnamen->isMahjong() && ! $turnamen->isMahjongTeam() && ! $turnamen->isFriendly())
 <script src="{{ asset('public/js/group-stage-history.js') }}"></script>
 @endif
-<script src="{{ asset('public/js/leaderboard.js') }}"></script>
+<script src="{{ asset('public/js/leaderboard.js') }}?v={{ @filemtime(base_path('public/js/leaderboard.js')) }}"></script>
 @endpush

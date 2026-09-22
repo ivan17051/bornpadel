@@ -225,7 +225,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" crossorigin="anonymous"></script>
 
-@if ($turnamen && $activeTab === 'klasemen' && ! $turnamen->isMahjong() && ! $turnamen->isFriendly())
+@if ($turnamen && $activeTab === 'klasemen' && ! $turnamen->isMahjong() && ! $turnamen->isMahjongTeam() && ! $turnamen->isFriendly())
 
     <script src="{{ asset('public/js/group-stage-history.js') }}"></script>
 
@@ -233,7 +233,7 @@
 
 @if ($turnamen && $activeTab === 'klasemen')
 
-    <script src="{{ asset('public/js/leaderboard.js') }}"></script>
+    <script src="{{ asset('public/js/leaderboard.js') }}?v={{ @filemtime(base_path('public/js/leaderboard.js')) }}"></script>
 
 @endif
 

@@ -223,6 +223,8 @@ class LeaderboardService
         $rows = app(MahjongTeamMatchmakingService::class)->teamStandings($turnamen, $idKategori);
 
         return $rows->values()->map(function (array $row, int $index) {
+            $members = collect($row['members'] ?? [])->values();
+
             return [
                 'id' => $row['id_tim'],
                 'nama' => $row['nama'],
@@ -232,22 +234,32 @@ class LeaderboardService
                 'is_mahjong_team' => true,
                 'matches_complete' => true,
                 'total_poin' => (int) $row['total_poin'],
-                'standings' => collect($row['members'])->values()->map(function ($member, $memberIndex) use ($row) {
+                'members' => $members->map(function ($member) {
+                    return [
+                        'id' => isset($member['id']) ? (int) $member['id'] : null,
+                        'id_pemain' => isset($member['id_pemain']) ? (int) $member['id_pemain'] : null,
+                        'nama' => $member['nama'] ?? '—',
+                        'poin_didapat' => (int) ($member['poin_didapat'] ?? 0),
+                    ];
+                })->values()->all(),
+                'standings' => $members->map(function ($member, $memberIndex) use ($row) {
+                    $pemainId = isset($member['id_pemain']) ? (int) $member['id_pemain'] : null;
+
                     return [
                         'rank' => $memberIndex + 1,
                         'id_grup' => $row['id_tim'],
-                        'id_pemain' => null,
+                        'id_pemain' => $pemainId,
                         'id_peserta' => null,
-                        'pemain_ids' => [],
-                        'nama' => $member['nama'],
-                        'poin_didapat' => (int) $member['poin_didapat'],
+                        'pemain_ids' => $pemainId ? [$pemainId] : [],
+                        'nama' => $member['nama'] ?? '—',
+                        'poin_didapat' => (int) ($member['poin_didapat'] ?? 0),
                         'set_menang' => 0,
                         'games_menang' => 0,
                         'games_diff_label' => '0',
                         'stats_reached_at' => null,
-                        'total_poin' => (int) $member['poin_didapat'],
+                        'total_poin' => (int) ($member['poin_didapat'] ?? 0),
                     ];
-                }),
+                })->values()->all(),
                 'rank' => $index + 1,
             ];
         });
@@ -435,18 +447,220 @@ class LeaderboardService
             ];
         })->sortByDesc('babak')->values();
 
+        $sections = $this->annotateMahjongStandingsSections($turnamen, $sections);
+
         return [
             'sections' => $sections,
             'recap' => $sections->map(function (array $section) {
                 return [
                     'babak' => $section['babak'],
                     'is_active' => $section['is_active'],
+                    'is_final' => $section['is_final'] ?? false,
+                    'advance_kind' => $section['advance_kind'] ?? 'none',
+                    'advance_note' => $section['advance_note'] ?? null,
+                    'ranking_note' => $section['ranking_note'] ?? null,
                     'rounds' => $section['rounds'],
                     'standings' => $section['rows'],
                 ];
             })->values(),
             'babak_numbers' => $babakNumbers->values(),
+            'ranking_note' => 'Peringkat berdasarkan Total babak, lalu Menang, lalu Akumulasi.',
         ];
+    }
+
+    /**
+     * Mark who already advanced, who is projected to advance, and ranking notes.
+     *
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $sections
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    protected function annotateMahjongStandingsSections(Turnamen $turnamen, Collection $sections): Collection
+    {
+        $pesertaIdsByBabak = $sections->mapWithKeys(function (array $section) {
+            $ids = collect($section['rows'] ?? [])
+                ->pluck('id_peserta')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all();
+
+            return [(int) $section['babak'] => $ids];
+        });
+
+        $maxBabak = (int) ($sections->max('babak') ?: 0);
+
+        return $sections->map(function (array $section) use ($turnamen, $pesertaIdsByBabak, $maxBabak) {
+            $babak = (int) $section['babak'];
+            $rows = collect($section['rows'] ?? [])->values();
+            $playerCount = $rows->count();
+            $isActive = ! empty($section['is_active']);
+            $nextBabak = $babak + 1;
+            $nextIds = $pesertaIdsByBabak[$nextBabak] ?? null;
+            $hasNextBabak = is_array($nextIds) && $nextIds !== [];
+            $isFinal = $playerCount > 0
+                && $playerCount <= 4
+                && ! $hasNextBabak
+                && ($isActive || (bool) $turnamen->mahjong_is_final || $babak === $maxBabak);
+
+            $rankingNote = 'Peringkat berdasarkan Total babak, lalu Menang, lalu Akumulasi.';
+            $advanceKind = 'none';
+            $advanceNote = null;
+            $advanceCount = 0;
+
+            $rows = $rows->map(function (array $row) {
+                $row['advances'] = false;
+                $row['advance_status'] = null;
+                $row['is_cutline'] = false;
+
+                return $row;
+            });
+
+            if ($hasNextBabak) {
+                $nextSet = array_fill_keys($nextIds, true);
+                $lastAdvancingRank = 0;
+                $rows = $rows->map(function (array $row) use ($nextSet, &$lastAdvancingRank) {
+                    $advances = isset($nextSet[(int) ($row['id_peserta'] ?? 0)]);
+                    $row['advances'] = $advances;
+                    $row['advance_status'] = $advances ? 'lolos' : null;
+                    if ($advances) {
+                        $lastAdvancingRank = max($lastAdvancingRank, (int) ($row['rank'] ?? 0));
+                    }
+
+                    return $row;
+                });
+                $rows = $this->markMahjongCutline($rows, $lastAdvancingRank, ['lolos']);
+                $advanceKind = 'confirmed';
+                $advanceCount = $rows->where('advances', true)->count();
+                $advanceNote = $advanceCount > 0
+                    ? 'Lolos ke Babak '.$nextBabak.' ('.$advanceCount.' pemain). Urutan: total babak → menang → akumulasi.'
+                    : null;
+            } elseif ($isFinal) {
+                $advanceKind = 'final';
+                $rows = $rows->map(function (array $row) {
+                    $rank = (int) ($row['rank'] ?? 0);
+                    if ($rank === 1) {
+                        $row['advance_status'] = 'juara';
+                        $row['advances'] = true;
+                    } elseif ($rank === 2) {
+                        $row['advance_status'] = 'runner_up';
+                    } elseif ($rank === 3) {
+                        $row['advance_status'] = 'third';
+                    }
+
+                    return $row;
+                });
+                $advanceNote = 'Babak final. Juara ditentukan dari total babak, lalu menang, lalu akumulasi.';
+            } elseif ($isActive && $playerCount > 4) {
+                $jumlahLolos = $this->defaultMahjongAdvanceCount($playerCount);
+
+                if ($jumlahLolos && $jumlahLolos < $playerCount) {
+                    $selection = $this->mahjongRanker->resolveAdvanceQualifiers($rows, $jumlahLolos);
+                    $autoIds = collect($selection['auto_qualified'] ?? [])
+                        ->map(fn ($row) => (int) ($row['id_peserta'] ?? 0))
+                        ->filter()
+                        ->all();
+                    $contestedIds = collect($selection['contested'] ?? [])
+                        ->map(fn ($row) => (int) ($row['id_peserta'] ?? 0))
+                        ->filter()
+                        ->all();
+                    $qualifierIds = collect($selection['qualifiers'] ?? [])
+                        ->map(fn ($row) => (int) ($row['id_peserta'] ?? 0))
+                        ->filter()
+                        ->all();
+
+                    $advanceKind = 'preview';
+                    $advanceCount = $jumlahLolos;
+                    $nextLabel = $jumlahLolos === 4 ? 'babak final' : 'babak berikutnya';
+                    $advanceNote = 'Pratinjau: '.$jumlahLolos.' pemain terbaik lanjut ke '.$nextLabel
+                        .' (total). Urutan: total babak → menang → akumulasi.';
+
+                    $entireFieldTied = ($selection['status'] ?? '') === 'needs_tiebreak'
+                        && $autoIds === []
+                        && count($contestedIds) === $playerCount;
+
+                    if ($entireFieldTied) {
+                        $advanceNote .= ' Semua pemain masih seri, jadi garis lolos belum ditandai.';
+                    } else {
+                        $autoSet = array_fill_keys($autoIds, true);
+                        $contestedSet = array_fill_keys($contestedIds, true);
+                        $qualifierSet = array_fill_keys($qualifierIds, true);
+                        $lastCutlineRank = 0;
+
+                        $rows = $rows->map(function (array $row) use ($autoSet, $contestedSet, $qualifierSet, &$lastCutlineRank) {
+                            $id = (int) ($row['id_peserta'] ?? 0);
+                            if (isset($qualifierSet[$id]) || isset($autoSet[$id])) {
+                                $row['advances'] = true;
+                                $row['advance_status'] = 'pratinjau';
+                                $lastCutlineRank = max($lastCutlineRank, (int) ($row['rank'] ?? 0));
+                            } elseif (isset($contestedSet[$id])) {
+                                $row['advance_status'] = 'seri';
+                                $lastCutlineRank = max($lastCutlineRank, (int) ($row['rank'] ?? 0));
+                            }
+
+                            return $row;
+                        });
+
+                        $rows = $this->markMahjongCutline($rows, $lastCutlineRank, ['pratinjau', 'seri']);
+
+                        if (($selection['status'] ?? '') === 'needs_tiebreak') {
+                            $advanceNote .= ' Ada seri di garis lolos — admin memilih saat Akhiri Babak.';
+                        }
+                    }
+                }
+            }
+
+            $section['rows'] = $rows->values();
+            $section['ranking_note'] = $rankingNote;
+            $section['advance_kind'] = $advanceKind;
+            $section['advance_note'] = $advanceNote;
+            $section['advance_count'] = $advanceCount;
+            $section['next_babak'] = $hasNextBabak ? $nextBabak : null;
+            $section['is_final'] = $isFinal;
+
+            return $section;
+        });
+    }
+
+    /**
+     * Typical mahjong cut: half the field, in multiples of 4, down to a 4-player final.
+     */
+    protected function defaultMahjongAdvanceCount(int $playerCount): ?int
+    {
+        if ($playerCount <= 4) {
+            return null;
+        }
+
+        $count = (int) (4 * intdiv($playerCount, 8));
+        if ($count < 4) {
+            $count = 4;
+        }
+        if ($count >= $playerCount) {
+            $count = $playerCount - ($playerCount % 4 === 0 ? 4 : $playerCount % 4);
+        }
+        if ($count < 4 || $count >= $playerCount || $count % 4 !== 0) {
+            return null;
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
+     * @param  list<string>  $statuses
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    protected function markMahjongCutline(Collection $rows, int $cutlineRank, array $statuses): Collection
+    {
+        if ($cutlineRank <= 0) {
+            return $rows;
+        }
+
+        return $rows->map(function (array $row) use ($cutlineRank, $statuses) {
+            $row['is_cutline'] = in_array($row['advance_status'] ?? null, $statuses, true)
+                && (int) ($row['rank'] ?? 0) === $cutlineRank;
+
+            return $row;
+        });
     }
 
     /**
