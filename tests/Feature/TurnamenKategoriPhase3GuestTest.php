@@ -70,6 +70,28 @@ class TurnamenKategoriPhase3GuestTest extends TestCase
         $service->register($turnamen, $payload, null, null, TurnamenPeserta::SUMBER_INTERNAL, true, $kategori->id);
     }
 
+    public function test_guest_hides_klasemen_tab_while_tournament_is_open(): void
+    {
+        $open = $this->createTurnamen(['status' => 'open', 'nama' => 'Open Hide Klasemen']);
+        $ongoing = $this->createTurnamen(['status' => 'ongoing', 'nama' => 'Ongoing Show Klasemen']);
+
+        $openHtml = $this->get(route('guest.participants', ['id_turnamen' => $open->id]))
+            ->assertOk()
+            ->getContent();
+        $this->assertStringNotContainsString('guest-tournament-nav__label">Klasemen', $openHtml);
+
+        $this->get(route('guest.standings', ['id_turnamen' => $open->id]))
+            ->assertRedirect(route('guest.participants', array_filter([
+                'id_turnamen' => $open->id,
+                'id_kategori' => optional($open->defaultKategori())->id,
+            ])));
+
+        $ongoingHtml = $this->get(route('guest.participants', ['id_turnamen' => $ongoing->id]))
+            ->assertOk()
+            ->getContent();
+        $this->assertStringContainsString('guest-tournament-nav__label">Klasemen', $ongoingHtml);
+    }
+
     public function test_guest_participants_filter_by_category(): void
     {
         $turnamen = $this->createTurnamen(['status' => 'open', 'nama' => 'Phase3 Peserta']);

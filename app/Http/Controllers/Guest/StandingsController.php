@@ -39,6 +39,13 @@ class StandingsController extends Controller
             $kategori = $this->resolvePublicKategori($turnamen, $this->requestKategoriId($request))
                 ?? $turnamen->defaultKategori();
             $kategoriId = $kategori ? $kategori->id : null;
+
+            if ($turnamen->isRegistrationOpen()) {
+                return redirect()->route('guest.participants', array_filter([
+                    'id_turnamen' => $turnamen->id,
+                    'id_kategori' => $kategoriId,
+                ]));
+            }
         }
 
         $mahjongStandings = $turnamen && $turnamen->isMahjong()

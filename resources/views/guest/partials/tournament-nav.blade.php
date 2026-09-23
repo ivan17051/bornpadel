@@ -54,12 +54,14 @@
         'url' => route('guest.participants', $query),
     ];
 
-    $tabs[] = [
-        'key' => 'standings',
-        'label' => 'Klasemen',
-        'icon' => 'bi-bar-chart-steps',
-        'url' => route('guest.standings', $query),
-    ];
+    if (! $turnamen->isRegistrationOpen()) {
+        $tabs[] = [
+            'key' => 'standings',
+            'label' => 'Klasemen',
+            'icon' => 'bi-bar-chart-steps',
+            'url' => route('guest.standings', $query),
+        ];
+    }
 
     if ($showBracket) {
         $tabs[] = [
