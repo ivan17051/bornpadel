@@ -743,7 +743,7 @@ class PemainController extends Controller
         ]);
 
         try {
-            $turnamen = $this->resolveFriendlyTournament((int) $request->input('id_turnamen'));
+            $turnamen = $this->resolveRegistrationGroupTournament((int) $request->input('id_turnamen'));
             $kategoriId = $this->resolveKategoriId($request, $turnamen);
 
             $this->registrationService->assignPesertaToRegistrationGroup(
@@ -758,7 +758,7 @@ class PemainController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Pemain berhasil dipindah ke grup.',
+            'message' => 'Pemain berhasil dipindah ke '.$turnamen->registrationRosterNoun().'.',
         ]);
     }
 
@@ -771,7 +771,7 @@ class PemainController extends Controller
         ]);
 
         try {
-            $turnamen = $this->resolveFriendlyTournament((int) $request->input('id_turnamen'));
+            $turnamen = $this->resolveRegistrationGroupTournament((int) $request->input('id_turnamen'));
             $kategoriId = $this->resolveKategoriId($request, $turnamen);
 
             $this->registrationService->removePesertaFromRegistrationGroup(
@@ -785,7 +785,7 @@ class PemainController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Pemain dilepas dari grup.',
+            'message' => 'Pemain dilepas dari '.$turnamen->registrationRosterNoun().'.',
         ]);
     }
 
@@ -798,11 +798,12 @@ class PemainController extends Controller
         ]);
 
         try {
-            $turnamen = $this->resolveFriendlyTournament((int) $request->input('id_turnamen'));
+            $turnamen = $this->resolveRegistrationGroupTournament((int) $request->input('id_turnamen'));
             $kategoriId = $this->resolveKategoriId($request, $turnamen);
+            $nounTitle = $turnamen->registrationRosterNoun(true);
 
             if ((int) $group->id_turnamen !== (int) $turnamen->id) {
-                throw new RuntimeException('Grup tidak termasuk turnamen ini.');
+                throw new RuntimeException($nounTitle.' tidak termasuk turnamen ini.');
             }
 
             $group = $this->registrationService->renameRegistrationGroup(
@@ -817,17 +818,17 @@ class PemainController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Nama grup berhasil diperbarui.',
+            'message' => 'Nama '.$turnamen->registrationRosterNoun().' berhasil diperbarui.',
             'data' => ['id' => $group->id, 'nama' => $group->nama],
         ]);
     }
 
-    protected function resolveFriendlyTournament(int $turnamenId): Turnamen
+    protected function resolveRegistrationGroupTournament(int $turnamenId): Turnamen
     {
         $turnamen = $this->matchmakingService->resolveTournament($turnamenId, false);
 
-        if (! $turnamen || ! $turnamen->isFriendly()) {
-            throw new RuntimeException('Fitur grup pendaftaran hanya untuk Group Match.');
+        if (! $turnamen || ! $turnamen->allowsGroupRegistration()) {
+            throw new RuntimeException('Fitur pindah tim/grup hanya untuk Group Match atau Mahjong Tim.');
         }
 
         return $turnamen;

@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Pemain;
 use App\Models\Grup;
+use App\Models\GrupMember;
+use App\Models\Pertandingan;
 use App\Models\Turnamen;
 use App\Models\TurnamenGrupPendaftaran;
 use App\Models\TurnamenGrupPendaftaranMember;
@@ -346,26 +348,51 @@ class PemainRegistrationService
             return ['type' => 'pairs', 'items' => $items];
         }
 
-        $items = TurnamenPeserta::query()
+        $relations = ['pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1'];
+        $showGroups = $turnamen->allowsGroupRegistration();
+
+        if ($showGroups) {
+            $relations[] = 'grupPendaftaranMember.grupPendaftaran';
+        }
+
+        $pesertaList = TurnamenPeserta::query()
             ->forKategori($kategoriId)
             ->where('status', '!=', 'rejected')
-            ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'pasanganAsPeserta2.peserta1.pemain1'])
+            ->with($relations)
             ->orderBy('id')
-            ->get()
-            ->map(function (TurnamenPeserta $peserta) use ($turnamen) {
-                $partnerName = optional($peserta->partner_pemain)->nama;
+            ->get();
 
-                return [
-                    'id' => $peserta->id,
-                    'nama' => optional($peserta->pemain1)->nama ?? '-',
-                    'partner' => $partnerName,
-                    'display' => $partnerName
-                        ? trim((optional($peserta->pemain1)->nama ?? '') . ' / ' . $partnerName)
-                        : (optional($peserta->pemain1)->nama ?? '-'),
-                    'status' => $peserta->status,
-                    'is_paired' => $peserta->isPaired(),
-                ];
-            });
+        if ($showGroups) {
+            $pesertaList = $pesertaList->sortBy(function (TurnamenPeserta $peserta) {
+                $group = optional($peserta->grupPendaftaranMember)->grupPendaftaran;
+                $grouped = $group ? '0' : '1';
+                $groupName = mb_strtolower((string) optional($group)->nama);
+                $urutan = str_pad((string) ((int) optional($peserta->grupPendaftaranMember)->urutan), 8, '0', STR_PAD_LEFT);
+                $playerName = mb_strtolower((string) optional($peserta->pemain1)->nama);
+
+                return $grouped.'|'.$groupName.'|'.$urutan.'|'.$playerName;
+            })->values();
+        }
+
+        $items = $pesertaList->map(function (TurnamenPeserta $peserta) use ($showGroups) {
+            $partnerName = optional($peserta->partner_pemain)->nama;
+            $group = $showGroups
+                ? optional($peserta->grupPendaftaranMember)->grupPendaftaran
+                : null;
+
+            return [
+                'id' => $peserta->id,
+                'nama' => optional($peserta->pemain1)->nama ?? '-',
+                'partner' => $partnerName,
+                'display' => $partnerName
+                    ? trim((optional($peserta->pemain1)->nama ?? '') . ' / ' . $partnerName)
+                    : (optional($peserta->pemain1)->nama ?? '-'),
+                'status' => $peserta->status,
+                'is_paired' => $peserta->isPaired(),
+                'group_id' => $group ? (int) $group->id : null,
+                'group_nama' => $group ? (string) $group->nama : null,
+            ];
+        });
 
         return [
             'type' => $turnamen->requiresPairRegistration() ? 'double_individual' : 'single',
@@ -641,7 +668,7 @@ class PemainRegistrationService
         $kategoriId = $turnamen->resolveKategori($idKategori)->id;
 
         $existsPendaftaranQuery = TurnamenGrupPendaftaran::query()
-            ->forKategori($kategoriId)
+            ->where('id_turnamen', $turnamen->id)
             ->whereRaw('LOWER(nama) = ?', [$lower]);
 
         if ($exceptGrupPendaftaranId) {
@@ -713,13 +740,14 @@ class PemainRegistrationService
         $idKategori = null
     ): TurnamenGrupPendaftaranMember {
         if (! $this->canEditRegistrationGroups($turnamen, $idKategori)) {
-            throw new RuntimeException('Tidak dapat mengubah anggota grup pendaftaran saat ini.');
+            throw new RuntimeException('Tidak dapat mengubah anggota '.$turnamen->registrationRosterNoun().' saat ini.');
         }
 
         $kategori = $turnamen->resolveKategori($idKategori);
         $capacity = $kategori->registrationRosterSize();
+        $nounTitle = $turnamen->registrationRosterNoun(true);
 
-        return DB::transaction(function () use ($turnamen, $kategori, $pesertaId, $groupId, $capacity) {
+        return DB::transaction(function () use ($turnamen, $kategori, $pesertaId, $groupId, $capacity, $nounTitle) {
             $peserta = TurnamenPeserta::query()
                 ->forKategori((int) $kategori->id)
                 ->where('id', $pesertaId)
@@ -737,7 +765,7 @@ class PemainRegistrationService
                 ->first();
 
             if (! $target) {
-                throw new RuntimeException('Grup pendaftaran tujuan tidak ditemukan.');
+                throw new RuntimeException($nounTitle.' tujuan tidak ditemukan.');
             }
 
             $existing = TurnamenGrupPendaftaranMember::query()
@@ -754,7 +782,7 @@ class PemainRegistrationService
                 ->count();
 
             if ($memberCount >= $capacity) {
-                throw new RuntimeException('Grup tujuan sudah penuh.');
+                throw new RuntimeException($nounTitle.' tujuan sudah penuh.');
             }
 
             $oldGroupId = $existing ? (int) $existing->id_grup_pendaftaran : null;
@@ -782,12 +810,13 @@ class PemainRegistrationService
         $idKategori = null
     ): void {
         if (! $this->canEditRegistrationGroups($turnamen, $idKategori)) {
-            throw new RuntimeException('Tidak dapat mengubah anggota grup pendaftaran saat ini.');
+            throw new RuntimeException('Tidak dapat mengubah anggota '.$turnamen->registrationRosterNoun().' saat ini.');
         }
 
         $kategori = $turnamen->resolveKategori($idKategori);
+        $noun = $turnamen->registrationRosterNoun();
 
-        DB::transaction(function () use ($kategori, $pesertaId) {
+        DB::transaction(function () use ($kategori, $pesertaId, $noun) {
             $peserta = TurnamenPeserta::query()
                 ->forKategori((int) $kategori->id)
                 ->where('id', $pesertaId)
@@ -804,7 +833,7 @@ class PemainRegistrationService
                 ->first();
 
             if (! $membership) {
-                throw new RuntimeException('Pemain tidak berada di dalam grup.');
+                throw new RuntimeException('Pemain tidak berada di dalam '.$noun.'.');
             }
 
             $groupId = (int) $membership->id_grup_pendaftaran;
@@ -820,7 +849,7 @@ class PemainRegistrationService
         $idKategori = null
     ): TurnamenGrupPendaftaran {
         if (! $this->canEditRegistrationGroups($turnamen, $idKategori)) {
-            throw new RuntimeException('Tidak dapat mengubah nama grup pendaftaran saat ini.');
+            throw new RuntimeException('Tidak dapat mengubah nama '.$turnamen->registrationRosterNoun().' saat ini.');
         }
 
         $kategori = $turnamen->resolveKategori($idKategori);
@@ -833,7 +862,7 @@ class PemainRegistrationService
             ->first();
 
         if (! $group) {
-            throw new RuntimeException('Grup pendaftaran tidak ditemukan.');
+            throw new RuntimeException($turnamen->registrationRosterNoun(true).' tidak ditemukan.');
         }
 
         $group->update(['nama' => $nama]);
@@ -912,6 +941,97 @@ class PemainRegistrationService
     public function getRegistrationStatus(Pemain $pemain, Turnamen $turnamen, $idKategori = null): ?string
     {
         return optional($pemain->pesertaForTurnamen($turnamen, $idKategori))->status;
+    }
+
+    /**
+     * Remove selected registrations from a tournament. Player profiles are kept.
+     *
+     * @param  array<int>  $pesertaIds
+     * @return Collection<int, TurnamenPeserta>
+     */
+    public function bulkUnregisterPeserta(Turnamen $turnamen, array $pesertaIds): Collection
+    {
+        if (in_array($turnamen->status, ['ongoing', 'completed'], true)) {
+            throw new RuntimeException('Peserta tidak dapat dihapus setelah turnamen berlangsung atau selesai.');
+        }
+
+        $pesertaIds = array_values(array_unique(array_map('intval', $pesertaIds)));
+
+        if ($pesertaIds === []) {
+            throw new RuntimeException('Daftar peserta wajib diisi.');
+        }
+
+        $rows = TurnamenPeserta::query()
+            ->forTurnamen($turnamen->id)
+            ->whereIn('id', $pesertaIds)
+            ->with(['pemain1', 'grupPendaftaranMember'])
+            ->get();
+
+        if ($rows->count() !== count($pesertaIds)) {
+            throw new RuntimeException('Satu atau lebih peserta tidak ditemukan pada turnamen ini.');
+        }
+
+        $blocked = [];
+
+        foreach ($rows as $peserta) {
+            if ($this->pesertaHasMatchesOrGroups($turnamen, $peserta)) {
+                $blocked[] = optional($peserta->pemain1)->nama ?? ('#'.$peserta->id);
+            }
+        }
+
+        if ($blocked !== []) {
+            throw new RuntimeException(
+                'Tidak dapat menghapus peserta yang sudah masuk pertandingan atau grup: '.implode(', ', $blocked).'.'
+            );
+        }
+
+        return DB::transaction(function () use ($rows) {
+            $deleted = collect();
+
+            foreach ($rows as $peserta) {
+                $groupId = optional($peserta->grupPendaftaranMember)->id_grup_pendaftaran;
+                $this->paymentReceiptService->delete($peserta->bukti_bayar);
+                $this->detachPemainFromPeserta($peserta, (int) $peserta->id_pemain1);
+                $this->deleteRegistrationGroupIfEmpty($groupId);
+                $deleted->push($peserta);
+            }
+
+            return $deleted;
+        });
+    }
+
+    protected function pesertaHasMatchesOrGroups(Turnamen $turnamen, TurnamenPeserta $peserta): bool
+    {
+        $pemainId = (int) $peserta->id_pemain1;
+
+        $inMatches = Pertandingan::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where(function ($query) use ($pemainId, $peserta) {
+                $query->where('id_pemain1', $pemainId)
+                    ->orWhere('id_pemain2', $pemainId)
+                    ->orWhere('id_pemenang', $pemainId)
+                    ->orWhere('id_peserta1', $peserta->id)
+                    ->orWhere('id_peserta2', $peserta->id)
+                    ->orWhere('id_peserta_pemenang', $peserta->id);
+            })
+            ->exists();
+
+        if ($inMatches) {
+            return true;
+        }
+
+        return GrupMember::query()
+            ->where(function ($query) use ($peserta, $pemainId) {
+                $query->where('id_turnamen_peserta', $peserta->id);
+
+                if ($pemainId > 0) {
+                    $query->orWhere('id_pemain', $pemainId);
+                }
+            })
+            ->whereHas('grup', function ($query) use ($turnamen) {
+                $query->where('id_turnamen', $turnamen->id);
+            })
+            ->exists();
     }
 
     public function detachPemainFromPeserta(TurnamenPeserta $peserta, int $pemainId): void

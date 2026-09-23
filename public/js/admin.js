@@ -164,25 +164,34 @@ const BornPadelAdmin = (function () {
     };
 
     const initBulkApproval = () => {
-        const cards = Array.from(document.querySelectorAll('.pemain-table-card[data-bulk-approve-url]'));
+        const cards = Array.from(document.querySelectorAll('.pemain-table-card[data-bulk-approve-url], .pemain-table-card[data-bulk-delete-url]'));
         if (cards.length === 0) return;
 
         cards.forEach((card) => {
             const bulkBtns = Array.from(card.querySelectorAll('.btn-bulk-approve'));
+            const deleteBtns = Array.from(card.querySelectorAll('.btn-bulk-delete'));
             const selectAll = card.querySelector('.select-all-approvable');
-            if (bulkBtns.length === 0) return;
+            if (bulkBtns.length === 0 && deleteBtns.length === 0) return;
 
             const checkboxes = () => Array.from(card.querySelectorAll('.peserta-bulk-checkbox'));
 
             const updateBulkControls = () => {
                 const selected = checkboxes().filter((cb) => cb.checked);
                 const count = selected.length;
+                const approvableCount = selected.filter((cb) => cb.dataset.canApprove === '1').length;
 
                 bulkBtns.forEach((btn) => {
+                    btn.disabled = approvableCount === 0;
+                    btn.title = approvableCount === 0
+                        ? 'Pilih peserta yang belum disetujui'
+                        : `Setujui ${approvableCount} peserta terpilih`;
+                });
+
+                deleteBtns.forEach((btn) => {
                     btn.disabled = count === 0;
                     btn.title = count === 0
                         ? 'Pilih peserta pada tabel terlebih dahulu'
-                        : `Setujui ${count} peserta terpilih`;
+                        : `Hapus ${count} peserta terpilih dari turnamen`;
                 });
 
                 if (selectAll) {
@@ -203,9 +212,9 @@ const BornPadelAdmin = (function () {
                 });
             }
 
-            const runBulkApprove = async (triggerBtn) => {
+            const runBulkApprove = async () => {
                 const selectedIds = checkboxes()
-                    .filter((cb) => cb.checked)
+                    .filter((cb) => cb.checked && cb.dataset.canApprove === '1')
                     .map((cb) => parseInt(cb.value, 10));
 
                 if (!selectedIds.length) return;
@@ -234,8 +243,44 @@ const BornPadelAdmin = (function () {
                 }
             };
 
+            const runBulkDelete = async () => {
+                const selectedIds = checkboxes()
+                    .filter((cb) => cb.checked)
+                    .map((cb) => parseInt(cb.value, 10));
+
+                if (!selectedIds.length || !card.dataset.bulkDeleteUrl) return;
+
+                const confirmed = await confirmAction({
+                    title: `Hapus ${selectedIds.length} peserta terpilih dari turnamen?`,
+                    text: 'Profil pemain tetap tersimpan. Pendaftaran pada turnamen ini saja yang dihapus.',
+                    confirmText: 'Ya, hapus',
+                    icon: 'warning',
+                    confirmButtonColor: '#dc3545',
+                });
+
+                if (!confirmed) return;
+
+                deleteBtns.forEach((btn) => setButtonLoading(btn, true));
+
+                try {
+                    await apiRequest(card.dataset.bulkDeleteUrl, 'POST', {
+                        id_turnamen: parseInt(card.dataset.turnamenId, 10),
+                        peserta_ids: selectedIds,
+                    });
+                    showAlert(`${selectedIds.length} peserta berhasil dihapus dari turnamen.`, 'success');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                    deleteBtns.forEach((btn) => setButtonLoading(btn, false));
+                }
+            };
+
             bulkBtns.forEach((btn) => {
-                btn.addEventListener('click', () => runBulkApprove(btn));
+                btn.addEventListener('click', () => runBulkApprove());
+            });
+
+            deleteBtns.forEach((btn) => {
+                btn.addEventListener('click', () => runBulkDelete());
             });
 
             updateBulkControls();
@@ -726,6 +771,8 @@ const BornPadelAdmin = (function () {
         const assignUrl = panel.dataset.regAssignUrl;
         const removeUrl = panel.dataset.regRemoveUrl;
         const renameTemplate = panel.dataset.regRenameUrlTemplate || '';
+        const rosterNoun = panel.dataset.regNoun || 'grup';
+        const rosterNounTitle = panel.dataset.regNounTitle || 'Grup';
         let groups = [];
 
         try {
@@ -772,7 +819,7 @@ const BornPadelAdmin = (function () {
             const targets = groups.filter((g) => g.slots > 0 && g.id !== fromId);
 
             if (!targets.length) {
-                showAlert('Tidak ada grup dengan slot kosong.', 'warning');
+                showAlert(`Tidak ada ${rosterNoun} dengan slot kosong.`, 'warning');
                 return;
             }
 
@@ -786,8 +833,8 @@ const BornPadelAdmin = (function () {
 
             if (moveHintEl) {
                 moveHintEl.textContent = fromId
-                    ? 'Hanya grup yang belum penuh yang muncul di daftar.'
-                    : 'Pemain tanpa grup akan dimasukkan ke grup yang dipilih.';
+                    ? `Hanya ${rosterNoun} yang belum penuh yang muncul di daftar.`
+                    : `Pemain tanpa ${rosterNoun} akan dimasukkan ke ${rosterNoun} yang dipilih.`;
             }
 
             moveModal.show();
@@ -808,7 +855,7 @@ const BornPadelAdmin = (function () {
 
                 const groupId = parseInt(moveSelect.value, 10);
                 if (!groupId) {
-                    showAlert('Pilih grup tujuan.', 'warning');
+                    showAlert(`Pilih ${rosterNoun} tujuan.`, 'warning');
                     return;
                 }
 
@@ -822,7 +869,7 @@ const BornPadelAdmin = (function () {
                         id_grup_pendaftaran: groupId,
                     });
                     moveModal.hide();
-                    showAlert('Pemain berhasil dipindah ke grup.', 'success');
+                    showAlert(`Pemain berhasil dipindah ke ${rosterNoun}.`, 'success');
                     reloadPage();
                 } catch (e) {
                     showAlert(e.message, 'error');
@@ -837,8 +884,8 @@ const BornPadelAdmin = (function () {
                 event.preventDefault();
                 const name = btn.dataset.pemainName || 'pemain ini';
                 const confirmed = await confirmAction({
-                    title: `Lepas ${name} dari grup?`,
-                    text: 'Pemain tetap terdaftar di turnamen sebagai individu (tanpa grup).',
+                    title: `Lepas ${name} dari ${rosterNoun}?`,
+                    text: `Pemain tetap terdaftar di turnamen sebagai individu (tanpa ${rosterNoun}).`,
                     confirmText: 'Ya, lepas',
                     icon: 'warning',
                     confirmButtonColor: '#dc3545',
@@ -850,7 +897,7 @@ const BornPadelAdmin = (function () {
                         ...basePayload(),
                         id_peserta: parseInt(btn.dataset.pesertaId, 10),
                     });
-                    showAlert('Pemain dilepas dari grup.', 'success');
+                    showAlert(`Pemain dilepas dari ${rosterNoun}.`, 'success');
                     reloadPage();
                 } catch (e) {
                     showAlert(e.message, 'error');
@@ -877,7 +924,7 @@ const BornPadelAdmin = (function () {
 
                 const nama = (renameInput?.value || '').trim();
                 if (!nama) {
-                    showAlert('Nama grup wajib diisi.', 'warning');
+                    showAlert(`Nama ${rosterNoun} wajib diisi.`, 'warning');
                     return;
                 }
 
@@ -891,7 +938,7 @@ const BornPadelAdmin = (function () {
                         nama,
                     });
                     renameModal.hide();
-                    showAlert('Nama grup berhasil diperbarui.', 'success');
+                    showAlert(`Nama ${rosterNoun} berhasil diperbarui.`, 'success');
                     reloadPage();
                 } catch (e) {
                     showAlert(e.message, 'error');

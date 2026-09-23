@@ -11,7 +11,7 @@
     $rounds = collect($rounds);
     $rows = collect($rows);
     $showGrup = $rows->contains(fn ($row) => filled($row['grup_nama'] ?? null));
-    $colCount = 6 + $rounds->count() + ($showGrup ? 1 : 0);
+    $colCount = 5 + $rounds->count() + ($showGrup ? 1 : 0);
     $rankingNote = $rankingNote ?: 'Peringkat berdasarkan Total babak, lalu Menang, lalu Akumulasi.';
 @endphp
 
@@ -32,7 +32,6 @@
                         <th class="text-center" title="Kriteria 1">Total Babak</th>
                         <th class="text-center" title="Kriteria 2: jumlah menang">W</th>
                         <th class="text-center" title="Kriteria 3">Akumulasi</th>
-                        <th class="text-center" style="width:7rem">Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -76,21 +75,6 @@
                             </td>
                             <td class="text-center">{{ $row['menang'] ?? 0 }}</td>
                             <td class="text-center text-muted">{{ $row['poin_akumulasi'] ?? 0 }}</td>
-                            <td class="text-center">
-                                @if ($status === 'lolos')
-                                    <span class="badge text-bg-success">Lolos</span>
-                                @elseif ($status === 'pratinjau')
-                                    <span class="badge text-bg-success">Lolos*</span>
-                                @elseif ($status === 'seri')
-                                    <span class="badge text-bg-warning text-dark">Seri</span>
-                                @elseif ($status === 'juara')
-                                    <span class="badge text-bg-warning text-dark">Juara</span>
-                                @elseif ($status === 'runner_up')
-                                    <span class="badge text-bg-light text-dark border">Ke-2</span>
-                                @elseif ($status === 'third')
-                                    <span class="badge text-bg-light text-dark border">Ke-3</span>
-                                @endif
-                            </td>
                         </tr>
                     @empty
                         <tr>

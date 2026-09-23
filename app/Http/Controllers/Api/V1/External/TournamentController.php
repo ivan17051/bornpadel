@@ -145,6 +145,7 @@ class TournamentController extends Controller
 
         $items = collect($participantData['items'] ?? [])->map(function ($item) {
             $item = is_array($item) ? $item : [];
+            $groupId = $item['group_id'] ?? null;
 
             return [
                 'id' => isset($item['id']) ? (int) $item['id'] : null,
@@ -153,6 +154,10 @@ class TournamentController extends Controller
                 'partner' => $item['partner'] ?? ($item['pemain2'] ?? null),
                 'status' => $item['status'] ?? null,
                 'is_paired' => (bool) ($item['is_paired'] ?? false),
+                'group_id' => $groupId !== null && $groupId !== '' ? (int) $groupId : null,
+                'group_nama' => isset($item['group_nama']) && $item['group_nama'] !== ''
+                    ? (string) $item['group_nama']
+                    : null,
             ];
         })->values();
 

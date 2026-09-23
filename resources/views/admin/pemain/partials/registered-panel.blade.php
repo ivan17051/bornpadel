@@ -3,6 +3,7 @@
     $preserveTab = $preserveTab ?? null;
     $soloPesertaOptions = $soloPesertaOptions ?? collect();
     $showBulkActions = auth()->user()->isAdmin() && $turnamen && empty($isDoubleView);
+    $showBulkDelete = $showBulkActions && $turnamen && ! in_array($turnamen->status, ['ongoing', 'completed'], true);
     $showPartnerActions = auth()->user()->isAdmin() && $turnamen && $turnamen->requiresPairRegistration() && ! $turnamen->isRegistrationClosed() && empty($isDoubleView);
     $showPartnerColumn = $turnamen && $turnamen->requiresPairRegistration() && empty($isDoubleView);
     $showFriendlyGroups = $turnamen && $turnamen->allowsGroupRegistration() && empty($isDoubleView) && ! request()->filled('sort');
@@ -91,11 +92,16 @@
      @if ($turnamen)
      data-turnamen-id="{{ $turnamen->id }}"
      data-bulk-approve-url="{{ route('admin.peserta.bulk-approve') }}"
+     @if ($showBulkDelete)
+     data-bulk-delete-url="{{ route('admin.peserta.bulk-delete') }}"
+     @endif
      @if (! empty($kategoriId) || ! empty(optional($kategori ?? null)->id))
      data-kategori="{{ $kategoriId ?? $kategori->id }}"
      @endif
      @if ($canEditRegistrationGroups)
      data-reg-edit="1"
+     data-reg-noun="{{ $rosterNoun }}"
+     data-reg-noun-title="{{ $rosterNounTitle }}"
      data-reg-players-per-group="{{ $friendlyPlayersPerGroup }}"
      data-reg-assign-url="{{ route('admin.pemain.friendly.registration-group.assign') }}"
      data-reg-remove-url="{{ route('admin.pemain.friendly.registration-group.remove') }}"
@@ -144,6 +150,14 @@
                         <i class="bi bi-check-all me-1"></i> Setujui Terpilih
                     </button>
                 @endif
+                @if ($showBulkDelete)
+                    <button type="button"
+                            class="btn btn-outline-danger btn-sm btn-bulk-delete"
+                            disabled
+                            title="Pilih peserta pada tabel terlebih dahulu">
+                        <i class="bi bi-trash me-1"></i> Hapus Terpilih
+                    </button>
+                @endif
                 @if ($turnamen)
                     <a href="{{ route('admin.pemain.available', $availableQuery) }}" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-person-plus me-1"></i> Tambah Pemain
@@ -170,7 +184,7 @@
                         @else
                             @if ($showBulkActions)
                                 <th style="width: 2.5rem;">
-                                    <input type="checkbox" class="form-check-input select-all-approvable" title="Pilih semua yang dapat disetujui">
+                                    <input type="checkbox" class="form-check-input select-all-approvable" title="Pilih semua">
                                 </th>
                             @endif
                             <th style="width: 3.5rem;"></th>
@@ -296,11 +310,12 @@
                             <tr data-pemain-id="{{ $item->id }}" data-peserta-id="{{ optional($pesertaRow)->id }}">
                                 @if ($showBulkActions)
                                     <td>
-                                        @if ($canBulkApprove)
+                                        @if ($pesertaRow)
                                             <input type="checkbox"
                                                    class="form-check-input peserta-bulk-checkbox"
                                                    value="{{ $pesertaRow->id }}"
-                                                   data-peserta-id="{{ $pesertaRow->id }}">
+                                                   data-peserta-id="{{ $pesertaRow->id }}"
+                                                   data-can-approve="{{ $canBulkApprove ? '1' : '0' }}">
                                         @endif
                                     </td>
                                 @endif

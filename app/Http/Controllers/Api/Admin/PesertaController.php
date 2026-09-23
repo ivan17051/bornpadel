@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\BulkApprovePesertaRequest;
+use App\Http\Requests\Admin\BulkDeletePesertaRequest;
 use App\Http\Requests\Admin\SetPesertaPartnerRequest;
 use App\Models\Turnamen;
 use App\Models\TurnamenPeserta;
 use App\Services\DoublePartnerManagementService;
+use App\Services\PemainRegistrationService;
 use App\Services\PesertaApprovalService;
 use Illuminate\Http\JsonResponse;
 use RuntimeException;
@@ -16,13 +18,16 @@ class PesertaController extends Controller
 {
     protected $approvalService;
     protected $partnerService;
+    protected $registrationService;
 
     public function __construct(
         PesertaApprovalService $approvalService,
-        DoublePartnerManagementService $partnerService
+        DoublePartnerManagementService $partnerService,
+        PemainRegistrationService $registrationService
     ) {
         $this->approvalService = $approvalService;
         $this->partnerService = $partnerService;
+        $this->registrationService = $registrationService;
     }
 
     public function bulkApprove(BulkApprovePesertaRequest $request): JsonResponse
@@ -55,6 +60,32 @@ class PesertaController extends Controller
                 'approved' => $result['approved']->values(),
                 'already_approved' => $result['already_approved']->values(),
                 'maks_peserta' => $turnamen->maks_peserta,
+            ],
+        ]);
+    }
+
+    public function bulkDelete(BulkDeletePesertaRequest $request): JsonResponse
+    {
+        $turnamen = Turnamen::findOrFail($request->id_turnamen);
+
+        try {
+            $deleted = $this->registrationService->bulkUnregisterPeserta($turnamen, $request->peserta_ids);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $deletedCount = $deleted->count();
+
+        return response()->json([
+            'success' => true,
+            'message' => $deletedCount > 0
+                ? sprintf('%d peserta berhasil dihapus dari turnamen.', $deletedCount)
+                : 'Tidak ada peserta yang dihapus.',
+            'data' => [
+                'deleted_count' => $deletedCount,
             ],
         ]);
     }

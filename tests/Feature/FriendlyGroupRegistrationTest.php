@@ -7,6 +7,7 @@ use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenGrupPendaftaran;
 use App\Models\TurnamenGrupPendaftaranMember;
+use App\Models\TurnamenKategori;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\FriendlyMatchmakingService;
@@ -46,6 +47,28 @@ class FriendlyGroupRegistrationTest extends TestCase
         $this->assertSame(4, $result['grup_pendaftaran']->members()->count());
     }
 
+    public function test_guest_participants_page_shows_group_names(): void
+    {
+        $turnamen = $this->createOpenFriendly();
+
+        app(PemainRegistrationService::class)->registerGroup(
+            $turnamen,
+            'Alpha Wolves',
+            $this->playerPayloads(1),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false
+        );
+
+        $html = $this->get(route('guest.participants', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Alpha Wolves', $html);
+        $this->assertStringContainsString($this->playerPayloads(1)[0]['nama'], $html);
+    }
+
     public function test_duplicate_group_name_is_rejected_case_insensitive(): void
     {
         $turnamen = $this->createOpenFriendly();
@@ -65,6 +88,36 @@ class FriendlyGroupRegistrationTest extends TestCase
         $this->expectExceptionMessage('Nama grup sudah digunakan pada kategori ini.');
 
         $service->assertGroupNameAvailable($turnamen, 'night owls');
+    }
+
+    public function test_duplicate_group_name_is_rejected_across_categories(): void
+    {
+        $turnamen = $this->createOpenFriendly();
+        $service = app(PemainRegistrationService::class);
+        $katB = TurnamenKategori::create([
+            'id_turnamen' => $turnamen->id,
+            'nama' => 'Open B',
+            'is_default' => false,
+            'urutan' => 2,
+            'harga' => $turnamen->harga,
+            'maks_peserta' => $turnamen->maks_peserta,
+            'status' => 'open',
+        ]);
+
+        $service->registerGroup(
+            $turnamen,
+            'Night Owls',
+            $this->playerPayloads(10),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false
+        );
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Nama grup sudah digunakan pada kategori ini.');
+
+        $service->assertGroupNameAvailable($turnamen, 'Night Owls', $katB->id);
     }
 
     public function test_duplicate_name_rejects_against_existing_competition_grup(): void

@@ -115,6 +115,147 @@ class MahjongTeamRegistrationTest extends TestCase
         $this->assertSame(4, TurnamenPeserta::query()->forTurnamen($turnamen->id)->count());
     }
 
+    public function test_guest_participants_page_shows_team_names(): void
+    {
+        $turnamen = $this->createOpenMahjongTeam();
+        $service = app(PemainRegistrationService::class);
+
+        $service->registerGroup(
+            $turnamen,
+            'Dragon Squad',
+            $this->playerPayloads(1),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false,
+            'approved'
+        );
+        $service->registerGroup(
+            $turnamen,
+            'Tiger Clan',
+            $this->playerPayloads(2),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false,
+            'approved'
+        );
+
+        $solo = Pemain::create([
+            'nama' => 'Solo MJ Participant',
+            'gender' => 'male',
+            'no_hp' => '+62819'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+            'rating' => 2.0,
+        ]);
+        TurnamenPeserta::create([
+            'id_turnamen' => $turnamen->id,
+            'id_pemain1' => $solo->id,
+            'status' => 'approved',
+            'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+        ]);
+
+        $html = $this->get(route('guest.participants', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Dragon Squad', $html);
+        $this->assertStringContainsString('Tiger Clan', $html);
+        $this->assertStringContainsString('Team Player 1-1', $html);
+        $this->assertStringContainsString('Team Player 2-1', $html);
+        $this->assertStringContainsString('Solo MJ Participant', $html);
+        $this->assertStringContainsString('Individu / Belum berkelompok', $html);
+
+        $dragonPos = strpos($html, 'Dragon Squad');
+        $tigerPos = strpos($html, 'Tiger Clan');
+        $soloPos = strpos($html, 'Individu / Belum berkelompok');
+        $this->assertNotFalse($dragonPos);
+        $this->assertNotFalse($tigerPos);
+        $this->assertNotFalse($soloPos);
+        $this->assertLessThan($soloPos, min($dragonPos, $tigerPos));
+    }
+
+    public function test_admin_can_move_individual_peserta_into_mahjong_team(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->createOpenMahjongTeam();
+        $service = app(PemainRegistrationService::class);
+
+        $team = $service->registerGroup(
+            $turnamen,
+            'Dragon Squad',
+            $this->playerPayloads(1),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false,
+            'approved'
+        );
+        $group = $team['grup_pendaftaran'];
+        $member = $group->members()->orderBy('id')->first();
+
+        $service->removePesertaFromRegistrationGroup($turnamen, (int) $member->id_peserta);
+
+        $solo = Pemain::create([
+            'nama' => 'Solo To Move',
+            'gender' => 'male',
+            'no_hp' => '+62819'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+            'rating' => 2.0,
+        ]);
+        $soloPeserta = TurnamenPeserta::create([
+            'id_turnamen' => $turnamen->id,
+            'id_pemain1' => $solo->id,
+            'status' => 'approved',
+            'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+        ]);
+
+        $this->assertTrue($service->canEditRegistrationGroups($turnamen));
+
+        $html = $this->actingAs($admin)
+            ->get(route('admin.pemain.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Pindah Tim', $html);
+        $this->assertStringContainsString('Solo To Move', $html);
+        $this->assertStringContainsString('Dragon Squad', $html);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.friendly.registration-group.assign'), [
+                'id_turnamen' => $turnamen->id,
+                'id_peserta' => $soloPeserta->id,
+                'id_grup_pendaftaran' => $group->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Pemain berhasil dipindah ke tim.');
+
+        $this->assertDatabaseHas('turnamen_grup_pendaftaran_member', [
+            'id_peserta' => $soloPeserta->id,
+            'id_grup_pendaftaran' => $group->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.pemain.friendly.registration-group.rename', $group), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Dragon Renamed',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.nama', 'Dragon Renamed');
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.friendly.registration-group.remove'), [
+                'id_turnamen' => $turnamen->id,
+                'id_peserta' => $soloPeserta->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Pemain dilepas dari tim.');
+
+        $this->assertDatabaseMissing('turnamen_grup_pendaftaran_member', [
+            'id_peserta' => $soloPeserta->id,
+        ]);
+    }
+
     public function test_generate_teams_keeps_registered_team_rosters(): void
     {
         $turnamen = $this->createOpenMahjongTeam();

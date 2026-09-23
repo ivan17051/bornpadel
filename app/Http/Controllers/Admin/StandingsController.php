@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Services\FriendlyMatchmakingService;
 use App\Services\GroupMatchmakingService;
 use App\Services\LeaderboardService;
+use App\Services\MahjongMatchmakingService;
+use App\Services\MahjongTeamMatchmakingService;
 use Illuminate\Http\Request;
 
 class StandingsController extends Controller
@@ -14,7 +16,9 @@ class StandingsController extends Controller
         Request $request,
         LeaderboardService $leaderboardService,
         GroupMatchmakingService $matchmakingService,
-        FriendlyMatchmakingService $friendlyService
+        FriendlyMatchmakingService $friendlyService,
+        MahjongMatchmakingService $mahjongService,
+        MahjongTeamMatchmakingService $mahjongTeamService
     ) {
         $turnamenList = $matchmakingService->listForFilter();
         $turnamen = $matchmakingService->resolveTournament(
@@ -34,11 +38,20 @@ class StandingsController extends Controller
             ? $friendlyService->getPublicMatchSessions($turnamen)
             : collect();
 
+        $mahjongHistory = $turnamen && $turnamen->isMahjong()
+            ? $mahjongService->getMatchmakingHistory($turnamen)
+            : collect();
+        $mahjongTeamHistory = $turnamen && $turnamen->isMahjongTeam()
+            ? $mahjongTeamService->getMatchmakingHistory($turnamen)
+            : collect();
+
         return view('admin.standings.index', compact(
             'turnamen',
             'turnamenList',
             'standings',
-            'friendlyMatchSessions'
+            'friendlyMatchSessions',
+            'mahjongHistory',
+            'mahjongTeamHistory'
         ));
     }
 }

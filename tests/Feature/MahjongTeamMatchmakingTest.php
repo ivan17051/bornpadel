@@ -305,6 +305,24 @@ class MahjongTeamMatchmakingTest extends TestCase
         foreach ($members as $member) {
             $this->assertStringContainsString($member->display_name, $html);
         }
+
+        $guestHtml = $this->get(route('guest.standings', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('id="public-mahjong-team-history-card"', $guestHtml);
+        $this->assertStringContainsString('Riwayat Meja', $guestHtml);
+        $this->assertStringContainsString('mahjong-team-history-ronde-accordion', $guestHtml);
+        $this->assertStringContainsString($meja->nama, $guestHtml);
+        $this->assertStringContainsString('+10', $guestHtml);
+        $this->assertLessThan(
+            strpos($guestHtml, 'id="public-mahjong-team-history-card"'),
+            strpos($guestHtml, 'id="live-leaderboard"')
+        );
+
+        foreach ($members as $member) {
+            $this->assertStringContainsString($member->display_name, $guestHtml);
+        }
     }
 
     public function test_can_update_mahjong_team_meja_round_and_keep_previous_winner(): void

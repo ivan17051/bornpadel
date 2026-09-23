@@ -80,6 +80,13 @@
                 :kategori="$kategori"
                 :refreshable="true"
             />
+
+            @include('admin.matchmaking.partials.mahjong-history', [
+                'mahjongHistory' => $mahjongHistory ?? collect(),
+                'idPrefix' => 'public-mahjong-history',
+                'linkPemain' => true,
+                'cardClass' => 'card border-0 shadow-sm mt-4',
+            ])
         @elseif ($turnamen && $turnamen->isMahjongTeam())
             <x-mahjong-team-leaderboard
                 :standings="$standings"
@@ -87,6 +94,13 @@
                 :kategori="$kategori"
                 :refreshable="true"
             />
+
+            @include('admin.matchmaking.partials.mahjong-team-history', [
+                'mahjongTeamHistory' => $mahjongTeamHistory ?? collect(),
+                'idPrefix' => 'public-mahjong-team-history',
+                'linkPemain' => true,
+                'cardClass' => 'card border-0 shadow-sm mt-4',
+            ])
         @elseif ($turnamen && $turnamen->isFriendly())
             <x-friendly-leaderboard
                 :standings="$standings"

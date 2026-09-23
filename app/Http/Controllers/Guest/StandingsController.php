@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Guest;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesPublicKategori;
 use App\Services\LeaderboardService;
+use App\Services\MahjongMatchmakingService;
+use App\Services\MahjongTeamMatchmakingService;
 use App\Services\PemainRegistrationService;
 use App\Services\FriendlyMatchmakingService;
 use App\Services\TournamentWinnersService;
@@ -19,7 +21,9 @@ class StandingsController extends Controller
         LeaderboardService $leaderboardService,
         PemainRegistrationService $registrationService,
         TournamentWinnersService $winnersService,
-        FriendlyMatchmakingService $friendlyService
+        FriendlyMatchmakingService $friendlyService,
+        MahjongMatchmakingService $mahjongService,
+        MahjongTeamMatchmakingService $mahjongTeamService
     ) {
         $turnamen = $registrationService->resolvePublicTournament(
             $request->filled('id_turnamen') ? (int) $request->id_turnamen : null
@@ -57,6 +61,13 @@ class StandingsController extends Controller
             ? $leaderboardService->getPostLeagueRanking($turnamen->id, $kategoriId)
             : ['sections' => collect(), 'has_bracket' => false, 'is_double' => false];
 
+        $mahjongHistory = $turnamen && $turnamen->isMahjong()
+            ? $mahjongService->getMatchmakingHistory($turnamen, $kategoriId)
+            : collect();
+        $mahjongTeamHistory = $turnamen && $turnamen->isMahjongTeam()
+            ? $mahjongTeamService->getMatchmakingHistory($turnamen, $kategoriId)
+            : collect();
+
         return view('guest.standings', compact(
             'turnamen',
             'kategori',
@@ -64,7 +75,9 @@ class StandingsController extends Controller
             'standings',
             'friendlyMatchSessions',
             'winners',
-            'postLeagueRanking'
+            'postLeagueRanking',
+            'mahjongHistory',
+            'mahjongTeamHistory'
         ));
     }
 }

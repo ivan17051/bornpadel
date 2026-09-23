@@ -70,6 +70,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/pengguna/{user}', [UserController::class, 'destroy'])->name('pengguna.destroy');
 
             Route::post('/peserta/bulk-approve', [ApiAdminPesertaController::class, 'bulkApprove'])->name('peserta.bulk-approve');
+            Route::post('/peserta/bulk-delete', [ApiAdminPesertaController::class, 'bulkDelete'])->name('peserta.bulk-delete');
             Route::post('/peserta/{peserta}/partner', [ApiAdminPesertaController::class, 'setPartner'])->name('peserta.partner.set');
             Route::delete('/peserta/{peserta}/partner', [ApiAdminPesertaController::class, 'removePartner'])->name('peserta.partner.remove');
         });

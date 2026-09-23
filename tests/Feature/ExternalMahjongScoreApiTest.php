@@ -11,6 +11,7 @@ use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\MahjongMatchmakingService;
 use App\Services\MahjongTeamMatchmakingService;
+use App\Services\PemainRegistrationService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -328,6 +329,51 @@ class ExternalMahjongScoreApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.turnamen.jenis', 'mahjong_team');
+    }
+
+    public function test_external_participants_include_mahjong_team_names(): void
+    {
+        $turnamen = Turnamen::create([
+            'nama' => 'External Team Names ' . uniqid(),
+            'tanggal' => now()->toDateString(),
+            'harga' => 100000,
+            'maks_peserta' => 16,
+            'jenis' => 'mahjong_team',
+            'players_per_group' => 4,
+            'status' => 'open',
+        ]);
+        $turnamen->ensureDefaultKategori();
+
+        $players = [];
+        for ($i = 1; $i <= 4; $i++) {
+            $players[] = [
+                'nama' => "Named Team Player {$i}",
+                'gender' => $i % 2 ? 'male' : 'female',
+                'no_hp' => '+62823'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT).$i,
+                'rating' => 2.5,
+            ];
+        }
+
+        app(PemainRegistrationService::class)->registerGroup(
+            $turnamen,
+            'Dragon Squad',
+            $players,
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false,
+            'approved'
+        );
+
+        $items = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$turnamen->id.'/participants')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->json('data.items');
+
+        $this->assertNotEmpty($items);
+        $this->assertSame('Dragon Squad', $items[0]['group_nama']);
+        $this->assertNotNull($items[0]['group_id']);
     }
 
     public function test_external_api_lists_mahjong_team_tables_as_groups(): void

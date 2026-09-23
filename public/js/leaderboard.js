@@ -75,16 +75,6 @@
             ?.addEventListener('click', fetchStandings);
     };
 
-    const mahjongStatusBadge = (status) => {
-        if (status === 'lolos') return '<span class="badge text-bg-success">Lolos</span>';
-        if (status === 'pratinjau') return '<span class="badge text-bg-success">Lolos*</span>';
-        if (status === 'seri') return '<span class="badge text-bg-warning text-dark">Seri</span>';
-        if (status === 'juara') return '<span class="badge text-bg-warning text-dark">Juara</span>';
-        if (status === 'runner_up') return '<span class="badge text-bg-light text-dark border">Ke-2</span>';
-        if (status === 'third') return '<span class="badge text-bg-light text-dark border">Ke-3</span>';
-        return '';
-    };
-
     const mahjongRowClass = (status) => {
         if (status === 'lolos' || status === 'pratinjau' || status === 'juara') return 'table-success';
         if (status === 'seri') return 'table-warning';
@@ -95,7 +85,7 @@
         const rounds = section.rounds || [];
         const rows = section.rows || [];
         const showGrup = rows.some((row) => !!row.grup_nama);
-        const colCount = 6 + rounds.length + (showGrup ? 1 : 0);
+        const colCount = 5 + rounds.length + (showGrup ? 1 : 0);
         const rankingNote = section.ranking_note
             || 'Peringkat berdasarkan Total babak, lalu Menang, lalu Akumulasi.';
         const advanceNote = section.advance_note || '';
@@ -130,7 +120,6 @@
                         </td>
                         <td class="text-center">${row.menang ?? 0}</td>
                         <td class="text-center text-muted">${row.poin_akumulasi ?? 0}</td>
-                        <td class="text-center">${mahjongStatusBadge(status)}</td>
                     </tr>`;
             }).join('')
             : `<tr>
@@ -158,7 +147,6 @@
                                     <th class="text-center" title="Kriteria 1">Total Babak</th>
                                     <th class="text-center" title="Kriteria 2: jumlah menang">W</th>
                                     <th class="text-center" title="Kriteria 3">Akumulasi</th>
-                                    <th class="text-center" style="width:7rem">Status</th>
                                 </tr>
                             </thead>
                             <tbody>${bodyRows}</tbody>

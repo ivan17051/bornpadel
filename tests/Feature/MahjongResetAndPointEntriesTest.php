@@ -836,6 +836,28 @@ class MahjongResetAndPointEntriesTest extends TestCase
 
         $historicalMember = $firstRonde['groups']->first()->members->first();
         $this->assertGreaterThan(0, $historicalMember->poinEntries->count());
+
+        $guestHtml = $this->get(route('guest.standings', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('live-leaderboard', $guestHtml);
+        $this->assertStringContainsString('id="public-mahjong-history-card"', $guestHtml);
+        $this->assertStringContainsString('Riwayat Babak', $guestHtml);
+        $this->assertStringContainsString($historicalMember->display_name, $guestHtml);
+        $this->assertLessThan(
+            strpos($guestHtml, 'id="public-mahjong-history-card"'),
+            strpos($guestHtml, 'id="live-leaderboard"')
+        );
+
+        $admin = $this->makeAdmin();
+        $adminHtml = $this->actingAs($admin)
+            ->get(route('admin.standings.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('id="klasemen-mahjong-history-card"', $adminHtml);
+        $this->assertStringContainsString('Riwayat Babak', $adminHtml);
     }
 
     public function test_matchmaking_workspace_renders_mahjong_group_as_round_table(): void
@@ -931,6 +953,7 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertStringContainsString('Total babak → Menang', $guestHtml);
         $this->assertStringContainsString('Lolos*', $guestHtml);
         $this->assertStringContainsString('Akumulasi', $guestHtml);
+        $this->assertStringNotContainsString('>Status<', $guestHtml);
 
         $admin = $this->makeAdmin();
         $adminHtml = $this->actingAs($admin)
@@ -941,6 +964,7 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertStringContainsString('Cara peringkat', $adminHtml);
         $this->assertStringContainsString('Lolos*', $adminHtml);
         $this->assertStringContainsString('>W<', $adminHtml);
+        $this->assertStringNotContainsString('>Status<', $adminHtml);
     }
 
     public function test_mahjong_standings_marks_confirmed_advancers_after_advance(): void
@@ -985,9 +1009,10 @@ class MahjongResetAndPointEntriesTest extends TestCase
             ->getContent();
 
         $this->assertStringContainsString('Lolos ke Babak 2', $html);
-        $this->assertStringContainsString('>Lolos<', $html);
+        $this->assertStringContainsString('table-success', $html);
         $this->assertStringContainsString('Final', $html);
         $this->assertStringContainsString('Juara', $html);
+        $this->assertStringNotContainsString('>Status<', $html);
     }
 
     public function test_mahjong_standings_do_not_mark_lolos_when_entire_field_is_tied(): void

@@ -60,6 +60,7 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     Route::middleware('admin')->group(function () {
         Route::delete('/turnamen/{turnamen}', [ApiAdminTurnamenController::class, 'destroy']);
         Route::post('/peserta/bulk-approve', [ApiAdminPesertaController::class, 'bulkApprove']);
+        Route::post('/peserta/bulk-delete', [ApiAdminPesertaController::class, 'bulkDelete']);
         Route::post('/peserta/{peserta}/partner', [ApiAdminPesertaController::class, 'setPartner']);
         Route::delete('/peserta/{peserta}/partner', [ApiAdminPesertaController::class, 'removePartner']);
     });

@@ -101,6 +101,11 @@
                         @endforeach
                     </div>
                 @else
+                    @php
+                        $showGroups = $turnamen->allowsGroupRegistration();
+                        $prevGroupKey = '__unset__';
+                        $colspan = 3 + ($participantType === 'double_individual' ? 1 : 0);
+                    @endphp
                     <div class="table-responsive">
                         <table class="table table-hover mb-0 align-middle">
                             <thead class="table-light">
@@ -115,6 +120,18 @@
                             </thead>
                             <tbody>
                                 @foreach ($participants as $index => $item)
+                                    @if ($showGroups)
+                                        @php $groupKey = ! empty($item['group_id']) ? 'g:'.$item['group_id'] : 'solo'; @endphp
+                                        @if ($groupKey !== $prevGroupKey)
+                                            <tr class="table-secondary">
+                                                <td colspan="{{ $colspan }}" class="small fw-semibold py-2">
+                                                    <i class="bi bi-people me-1"></i>
+                                                    {{ $item['group_nama'] ?: 'Individu / Belum berkelompok' }}
+                                                </td>
+                                            </tr>
+                                            @php $prevGroupKey = $groupKey; @endphp
+                                        @endif
+                                    @endif
                                     <tr>
                                         <td>{{ $index + 1 }}</td>
                                         <td class="fw-semibold">{{ $item['nama'] }}</td>
