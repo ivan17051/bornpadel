@@ -43,6 +43,74 @@ class Grup extends Model
         return $this->hasMany(GrupMember::class, 'id_grup');
     }
 
+    /**
+     * Group this seating's poin entries into scoring rounds (one hand per row).
+     *
+     * @return list<array<int, MahjongPoinEntry|null>>
+     */
+    public function scoringRounds(): array
+    {
+        $this->loadMissing('members.poinEntries');
+        $members = $this->members->values();
+        if ($members->isEmpty()) {
+            return [];
+        }
+
+        $memberIds = $members->map(fn (GrupMember $member) => (int) $member->id)->all();
+        $items = [];
+
+        foreach ($members as $member) {
+            $entries = $member->relationLoaded('poinEntries')
+                ? $member->poinEntries
+                : $member->poinEntries()->get();
+
+            foreach ($entries as $entry) {
+                $items[] = [
+                    'member_id' => (int) $member->id,
+                    'entry' => $entry,
+                    'ts' => optional($entry->created_at)->getTimestamp() ?? 0,
+                    'id' => (int) $entry->id,
+                ];
+            }
+        }
+
+        usort($items, function ($a, $b) {
+            return $a['ts'] <=> $b['ts'] ?: $a['id'] <=> $b['id'];
+        });
+
+        $rounds = [];
+        $used = [];
+        foreach ($items as $item) {
+            if (isset($used[$item['id']])) {
+                continue;
+            }
+
+            $round = [];
+            foreach ($memberIds as $memberId) {
+                $round[$memberId] = null;
+            }
+            $round[$item['member_id']] = $item['entry'];
+            $used[$item['id']] = true;
+
+            foreach ($items as $other) {
+                if (isset($used[$other['id']])) {
+                    continue;
+                }
+                if ($round[$other['member_id']] !== null) {
+                    continue;
+                }
+                if (abs($other['ts'] - $item['ts']) <= 3) {
+                    $round[$other['member_id']] = $other['entry'];
+                    $used[$other['id']] = true;
+                }
+            }
+
+            $rounds[] = $round;
+        }
+
+        return $rounds;
+    }
+
     public function pemain()
     {
         return $this->belongsToMany(Pemain::class, 'grup_member', 'id_grup', 'id_pemain')

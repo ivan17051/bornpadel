@@ -1,15 +1,19 @@
-{{-- Read-only Mahjong Tim meja history: babak → ronde → meja --}}
+{{-- Mahjong Tim meja history: babak → ronde → meja. Pass $editable = true on matchmaking tab. --}}
 @php
     $mahjongTeamHistory = $mahjongTeamHistory ?? collect();
     $idPrefix = $idPrefix ?? 'mahjong-team-history';
     $linkPemain = $linkPemain ?? false;
     $cardClass = $cardClass ?? 'card mb-3';
+    $editable = $editable ?? false;
 @endphp
 
 @if ($mahjongTeamHistory->isNotEmpty())
     <div class="{{ $cardClass }}" id="{{ $idPrefix }}-card">
-        <div class="card-header">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <h6 class="mb-0"><i class="bi bi-clock-history me-1"></i> Riwayat Meja</h6>
+            @if ($editable)
+                <span class="small text-muted">Klik nomor ronde untuk mengubah skor.</span>
+            @endif
         </div>
         <div class="card-body">
             <ul class="nav nav-tabs flex-wrap" id="{{ $idPrefix }}-babak-tabs" role="tablist">
@@ -94,22 +98,33 @@
                                                         <span class="text-muted fw-normal">— {{ $histMembers->count() }} pemain</span>
                                                     </h6>
                                                     <div class="table-responsive border rounded">
-                                                        <table class="table table-sm table-bordered table-hover mb-0 align-middle">
+                                                        <table class="table table-sm table-bordered table-hover mb-0 align-middle {{ $editable ? 'mahjong-group-score-table' : '' }}"
+                                                               @if ($editable)
+                                                                   data-grup-id="{{ $histMeja->id }}"
+                                                                   data-grup-name="{{ $histMeja->nama }}"
+                                                                   data-update-url="{{ route('admin.matchmaking.mahjong-team-meja-point-entries.update', $histMeja) }}"
+                                                                   data-score-scope="table"
+                                                               @endif>
                                                             <thead class="table-light">
                                                                 <tr>
-                                                                    <th class="text-center" style="width:4.5rem">Ronde</th>
+                                                                    <th class="text-center {{ $editable ? 'mahjong-ronde-head' : '' }}" style="width:4.5rem">Ronde</th>
                                                                     @foreach ($histMembers as $histMember)
                                                                         @php
                                                                             $histPemainIds = array_values(array_filter([
                                                                                 (int) ($histMember->id_pemain ?: optional($histMember->turnamenPeserta)->id_pemain1),
                                                                             ]));
+                                                                            $histLabel = trim($histMember->display_name.(optional($histMember->grup)->nama ? ' ('.$histMember->grup->nama.')' : ''));
                                                                         @endphp
-                                                                        <th class="text-center">
+                                                                        <th class="text-center {{ $editable ? 'mahjong-player-head' : '' }}"
+                                                                            @if ($editable)
+                                                                                data-member-id="{{ $histMember->id }}"
+                                                                                data-label="{{ $histLabel }}"
+                                                                            @endif>
                                                                             <div class="fw-semibold">
                                                                                 @if ($linkPemain)
                                                                                     <x-pemain-names :pemain-ids="$histPemainIds" :nama="$histMember->display_name" />
                                                                                 @else
-                                                                                    {{ $histMember->display_name }}
+                                                                                    <span class="mahjong-player-name">{{ $histMember->display_name }}</span>
                                                                                 @endif
                                                                             </div>
                                                                             @if (optional($histMember->grup)->nama)
@@ -121,15 +136,32 @@
                                                             </thead>
                                                             <tbody>
                                                                 @forelse ($histRounds as $histRoundIndex => $histRound)
-                                                                    <tr>
-                                                                        <td class="text-center fw-semibold text-muted">{{ $histRoundIndex + 1 }}</td>
+                                                                    <tr class="{{ $editable ? 'mahjong-round-row' : '' }}" @if ($editable) data-round="{{ $histRoundIndex + 1 }}" @endif>
+                                                                        <td class="text-center {{ $editable ? 'mahjong-round-number-cell' : 'fw-semibold text-muted' }}">
+                                                                            @if ($editable)
+                                                                                <button type="button"
+                                                                                        class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
+                                                                                        title="Edit ronde {{ $histRoundIndex + 1 }}">
+                                                                                    <span class="mahjong-round-label">{{ $histRoundIndex + 1 }}</span>
+                                                                                    <i class="bi bi-pencil-square ms-1"></i>
+                                                                                </button>
+                                                                            @else
+                                                                                {{ $histRoundIndex + 1 }}
+                                                                            @endif
+                                                                        </td>
                                                                         @foreach ($histMembers as $histMember)
                                                                             @php
                                                                                 $histEntry = $histRound[(int) $histMember->id] ?? null;
                                                                             @endphp
-                                                                            <td class="text-center">
+                                                                            <td class="text-center {{ $editable ? 'mahjong-round-cell' : '' }}"
+                                                                                @if ($editable) data-member-id="{{ $histMember->id }}" @endif>
                                                                                 @if ($histEntry)
-                                                                                    <span class="badge text-bg-light text-dark border {{ $histEntry->is_winner ? 'border-warning' : '' }}">
+                                                                                    <span class="badge text-bg-light text-dark border {{ $editable ? 'mahjong-poin-entry' : '' }} {{ $histEntry->is_winner ? 'border-warning' : '' }}"
+                                                                                          @if ($editable)
+                                                                                              data-entry-id="{{ $histEntry->id }}"
+                                                                                              data-poin="{{ (int) $histEntry->poin }}"
+                                                                                              data-is-winner="{{ $histEntry->is_winner ? '1' : '0' }}"
+                                                                                          @endif>
                                                                                         @if ($histEntry->is_winner)
                                                                                             <i class="bi bi-trophy-fill text-warning me-1" title="Pemenang ronde"></i>
                                                                                         @endif
@@ -155,8 +187,10 @@
                                                                         <th>Subtotal</th>
                                                                         @foreach ($histMembers as $histMember)
                                                                             <th class="text-center">
-                                                                                {{ (int) ($histTotals[(int) $histMember->id] ?? 0) }}
-                                                                                ({{ (int) ($histWins[(int) $histMember->id] ?? 0) }})
+                                                                                <span @if ($editable) class="mahjong-subtotal" data-member-id="{{ $histMember->id }}" @endif>
+                                                                                    {{ (int) ($histTotals[(int) $histMember->id] ?? 0) }}
+                                                                                    ({{ (int) ($histWins[(int) $histMember->id] ?? 0) }})
+                                                                                </span>
                                                                             </th>
                                                                         @endforeach
                                                                     </tr>

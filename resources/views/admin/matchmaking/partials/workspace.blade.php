@@ -841,7 +841,7 @@
         </div>
     @endif
 
-    @include('admin.matchmaking.partials.mahjong-history')
+    @include('admin.matchmaking.partials.mahjong-history', ['editable' => true])
 
     @if ($isMahjongTeam ?? false)
         @include('admin.matchmaking.partials.mahjong-team-panel')

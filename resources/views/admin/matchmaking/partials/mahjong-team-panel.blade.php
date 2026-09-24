@@ -289,7 +289,7 @@
     </div>
 @endif
 
-@include('admin.matchmaking.partials.mahjong-team-history')
+@include('admin.matchmaking.partials.mahjong-team-history', ['editable' => true])
 
 {{-- End babak modal for teams --}}
 <div class="modal fade" id="mahjongTeamEndBabakModal" tabindex="-1" aria-hidden="true">

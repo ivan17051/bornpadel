@@ -604,10 +604,12 @@ class MahjongMatchmakingService
     public function updateGroupPointEntries(Grup $grup, array $scores, ?int $winnerMemberId = null): Collection
     {
         return DB::transaction(function () use ($grup, $scores, $winnerMemberId) {
-            $this->assertActiveMahjongGroup($grup);
+            $this->assertMahjongGroup($grup);
 
             $grup->loadMissing('members.poinEntries');
             $membersById = $grup->members->keyBy('id');
+            $wasActive = (bool) $grup->is_aktif;
+            $oldSums = $membersById->map(fn (GrupMember $member) => (int) $member->poinEntries->sum('poin'));
 
             if ($membersById->count() !== self::PLAYERS_PER_GROUP) {
                 throw new RuntimeException('Grup Mahjong harus berisi tepat 4 pemain.');
@@ -649,8 +651,22 @@ class MahjongMatchmakingService
                 ]);
             }
 
-            return $membersById->values()->map(function (GrupMember $member) {
-                return $this->syncPoinDidapatFromEntries($member);
+            return $membersById->values()->map(function (GrupMember $member) use ($grup, $wasActive, $oldSums) {
+                if ($wasActive) {
+                    return $this->syncPoinDidapatFromEntries($member);
+                }
+
+                $newSum = (int) $member->poinEntries->sum('poin');
+                $delta = $newSum - (int) $oldSums->get($member->id);
+
+                if ($delta !== 0) {
+                    $member->update([
+                        'poin_akumulasi' => (int) $member->poin_akumulasi + $delta,
+                    ]);
+                    $this->propagateMahjongSeatingDelta($grup, (int) $member->id_turnamen_peserta, $delta);
+                }
+
+                return $member->fresh(['poinEntries', 'grup.turnamen']);
             })->values();
         });
     }
@@ -740,16 +756,53 @@ class MahjongMatchmakingService
         $this->assertActiveMahjongGroup($member->grup);
     }
 
-    protected function assertActiveMahjongGroup(Grup $grup): void
+    protected function assertMahjongGroup(Grup $grup): void
     {
         $grup->loadMissing('turnamen');
 
         if (! $grup->turnamen || ! $grup->turnamen->isMahjong()) {
             throw new RuntimeException('Pembaruan poin hanya untuk turnamen Mahjong.');
         }
+    }
+
+    protected function assertActiveMahjongGroup(Grup $grup): void
+    {
+        $this->assertMahjongGroup($grup);
 
         if (! $grup->is_aktif) {
             throw new RuntimeException('Grup tidak aktif.');
+        }
+    }
+
+    protected function propagateMahjongSeatingDelta(Grup $editedGrup, int $pesertaId, int $delta): void
+    {
+        if ($delta === 0 || $pesertaId <= 0) {
+            return;
+        }
+
+        $babak = (int) ($editedGrup->babak ?: 1);
+        $ronde = (int) ($editedGrup->ronde ?: 1);
+
+        $laterMembers = GrupMember::query()
+            ->where('id_turnamen_peserta', $pesertaId)
+            ->whereHas('grup', function ($query) use ($editedGrup, $babak, $ronde) {
+                $query->where('id_kategori', $editedGrup->id_kategori)
+                    ->where('babak', $babak)
+                    ->where('id', '!=', $editedGrup->id)
+                    ->where(function ($inner) use ($ronde, $editedGrup) {
+                        $inner->where('ronde', '>', $ronde)
+                            ->orWhere('is_aktif', true)
+                            ->orWhere(function ($sameRonde) use ($ronde, $editedGrup) {
+                                $sameRonde->where('ronde', $ronde)->where('id', '>', $editedGrup->id);
+                            });
+                    });
+            })
+            ->get();
+
+        foreach ($laterMembers as $later) {
+            $later->update([
+                'poin_akumulasi' => (int) $later->poin_akumulasi + $delta,
+            ]);
         }
     }
 

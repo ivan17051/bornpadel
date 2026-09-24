@@ -2100,29 +2100,54 @@ const BornPadelAdmin = (function () {
             </td>`;
         }
 
-        function updateMahjongMemberFooter(memberId, data) {
+        function mahjongTableMemberRoundStats(table, memberId) {
+            let poin = 0;
+            let wins = 0;
+            table.querySelectorAll(`.mahjong-round-cell[data-member-id="${memberId}"] .mahjong-poin-entry`).forEach((el) => {
+                poin += parseInt(el.dataset.poin, 10) || 0;
+                if (el.dataset.isWinner === '1' || el.classList.contains('border-warning')) {
+                    wins += 1;
+                }
+            });
+            return { poin, wins };
+        }
+
+        function updateMahjongMemberFooter(memberId, data, root) {
             if (!data) return;
 
-            const subtotal = document.querySelector(`.mahjong-subtotal[data-member-id="${memberId}"]`);
-            const babakBadge = document.querySelector(`.mahjong-poin-babak[data-member-id="${memberId}"]`);
-            const totalBadge = document.querySelector(`.mahjong-total-poin[data-member-id="${memberId}"]`);
-            const menangBadge = document.querySelector(`.mahjong-menang[data-member-id="${memberId}"]`);
-            const adjustment = document.querySelector(`.mahjong-penyesuaian[data-member-id="${memberId}"]`);
-            const babakTotal = mahjongBabakTotal(data);
+            const scope = root && root.querySelector ? root : document;
+            const table = (root && root.classList && root.classList.contains('mahjong-group-score-table'))
+                ? root
+                : (scope.querySelector ? scope.closest?.('table') : null);
+            const useTableScores = table && table.dataset && table.dataset.scoreScope === 'table';
+            const subtotal = scope.querySelector(`.mahjong-subtotal[data-member-id="${memberId}"]`);
+            const babakBadge = scope.querySelector(`.mahjong-poin-babak[data-member-id="${memberId}"]`);
+            const totalBadge = scope.querySelector(`.mahjong-total-poin[data-member-id="${memberId}"]`);
+            const menangBadge = scope.querySelector(`.mahjong-menang[data-member-id="${memberId}"]`);
+            const adjustment = scope.querySelector(`.mahjong-penyesuaian[data-member-id="${memberId}"]`);
+            let babakTotal = mahjongBabakTotal(data);
+            let menang = data.menang ?? 0;
+
+            if (useTableScores) {
+                const stats = mahjongTableMemberRoundStats(table, memberId);
+                const adj = adjustment ? (parseInt(adjustment.dataset.poin, 10) || 0) : 0;
+                babakTotal = stats.poin + adj;
+                menang = stats.wins;
+            }
 
             if (subtotal) {
-                subtotal.textContent = formatMahjongSubtotal(babakTotal, data.menang);
+                subtotal.textContent = formatMahjongSubtotal(babakTotal, menang);
             }
             if (babakBadge) {
                 babakBadge.textContent = babakTotal;
             }
-            if (totalBadge) {
+            if (totalBadge && data.total_poin != null) {
                 totalBadge.textContent = data.total_poin;
             }
             if (menangBadge) {
-                menangBadge.textContent = data.menang ?? 0;
+                menangBadge.textContent = menang;
             }
-            if (adjustment && data.poin_penyesuaian != null) {
+            if (adjustment && data.poin_penyesuaian != null && !useTableScores) {
                 adjustment.dataset.poin = String(parseInt(data.poin_penyesuaian, 10) || 0);
                 adjustment.textContent = formatMahjongAdjustment(data.poin_penyesuaian);
             }
@@ -2267,11 +2292,11 @@ const BornPadelAdmin = (function () {
 
                 const currentEntryId = cell.querySelector('.mahjong-poin-entry')?.dataset.entryId;
                 const entries = Array.isArray(member.entries) ? member.entries : [];
-                const entry = entries.find((item) => String(item.id) === String(currentEntryId))
-                    || entries[entries.length - 1]
-                    || null;
+                const entry = currentEntryId
+                    ? (entries.find((item) => String(item.id) === String(currentEntryId)) || null)
+                    : (entries[entries.length - 1] || null);
                 cell.innerHTML = mahjongEntryCellHtml(memberId, entry);
-                updateMahjongMemberFooter(member.id, member);
+                updateMahjongMemberFooter(member.id, member, table);
             });
         }
 

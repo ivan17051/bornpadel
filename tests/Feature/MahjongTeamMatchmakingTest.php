@@ -301,6 +301,8 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertStringContainsString('+10', $html);
         $this->assertStringContainsString('-5', $html);
         $this->assertStringContainsString($meja->nama, $html);
+        $this->assertStringContainsString('data-score-scope="table"', $html);
+        $this->assertStringContainsString('Klik nomor ronde untuk mengubah skor.', $html);
 
         foreach ($members as $member) {
             $this->assertStringContainsString($member->display_name, $html);
@@ -315,6 +317,7 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertStringContainsString('mahjong-team-history-ronde-accordion', $guestHtml);
         $this->assertStringContainsString($meja->nama, $guestHtml);
         $this->assertStringContainsString('+10', $guestHtml);
+        $this->assertStringNotContainsString('data-score-scope="table"', $guestHtml);
         $this->assertLessThan(
             strpos($guestHtml, 'id="public-mahjong-team-history-card"'),
             strpos($guestHtml, 'id="live-leaderboard"')
@@ -496,6 +499,70 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertSame($topMember->display_name, $json['data'][0]['members'][0]['nama']);
         $this->assertSame(40, (int) $json['data'][0]['members'][0]['poin_didapat']);
         $this->assertNotEmpty($json['data'][0]['members']);
+    }
+
+    public function test_matchmaking_history_meja_point_entries_can_be_updated_after_reshuffle(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $members = $meja->seats->map->grupMember->filter()->values();
+
+        $service->addMejaPointEntries($meja, $members->map(fn (GrupMember $member, int $index) => [
+            'id' => $member->id,
+            'poin' => [8, -2, -3, -3][$index],
+        ])->all(), (int) $members[0]->id);
+
+        $entries = $members->mapWithKeys(function (GrupMember $member) use ($meja) {
+            $entry = MahjongPoinEntry::query()
+                ->where('id_grup_member', $member->id)
+                ->where('id_meja', $meja->id)
+                ->first();
+
+            return [$member->id => $entry];
+        });
+
+        $this->assertSame(8, (int) $members[0]->fresh()->poin_didapat);
+
+        $service->reshuffleMeja($turnamen);
+        $meja->refresh();
+        $this->assertFalse((bool) $meja->is_aktif);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-team-meja-point-entries.update', $meja), [
+                'id_grup_member_pemenang' => (int) $members[1]->id,
+                'scores' => $members->map(function (GrupMember $member, int $index) use ($entries) {
+                    return [
+                        'id' => $member->id,
+                        'entry_id' => $entries[$member->id]->id,
+                        'poin' => [12, 0, -6, -6][$index],
+                    ];
+                })->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(12, (int) $entries[$members[0]->id]->fresh()->poin);
+        $this->assertFalse((bool) $entries[$members[0]->id]->fresh()->is_winner);
+        $this->assertTrue((bool) $entries[$members[1]->id]->fresh()->is_winner);
+        $this->assertSame(12, (int) $members[0]->fresh()->poin_didapat);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-team-meja-point-entries.store', $meja), [
+                'scores' => $members->map(fn (GrupMember $member, int $index) => [
+                    'id' => $member->id,
+                    'poin' => [1, 0, 0, -1][$index],
+                ])->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Meja tidak aktif.');
     }
 
     protected function prepareTournament(int $playerCount, int $playersPerTeam = 4): Turnamen

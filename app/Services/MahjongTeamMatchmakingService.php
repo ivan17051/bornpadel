@@ -359,10 +359,6 @@ class MahjongTeamMatchmakingService
             throw new RuntimeException('Input poin hanya untuk Mahjong Tim.');
         }
 
-        if (! $meja->is_aktif) {
-            throw new RuntimeException('Meja tidak aktif.');
-        }
-
         $meja->loadMissing(['seats.grupMember.poinEntries']);
 
         $membersById = $meja->seats

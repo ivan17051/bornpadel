@@ -674,14 +674,20 @@ class MatchmakingController extends Controller
 
     protected function mahjongMemberPointsPayload(GrupMember $member): array
     {
-        $member->loadMissing('poinEntries');
+        $member->loadMissing(['poinEntries', 'grup.turnamen']);
+
+        $poinBabak = (int) $member->poin_babak;
+        $grup = $member->grup;
+        if ($grup && ! $grup->is_aktif && optional($grup->turnamen)->isMahjong()) {
+            $poinBabak = (int) $member->poinEntries->sum('poin') + (int) $member->poin_penyesuaian;
+        }
 
         return [
             'id' => $member->id,
             'poin_didapat' => (int) $member->poin_didapat,
             'poin_akumulasi' => (int) $member->poin_akumulasi,
             'poin_penyesuaian' => (int) $member->poin_penyesuaian,
-            'poin_babak' => (int) $member->poin_babak,
+            'poin_babak' => $poinBabak,
             'total_poin' => $member->total_poin,
             'menang' => (int) $member->menang,
             'entries' => $member->poinEntries->map(function ($entry) {
