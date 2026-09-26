@@ -410,8 +410,13 @@ class MahjongTeamMatchmakingService
                 ]);
             }
 
-            return $membersById->values()->map(function (GrupMember $member) {
-                $this->syncPoinDidapatFromEntries($member);
+            return $membersById->values()->map(function (GrupMember $member) use ($meja) {
+                $member->loadMissing('grup');
+                $currentBabak = (int) (optional($member->grup)->babak ?: 1);
+
+                if ((int) $meja->babak === $currentBabak) {
+                    $this->syncPoinDidapatFromEntries($member);
+                }
 
                 return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
             })->values();
@@ -521,7 +526,7 @@ class MahjongTeamMatchmakingService
             ->get();
 
         return $teams->map(function (Grup $tim) {
-            $total = (int) $tim->members->sum(fn (GrupMember $m) => (int) $m->poin_didapat);
+            $total = (int) $tim->members->sum(fn (GrupMember $m) => (int) $m->poin_babak);
 
             return [
                 'id_tim' => (int) $tim->id,
@@ -529,7 +534,7 @@ class MahjongTeamMatchmakingService
                 'total_poin' => $total,
                 'members' => $tim->members
                     ->sort(function (GrupMember $a, GrupMember $b) {
-                        $cmp = ((int) $b->poin_didapat) <=> ((int) $a->poin_didapat);
+                        $cmp = ((int) $b->poin_babak) <=> ((int) $a->poin_babak);
 
                         return $cmp !== 0 ? $cmp : ((int) $a->id) <=> ((int) $b->id);
                     })
@@ -539,6 +544,8 @@ class MahjongTeamMatchmakingService
                         'id_pemain' => $m->id_pemain ? (int) $m->id_pemain : null,
                         'nama' => $m->display_name,
                         'poin_didapat' => (int) $m->poin_didapat,
+                        'poin_penyesuaian' => (int) $m->poin_penyesuaian,
+                        'poin_babak' => (int) $m->poin_babak,
                     ])
                     ->all(),
             ];
@@ -659,6 +666,7 @@ class MahjongTeamMatchmakingService
                     $member->update([
                         'poin_didapat' => 0,
                         'poin_akumulasi' => 0,
+                        'poin_penyesuaian' => 0,
                         'poin_disetujui' => false,
                     ]);
                 }
@@ -1087,9 +1095,11 @@ class MahjongTeamMatchmakingService
 
     protected function approvedEntries(Turnamen $turnamen, $idKategori): Collection
     {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
         return TurnamenPeserta::query()
-            ->where('id_turnamen', $turnamen->id)
-            ->where('status', 'approved')
+            ->forKategori($kategori->id)
+            ->approved()
             ->with('pemain1')
             ->orderBy('id')
             ->get();

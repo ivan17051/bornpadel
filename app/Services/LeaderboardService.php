@@ -216,7 +216,7 @@ class LeaderboardService
     }
 
     /**
-     * Team standings for Mahjong Tim (aggregate poin_didapat per active team).
+     * Team standings for Mahjong Tim (aggregate poin babak, including bonus/penalti).
      */
     public function getMahjongTeamStandings(Turnamen $turnamen, $idKategori = null): Collection
     {
@@ -240,10 +240,13 @@ class LeaderboardService
                         'id_pemain' => isset($member['id_pemain']) ? (int) $member['id_pemain'] : null,
                         'nama' => $member['nama'] ?? '—',
                         'poin_didapat' => (int) ($member['poin_didapat'] ?? 0),
+                        'poin_penyesuaian' => (int) ($member['poin_penyesuaian'] ?? 0),
+                        'poin_babak' => (int) ($member['poin_babak'] ?? $member['poin_didapat'] ?? 0),
                     ];
                 })->values()->all(),
                 'standings' => $members->map(function ($member, $memberIndex) use ($row) {
                     $pemainId = isset($member['id_pemain']) ? (int) $member['id_pemain'] : null;
+                    $poinBabak = (int) ($member['poin_babak'] ?? $member['poin_didapat'] ?? 0);
 
                     return [
                         'rank' => $memberIndex + 1,
@@ -257,7 +260,7 @@ class LeaderboardService
                         'games_menang' => 0,
                         'games_diff_label' => '0',
                         'stats_reached_at' => null,
-                        'total_poin' => (int) ($member['poin_didapat'] ?? 0),
+                        'total_poin' => $poinBabak,
                     ];
                 })->values()->all(),
                 'rank' => $index + 1,

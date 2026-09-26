@@ -54,7 +54,7 @@
         'url' => route('guest.participants', $query),
     ];
 
-    if (! $turnamen->isRegistrationOpen()) {
+    if (! $registrationOpen) {
         $tabs[] = [
             'key' => 'standings',
             'label' => 'Klasemen',

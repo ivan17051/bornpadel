@@ -40,7 +40,11 @@ class StandingsController extends Controller
                 ?? $turnamen->defaultKategori();
             $kategoriId = $kategori ? $kategori->id : null;
 
-            if ($turnamen->isRegistrationOpen()) {
+            $registrationOpen = $kategori
+                ? $kategori->isRegistrationOpen()
+                : $turnamen->isRegistrationOpen();
+
+            if ($registrationOpen) {
                 return redirect()->route('guest.participants', array_filter([
                     'id_turnamen' => $turnamen->id,
                     'id_kategori' => $kategoriId,

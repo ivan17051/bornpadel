@@ -12,13 +12,14 @@ use App\Models\TurnamenMejaSeat;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\MahjongTeamMatchmakingService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Services\TurnamenKategoriService;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class MahjongTeamMatchmakingTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     public function test_generate_teams_and_meja_for_four_teams(): void
     {
@@ -67,7 +68,10 @@ class MahjongTeamMatchmakingTest extends TestCase
         $teams = Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->with('members')->orderBy('id')->get();
         foreach ($teams as $index => $team) {
             foreach ($team->members as $member) {
-                $member->update(['poin_didapat' => (4 - $index) * 10]);
+                $member->update([
+                    'poin_didapat' => (4 - $index) * 10,
+                    'poin_penyesuaian' => 5,
+                ]);
             }
         }
 
@@ -92,6 +96,7 @@ class MahjongTeamMatchmakingTest extends TestCase
 
         $this->assertSame(2, Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count());
         $this->assertSame(0, (int) GrupMember::whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))->sum('poin_didapat'));
+        $this->assertSame(0, (int) GrupMember::whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))->sum('poin_penyesuaian'));
 
         $remaining = Grup::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->with('members')->orderBy('id')->get();
         foreach ($remaining as $index => $team) {
@@ -118,6 +123,86 @@ class MahjongTeamMatchmakingTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
         $service->generateTeams($turnamen, 'random');
+    }
+
+    public function test_generate_teams_only_uses_players_from_selected_kategori(): void
+    {
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $katA = $turnamen->defaultKategori();
+        $katB = app(TurnamenKategoriService::class)->create($turnamen, [
+            'nama' => 'Kategori B',
+            'harga' => 100000,
+            'maks_peserta' => 16,
+        ]);
+        $katB->update(['status' => 'ongoing']);
+
+        for ($i = 1; $i <= 16; $i++) {
+            $pemain = Pemain::create([
+                'nama' => "Other Cat Player {$i}",
+                'gender' => $i % 2 ? 'male' : 'female',
+                'no_hp' => '+62816'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT).$i,
+                'rating' => 3,
+            ]);
+
+            TurnamenPeserta::create([
+                'id_turnamen' => $turnamen->id,
+                'id_kategori' => $katB->id,
+                'id_pemain1' => $pemain->id,
+                'status' => 'approved',
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+            ]);
+        }
+
+        $result = $service->generateTeams($turnamen, 'random', $katA->id);
+
+        $this->assertCount(4, $result['teams']);
+
+        $pesertaIds = GrupMember::query()
+            ->whereHas('grup', function ($query) use ($katA) {
+                $query->where('id_kategori', $katA->id);
+            })
+            ->pluck('id_turnamen_peserta');
+
+        $this->assertCount(16, $pesertaIds);
+        $this->assertSame(
+            16,
+            TurnamenPeserta::query()->whereIn('id', $pesertaIds)->where('id_kategori', $katA->id)->count()
+        );
+        $this->assertSame(
+            0,
+            TurnamenPeserta::query()->whereIn('id', $pesertaIds)->where('id_kategori', $katB->id)->count()
+        );
+    }
+
+    public function test_team_standings_include_bonus_penalti_in_ranking(): void
+    {
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $teams = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($teams[0]->members as $member) {
+            $member->update(['poin_didapat' => 10, 'poin_penyesuaian' => 20]);
+        }
+
+        foreach ($teams[1]->members as $member) {
+            $member->update(['poin_didapat' => 20, 'poin_penyesuaian' => 0]);
+        }
+
+        $standings = $service->teamStandings($turnamen);
+
+        $this->assertSame($teams[0]->nama, $standings[0]['nama']);
+        $this->assertSame(120, (int) $standings[0]['total_poin']);
+        $this->assertSame(30, (int) $standings[0]['members'][0]['poin_babak']);
+        $this->assertSame($teams[1]->nama, $standings[1]['nama']);
+        $this->assertSame(80, (int) $standings[1]['total_poin']);
     }
 
     public function test_close_registration_rejects_invalid_starting_roster(): void
@@ -662,6 +747,99 @@ class MahjongTeamMatchmakingTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('data.mahjong_require_score_approval', false);
+    }
+
+    public function test_previous_babak_history_edit_does_not_clear_current_approvals(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $oldMeja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $oldMembers = $oldMeja->seats->map->grupMember->filter()->values();
+
+        $service->addMejaPointEntries($oldMeja, $oldMembers->map(fn (GrupMember $member, int $index) => [
+            'id' => $member->id,
+            'poin' => [8, -2, -3, -3][$index],
+        ])->all(), (int) $oldMembers[0]->id);
+
+        $entries = $oldMembers->mapWithKeys(function (GrupMember $member) use ($oldMeja) {
+            $entry = MahjongPoinEntry::query()
+                ->where('id_grup_member', $member->id)
+                ->where('id_meja', $oldMeja->id)
+                ->first();
+
+            return [$member->id => $entry];
+        });
+
+        $teams = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($teams as $index => $team) {
+            foreach ($team->members as $member) {
+                $member->update(['poin_didapat' => (4 - $index) * 10]);
+            }
+        }
+
+        $service->advanceTeams($turnamen, 2);
+        $oldMeja->refresh();
+        $this->assertFalse((bool) $oldMeja->is_aktif);
+        $this->assertSame(1, (int) $oldMeja->babak);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-score-approval'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => true,
+            ])
+            ->assertOk();
+
+        $activeMeja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->get();
+
+        foreach ($activeMeja as $meja) {
+            $this->actingAs($admin)
+                ->patchJson(route('admin.matchmaking.mahjong-team-meja-score-approval', $meja))
+                ->assertOk();
+        }
+
+        $seated = GrupMember::query()
+            ->whereHas('grup', function ($query) use ($turnamen) {
+                $query->where('id_turnamen', $turnamen->id)->where('is_aktif', true);
+            })
+            ->where('poin_disetujui', true)
+            ->first();
+
+        $this->assertNotNull($seated);
+        $poinBefore = (int) $seated->poin_didapat;
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-team-meja-point-entries.update', $oldMeja), [
+                'id_grup_member_pemenang' => (int) $oldMembers[1]->id,
+                'scores' => $oldMembers->map(function (GrupMember $member, int $index) use ($entries) {
+                    return [
+                        'id' => $member->id,
+                        'entry_id' => $entries[$member->id]->id,
+                        'poin' => [12, 0, -6, -6][$index],
+                    ];
+                })->all(),
+            ])
+            ->assertOk();
+
+        $seated->refresh();
+        $this->assertTrue((bool) $seated->poin_disetujui);
+        $this->assertSame($poinBefore, (int) $seated->poin_didapat);
+        $this->assertSame(12, (int) $entries[$oldMembers[0]->id]->fresh()->poin);
     }
 
     protected function prepareTournament(int $playerCount, int $playersPerTeam = 4): Turnamen

@@ -92,6 +92,38 @@ class TurnamenKategoriPhase3GuestTest extends TestCase
         $this->assertStringContainsString('guest-tournament-nav__label">Klasemen', $ongoingHtml);
     }
 
+    public function test_guest_shows_klasemen_for_ongoing_kategori_while_event_shell_is_open(): void
+    {
+        $turnamen = $this->createTurnamen(['status' => 'open', 'nama' => 'Multi Cat Klasemen']);
+        $katA = $turnamen->defaultKategori();
+        $katA->update(['status' => 'ongoing']);
+        $katB = app(TurnamenKategoriService::class)->create($turnamen, [
+            'nama' => 'Still Open',
+            'harga' => 100000,
+        ]);
+        $katB->update(['status' => 'open']);
+        $turnamen->update(['status' => 'open']);
+
+        $this->seedGroupWithMember($turnamen, $katA->id, 'Grup Ongoing', 'Player Ongoing');
+
+        $html = $this->get(route('guest.participants', [
+            'id_turnamen' => $turnamen->id,
+            'id_kategori' => $katA->id,
+        ]))->assertOk()->getContent();
+        $this->assertStringContainsString('guest-tournament-nav__label">Klasemen', $html);
+
+        $this->get(route('guest.standings', [
+            'id_turnamen' => $turnamen->id,
+            'id_kategori' => $katA->id,
+        ]))->assertOk()->assertSee('Grup Ongoing');
+
+        $openHtml = $this->get(route('guest.participants', [
+            'id_turnamen' => $turnamen->id,
+            'id_kategori' => $katB->id,
+        ]))->assertOk()->getContent();
+        $this->assertStringNotContainsString('guest-tournament-nav__label">Klasemen', $openHtml);
+    }
+
     public function test_guest_participants_filter_by_category(): void
     {
         $turnamen = $this->createTurnamen(['status' => 'open', 'nama' => 'Phase3 Peserta']);

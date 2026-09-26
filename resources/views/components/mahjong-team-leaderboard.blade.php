@@ -69,7 +69,7 @@
                                                             :id="$member['id_pemain'] ?? null"
                                                             :name="$member['nama'] ?? '—'"
                                                         />
-                                                        <span class="ms-1">{{ (int) ($member['poin_didapat'] ?? 0) }}</span>
+                                                        <span class="ms-1">{{ (int) ($member['poin_babak'] ?? $member['poin_didapat'] ?? 0) }}</span>
                                                     </li>
                                                 @endforeach
                                             </ul>
@@ -84,7 +84,7 @@
                     </table>
                 </div>
                 <div class="px-3 py-2 border-top bg-light small text-muted">
-                    Peringkat berdasarkan total poin tim. Poin tiap pemain tercantum di bawah nama tim.
+                    Peringkat berdasarkan total poin tim, termasuk bonus/penalti. Poin tiap pemain tercantum di bawah nama tim.
                 </div>
             </div>
         </div>

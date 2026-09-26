@@ -1239,6 +1239,87 @@ class MahjongResetAndPointEntriesTest extends TestCase
             ->assertJsonPath('data.mahjong_require_score_approval', false);
     }
 
+    public function test_editing_inactive_history_clears_active_score_approval(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+        $members = $grup->members->values();
+        $mahjong->addGroupPointEntries(
+            $grup,
+            $members->map(fn (GrupMember $member, int $index) => [
+                'id' => $member->id,
+                'poin' => [8, -2, -3, -3][$index],
+            ])->all(),
+            (int) $members->first()->id
+        );
+
+        $entriesByMember = $members->mapWithKeys(function (GrupMember $member) {
+            return [$member->id => $member->fresh()->poinEntries()->first()->id];
+        });
+        $pesertaId = (int) $members->first()->id_turnamen_peserta;
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-score-approval'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => true,
+            ])
+            ->assertOk();
+
+        foreach (Grup::query()->where('id_turnamen', $turnamen->id)->where('is_aktif', true)->get() as $activeGrup) {
+            $this->actingAs($admin)
+                ->patchJson(route('admin.matchmaking.mahjong-group-score-approval', $activeGrup))
+                ->assertOk();
+        }
+
+        $mahjong->reshuffleGroups($turnamen->fresh(), 'random');
+
+        foreach (Grup::query()->where('id_turnamen', $turnamen->id)->where('is_aktif', true)->get() as $activeGrup) {
+            $this->actingAs($admin)
+                ->patchJson(route('admin.matchmaking.mahjong-group-score-approval', $activeGrup))
+                ->assertOk();
+        }
+
+        $later = GrupMember::query()
+            ->where('id_turnamen_peserta', $pesertaId)
+            ->whereHas('grup', function ($query) {
+                $query->where('is_aktif', true);
+            })
+            ->first();
+
+        $this->assertNotNull($later);
+        $this->assertTrue((bool) $later->poin_disetujui);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-group-point-entries.update', $grup), [
+                'id_grup_member_pemenang' => (int) $members->get(1)->id,
+                'scores' => $members->map(function (GrupMember $member, int $index) use ($entriesByMember) {
+                    return [
+                        'id' => $member->id,
+                        'entry_id' => $entriesByMember[$member->id],
+                        'poin' => [10, 4, -7, -7][$index],
+                    ];
+                })->all(),
+            ])
+            ->assertOk();
+
+        $this->assertFalse((bool) $later->fresh()->poin_disetujui);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.reshuffle-groups'), [
+                'id_turnamen' => $turnamen->id,
+                'mode' => 'random',
+            ])
+            ->assertStatus(422);
+    }
+
     protected function seedDistinctMahjongGroupScores(MahjongMatchmakingService $service, Turnamen $turnamen): void
     {
         $groups = Grup::query()

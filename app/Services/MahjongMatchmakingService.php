@@ -883,6 +883,7 @@ class MahjongMatchmakingService
         foreach ($laterMembers as $later) {
             $later->update([
                 'poin_akumulasi' => (int) $later->poin_akumulasi + $delta,
+                'poin_disetujui' => false,
             ]);
         }
     }

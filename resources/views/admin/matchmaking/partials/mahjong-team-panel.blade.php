@@ -37,7 +37,7 @@
                                         @foreach ($row['members'] as $member)
                                             <li>
                                                 {{ $member['nama'] ?? '—' }}
-                                                <span class="ms-1">{{ (int) ($member['poin_didapat'] ?? 0) }}</span>
+                                                <span class="ms-1">{{ (int) ($member['poin_babak'] ?? $member['poin_didapat'] ?? 0) }}</span>
                                             </li>
                                         @endforeach
                                     </ul>
