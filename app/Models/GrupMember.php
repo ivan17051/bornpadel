@@ -16,6 +16,7 @@ class GrupMember extends Model
         'poin_didapat',
         'poin_akumulasi',
         'poin_penyesuaian',
+        'poin_disetujui',
         'set_menang',
         'games_menang',
         'stats_reached_at',
@@ -26,6 +27,7 @@ class GrupMember extends Model
         'poin_didapat' => 'integer',
         'poin_akumulasi' => 'integer',
         'poin_penyesuaian' => 'integer',
+        'poin_disetujui' => 'boolean',
     ];
 
     public function getPoinBabakAttribute(): int

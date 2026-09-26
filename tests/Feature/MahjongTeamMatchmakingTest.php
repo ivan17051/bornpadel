@@ -565,6 +565,105 @@ class MahjongTeamMatchmakingTest extends TestCase
             ->assertJsonPath('message', 'Meja tidak aktif.');
     }
 
+    public function test_score_approval_toggle_gates_team_reshuffle_and_end_babak(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-score-approval'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.mahjong_require_score_approval', true);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.reshuffle-groups'), [
+                'id_turnamen' => $turnamen->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Setujui skor semua pemain dulu sebelum reshuffle atau akhiri babak (16 pemain belum disetujui).');
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 2,
+                'preview' => true,
+            ])
+            ->assertStatus(422);
+
+        $html = $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('mahjong-score-approval-toggle', $html);
+        $this->assertStringContainsString('btn-mahjong-approve-score', $html);
+        $this->assertStringContainsString('btn-mahjong-approve-group', $html);
+
+        $mejaList = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->get();
+
+        foreach ($mejaList as $meja) {
+            $this->actingAs($admin)
+                ->patchJson(route('admin.matchmaking.mahjong-team-meja-score-approval', $meja))
+                ->assertOk()
+                ->assertJsonPath('success', true);
+        }
+
+        $meja = $mejaList->first()->fresh('seats.grupMember');
+        $members = $meja->seats->map->grupMember->filter()->values();
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-team-meja-point-entries.store', $meja), [
+                'scores' => $members->map(fn (GrupMember $member, int $index) => [
+                    'id' => $member->id,
+                    'poin' => [8, -2, -3, -3][$index],
+                ])->all(),
+                'id_grup_member_pemenang' => (int) $members[0]->id,
+            ])
+            ->assertOk();
+
+        $this->assertFalse((bool) $members[0]->fresh()->poin_disetujui);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.reshuffle-groups'), [
+                'id_turnamen' => $turnamen->id,
+            ])
+            ->assertStatus(422);
+
+        $mejaList = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->get();
+
+        foreach ($mejaList as $item) {
+            $this->actingAs($admin)
+                ->patchJson(route('admin.matchmaking.mahjong-team-meja-score-approval', $item))
+                ->assertOk();
+        }
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.reshuffle-groups'), [
+                'id_turnamen' => $turnamen->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-score-approval'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => false,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.mahjong_require_score_approval', false);
+    }
+
     protected function prepareTournament(int $playerCount, int $playersPerTeam = 4): Turnamen
     {
         $turnamen = Turnamen::create([

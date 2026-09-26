@@ -20,6 +20,7 @@ class TurnamenKategori extends Model
         'group_matches_generated_at',
         'mahjong_is_final',
         'mahjong_external_scoring_enabled',
+        'mahjong_require_score_approval',
         'players_per_group',
     ];
 
@@ -30,6 +31,7 @@ class TurnamenKategori extends Model
         'urutan' => 'integer',
         'mahjong_is_final' => 'boolean',
         'mahjong_external_scoring_enabled' => 'boolean',
+        'mahjong_require_score_approval' => 'boolean',
         'players_per_group' => 'integer',
         'registration_paired_at' => 'datetime',
         'group_matches_generated_at' => 'datetime',

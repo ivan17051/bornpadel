@@ -387,6 +387,92 @@ class MatchmakingController extends Controller
         ]);
     }
 
+    public function updateMahjongScoreApproval(Request $request)
+    {
+        $request->validate([
+            'enabled' => ['required', 'boolean'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveTournament($request);
+            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $enabled = $this->mahjongService->setScoreApprovalRequired(
+                $turnamen,
+                $request->boolean('enabled'),
+                $kategoriId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $enabled
+                ? 'Persetujuan skor diaktifkan. Setujui skor tiap pemain sebelum reshuffle atau akhiri babak.'
+                : 'Persetujuan skor dinonaktifkan.',
+            'data' => [
+                'mahjong_require_score_approval' => $enabled,
+            ],
+        ]);
+    }
+
+    public function approveMahjongMemberScore(GrupMember $member)
+    {
+        try {
+            $member->loadMissing('grup.turnamen');
+            $turnamen = optional($member->grup)->turnamen;
+            $updated = $turnamen && $turnamen->isMahjongTeam()
+                ? $this->mahjongTeamService->approveMemberScore($member)
+                : $this->mahjongService->approveMemberScore($member);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Skor '.$updated->display_name.' disetujui.',
+            'data' => $this->mahjongMemberPointsPayload($updated),
+        ]);
+    }
+
+    public function approveMahjongGroupScores(Grup $grup)
+    {
+        try {
+            $updatedMembers = $this->mahjongService->approveGroupScores($grup);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Skor semua pemain di '.$grup->nama.' disetujui.',
+            'data' => [
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
+                })->values(),
+            ],
+        ]);
+    }
+
+    public function approveMahjongTeamMejaScores(TurnamenMeja $meja)
+    {
+        try {
+            $updatedMembers = $this->mahjongTeamService->approveMejaScores($meja);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Skor semua pemain di '.$meja->nama.' disetujui.',
+            'data' => [
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
+                })->values(),
+            ],
+        ]);
+    }
+
     public function updateMahjongPoints(Request $request, GrupMember $member)
     {
         $this->defaultEmptyMahjongPoin($request);
@@ -690,6 +776,7 @@ class MatchmakingController extends Controller
             'poin_babak' => $poinBabak,
             'total_poin' => $member->total_poin,
             'menang' => (int) $member->menang,
+            'poin_disetujui' => (bool) $member->poin_disetujui,
             'entries' => $member->poinEntries->map(function ($entry) {
                 return [
                     'id' => $entry->id,

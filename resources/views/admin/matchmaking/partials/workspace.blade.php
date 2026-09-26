@@ -301,7 +301,7 @@
                                 {{ $isMahjongTeam ? 'Reshuffle Meja' : 'Reshuffle Groups' }}
                             </button>
                         @endif
-                        @if ($isMahjong)
+                        @if ($isMahjong || $isMahjongTeam)
                             <div class="form-check form-switch d-inline-flex align-items-center ms-1 me-1"
                                  title="Izinkan klien eksternal (API key) mengirim skor Mahjong">
                                 <input class="form-check-input"
@@ -314,6 +314,22 @@
                                        @checked($mahjongExternalScoringEnabled ?? false)>
                                 <label class="form-check-label small ms-2" for="mahjong-external-scoring-toggle">
                                     API skor eksternal
+                                </label>
+                            </div>
+                        @endif
+                        @if ($isMahjong || $isMahjongTeam)
+                            <div class="form-check form-switch d-inline-flex align-items-center ms-1 me-1"
+                                 title="Jika aktif, skor tiap pemain harus disetujui sebelum reshuffle atau akhiri babak">
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       role="switch"
+                                       id="mahjong-score-approval-toggle"
+                                       data-url="{{ route('admin.matchmaking.mahjong-score-approval') }}"
+                                       data-turnamen="{{ $turnamen->id }}"
+                                       data-kategori="{{ $kategoriId }}"
+                                       @checked($mahjongRequireScoreApproval ?? false)>
+                                <label class="form-check-label small ms-2" for="mahjong-score-approval-toggle">
+                                    Persetujuan skor
                                 </label>
                             </div>
                         @endif
@@ -422,6 +438,12 @@
                                     title="Input poin untuk semua pemain di grup">
                                 <i class="bi bi-pencil-square me-1"></i>Input Poin
                             </button>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-success btn-mahjong-approve-group mahjong-score-approval {{ ($mahjongRequireScoreApproval ?? false) ? '' : 'd-none' }}"
+                                    data-url="{{ route('admin.matchmaking.mahjong-group-score-approval', $g) }}"
+                                    title="Setujui skor semua pemain di grup ini">
+                                <i class="bi bi-check2-all me-1"></i>Setujui semua
+                            </button>
                         </div>
                     </h2>
                     <div id="group-collapse-{{ $g->id }}"
@@ -511,6 +533,18 @@
                                                         <i class="bi bi-arrow-left-right me-1 text-primary"></i>
                                                     @endif
                                                     <span class="mahjong-player-name">{{ $member->display_name }}</span>
+                                                </div>
+                                                <div class="mahjong-score-approval mt-2 {{ ($mahjongRequireScoreApproval ?? false) ? '' : 'd-none' }}"
+                                                     data-member-id="{{ $member->id }}"
+                                                     data-approved="{{ $member->poin_disetujui ? '1' : '0' }}"
+                                                     data-url="{{ route('admin.matchmaking.mahjong-member-score-approval', $member) }}">
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-success btn-mahjong-approve-score {{ $member->poin_disetujui ? 'd-none' : '' }}">
+                                                        <i class="bi bi-check2-circle me-1"></i>Setujui
+                                                    </button>
+                                                    <span class="badge text-bg-success mahjong-score-approved-badge {{ $member->poin_disetujui ? '' : 'd-none' }}">
+                                                        <i class="bi bi-check-circle-fill me-1"></i>Disetujui
+                                                    </span>
                                                 </div>
                                                 @if ($mahjongShowAkumulasi)
                                                     <div class="small text-muted fw-normal mt-1 mahjong-akumulasi" data-member-id="{{ $member->id }}">

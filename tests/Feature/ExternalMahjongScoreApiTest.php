@@ -481,6 +481,52 @@ class ExternalMahjongScoreApiTest extends TestCase
         $this->assertSame($meja->id, (int) $member->fresh()->poinEntries()->first()->id_meja);
     }
 
+    public function test_mahjong_team_can_toggle_external_scoring_and_block_api_writes(): void
+    {
+        $admin = User::create([
+            'name' => 'Team Toggle Admin',
+            'username' => 'team-toggle-' . uniqid(),
+            'email' => uniqid() . '@example.test',
+            'password' => Hash::make('12345678'),
+            'role' => 'admin',
+        ]);
+
+        $turnamen = $this->prepareMahjongTeamTournament(16);
+        app(MahjongTeamMatchmakingService::class)->generateTeams($turnamen, 'random');
+
+        $html = $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('mahjong-external-scoring-toggle', $html);
+        $this->assertStringContainsString('API skor eksternal', $html);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-external-scoring'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => false,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.mahjong_external_scoring_enabled', false);
+
+        $this->assertFalse(app(MahjongMatchmakingService::class)->isExternalScoringEnabled($turnamen->fresh()));
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats')
+            ->first();
+        $member = GrupMember::findOrFail($meja->seats->first()->id_grup_member);
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-members/'.$member->id.'/scores', [
+                'poin' => 4,
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('data.mahjong_external_scoring_enabled', false);
+    }
+
     protected function prepareMahjongTournament(int $playerCount): Turnamen
     {
         $turnamen = Turnamen::create([

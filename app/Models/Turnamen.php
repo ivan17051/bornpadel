@@ -33,6 +33,7 @@ class Turnamen extends Model
         'status',
         'mahjong_is_final',
         'mahjong_external_scoring_enabled',
+        'mahjong_require_score_approval',
         'registration_paired_at',
         'group_matches_generated_at',
     ];
@@ -45,6 +46,7 @@ class Turnamen extends Model
         'dom' => 'datetime',
         'mahjong_is_final' => 'boolean',
         'mahjong_external_scoring_enabled' => 'boolean',
+        'mahjong_require_score_approval' => 'boolean',
         'registration_paired_at' => 'datetime',
         'group_matches_generated_at' => 'datetime',
     ];
@@ -350,6 +352,7 @@ class Turnamen extends Model
             'group_matches_generated_at' => $this->group_matches_generated_at,
             'mahjong_is_final' => (bool) $this->mahjong_is_final,
             'mahjong_external_scoring_enabled' => (bool) ($this->mahjong_external_scoring_enabled ?? true),
+            'mahjong_require_score_approval' => (bool) ($this->mahjong_require_score_approval ?? false),
             'players_per_group' => $this->players_per_group,
         ]);
     }
@@ -443,6 +446,11 @@ class Turnamen extends Model
     public function categoryMahjongExternalScoringEnabled($idKategori = null): bool
     {
         return (bool) $this->resolveKategori($idKategori)->mahjong_external_scoring_enabled;
+    }
+
+    public function categoryMahjongRequireScoreApproval($idKategori = null): bool
+    {
+        return (bool) $this->resolveKategori($idKategori)->mahjong_require_score_approval;
     }
 
     public function categoryGroupMatchesGeneratedAt($idKategori = null)

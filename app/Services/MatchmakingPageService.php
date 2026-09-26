@@ -538,9 +538,15 @@ class MatchmakingPageService
 
                 : false,
 
-            'mahjongExternalScoringEnabled' => $turnamen && $isMahjong && $kategoriId
+            'mahjongExternalScoringEnabled' => $turnamen && ($isMahjong || $isMahjongTeam) && $kategoriId
 
                 ? $this->mahjongService->isExternalScoringEnabled($turnamen, $kategoriId)
+
+                : false,
+
+            'mahjongRequireScoreApproval' => $turnamen && ($isMahjong || $isMahjongTeam) && $kategoriId
+
+                ? $this->mahjongService->isScoreApprovalRequired($turnamen, $kategoriId)
 
                 : false,
 

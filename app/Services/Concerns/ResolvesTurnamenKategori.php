@@ -41,6 +41,7 @@ trait ResolvesTurnamenKategori
             'group_matches_generated_at',
             'mahjong_is_final',
             'mahjong_external_scoring_enabled',
+            'mahjong_require_score_approval',
             'harga',
             'maks_peserta',
             'players_per_group',

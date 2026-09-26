@@ -50,8 +50,8 @@ class MahjongMatchmakingService
 
     public function setExternalScoringEnabled(Turnamen $turnamen, bool $enabled, $idKategori = null): bool
     {
-        if (! $turnamen->isMahjong()) {
-            throw new RuntimeException('Pengaturan skor eksternal hanya untuk turnamen Mahjong.');
+        if (! $turnamen->isMahjongFormat()) {
+            throw new RuntimeException('Pengaturan skor eksternal hanya untuk turnamen Mahjong dan Mahjong Tim.');
         }
 
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
@@ -61,6 +61,72 @@ class MahjongMatchmakingService
         ]);
 
         return $enabled;
+    }
+
+    public function isScoreApprovalRequired(Turnamen $turnamen, $idKategori = null): bool
+    {
+        return $turnamen->isMahjongFormat()
+            && $turnamen->categoryMahjongRequireScoreApproval($idKategori);
+    }
+
+    public function setScoreApprovalRequired(Turnamen $turnamen, bool $enabled, $idKategori = null): bool
+    {
+        if (! $turnamen->isMahjongFormat()) {
+            throw new RuntimeException('Persetujuan skor hanya untuk turnamen Mahjong dan Mahjong Tim.');
+        }
+
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
+        $this->updateCompetitionLifecycle($kategori, [
+            'mahjong_require_score_approval' => $enabled,
+        ]);
+
+        return $enabled;
+    }
+
+    public function approveMemberScore(GrupMember $member): GrupMember
+    {
+        $this->assertActiveMahjongMember($member);
+
+        $member->update(['poin_disetujui' => true]);
+
+        return $member->fresh(['poinEntries', 'grup.turnamen']);
+    }
+
+    /**
+     * @return Collection<int, GrupMember>
+     */
+    public function approveGroupScores(Grup $grup): Collection
+    {
+        $this->assertActiveMahjongGroup($grup);
+        $grup->loadMissing('members');
+
+        foreach ($grup->members as $member) {
+            $member->update(['poin_disetujui' => true]);
+        }
+
+        return $grup->members->map(function (GrupMember $member) {
+            return $member->fresh(['poinEntries', 'grup.turnamen']);
+        })->values();
+    }
+
+    public function assertScoresApprovedForProgression(Turnamen $turnamen, $idKategori = null): void
+    {
+        if (! $this->isScoreApprovalRequired($turnamen, $idKategori)) {
+            return;
+        }
+
+        $unapproved = $this->getActiveMembers($turnamen, $idKategori)
+            ->filter(fn (GrupMember $member) => ! $member->poin_disetujui);
+
+        if ($unapproved->isEmpty()) {
+            return;
+        }
+
+        throw new RuntimeException(sprintf(
+            'Setujui skor semua pemain dulu sebelum reshuffle atau akhiri babak (%d pemain belum disetujui).',
+            $unapproved->count()
+        ));
     }
 
     /**
@@ -229,6 +295,8 @@ class MahjongMatchmakingService
             throw new RuntimeException('Grup Mahjong tidak dapat diacak ulang pada status turnamen ini.');
         }
 
+        $this->assertScoresApprovedForProgression($turnamen, $idKategori);
+
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
 
         return DB::transaction(function () use ($turnamen, $kategori, $mode) {
@@ -254,6 +322,8 @@ class MahjongMatchmakingService
         ?array $tiebreakPesertaIds = null,
         string $mode = self::ADVANCE_MODE_TOTAL
     ): array {
+        $this->assertScoresApprovedForProgression($turnamen, $idKategori);
+
         $selection = $this->resolveAdvanceSelection(
             $turnamen,
             $jumlahLolos,
@@ -312,6 +382,8 @@ class MahjongMatchmakingService
         ?array $tiebreakPesertaIds = null,
         string $mode = self::ADVANCE_MODE_TOTAL
     ): array {
+        $this->assertScoresApprovedForProgression($turnamen, $idKategori);
+
         $selection = $this->resolveAdvanceSelection(
             $turnamen,
             $jumlahLolos,
@@ -528,7 +600,10 @@ class MahjongMatchmakingService
     {
         // Legacy overwrite kept for rare callers; UI uses addMemberPointEntry.
         $this->assertActiveMahjongMember($member);
-        $member->update(['poin_didapat' => $poinDidapat]);
+        $member->update([
+            'poin_didapat' => $poinDidapat,
+            'poin_disetujui' => false,
+        ]);
 
         return $member->fresh(['poinEntries', 'grup.turnamen']);
     }
@@ -702,7 +777,10 @@ class MahjongMatchmakingService
 
             foreach ($scores as $score) {
                 $member = $membersById->get((int) $score['id']);
-                $member->update(['poin_penyesuaian' => (int) $score['poin']]);
+                $member->update([
+                    'poin_penyesuaian' => (int) $score['poin'],
+                    'poin_disetujui' => false,
+                ]);
             }
 
             return $membersById->values()->map(function (GrupMember $member) {
@@ -740,7 +818,10 @@ class MahjongMatchmakingService
     public function syncPoinDidapatFromEntries(GrupMember $member): GrupMember
     {
         $sum = (int) $member->poinEntries()->sum('poin');
-        $member->update(['poin_didapat' => $sum]);
+        $member->update([
+            'poin_didapat' => $sum,
+            'poin_disetujui' => false,
+        ]);
 
         return $member->fresh(['poinEntries', 'grup.turnamen']);
     }

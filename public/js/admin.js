@@ -1162,6 +1162,10 @@ const BornPadelAdmin = (function () {
             };
 
             groupSwapContainer.addEventListener('click', (event) => {
+                if (event.target.closest('.mahjong-score-approval, .btn-mahjong-approve-score, .btn-mahjong-approve-group')) {
+                    return;
+                }
+
                 const memberEl = event.target.closest('.group-member-swap-source');
                 if (!memberEl || !groupSwapContainer.contains(memberEl)) {
                     return;
@@ -2039,6 +2043,94 @@ const BornPadelAdmin = (function () {
             });
         }
 
+        const mahjongScoreApprovalToggle = document.getElementById('mahjong-score-approval-toggle');
+
+        function setMahjongScoreApprovalMode(enabled) {
+            document.querySelectorAll('.mahjong-score-approval').forEach((el) => {
+                el.classList.toggle('d-none', !enabled);
+            });
+        }
+
+        function setMahjongMemberApprovalState(memberId, approved) {
+            document.querySelectorAll(`.mahjong-score-approval[data-member-id="${memberId}"]`).forEach((wrap) => {
+                wrap.dataset.approved = approved ? '1' : '0';
+                wrap.querySelector('.btn-mahjong-approve-score')?.classList.toggle('d-none', approved);
+                wrap.querySelector('.mahjong-score-approved-badge')?.classList.toggle('d-none', !approved);
+            });
+        }
+
+        if (mahjongScoreApprovalToggle) {
+            mahjongScoreApprovalToggle.addEventListener('change', async () => {
+                const enabled = mahjongScoreApprovalToggle.checked;
+                mahjongScoreApprovalToggle.disabled = true;
+
+                try {
+                    const data = await apiRequest(mahjongScoreApprovalToggle.dataset.url, 'PATCH', {
+                        id_turnamen: parseInt(mahjongScoreApprovalToggle.dataset.turnamen, 10),
+                        enabled,
+                    });
+                    setMahjongScoreApprovalMode(enabled);
+                    showToast(data.message);
+                } catch (e) {
+                    mahjongScoreApprovalToggle.checked = !enabled;
+                    showToast(e.message, 'error');
+                } finally {
+                    mahjongScoreApprovalToggle.disabled = false;
+                }
+            });
+        }
+
+        document.addEventListener('click', async (event) => {
+            const approveMemberBtn = event.target.closest('.btn-mahjong-approve-score');
+            if (approveMemberBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const wrap = approveMemberBtn.closest('.mahjong-score-approval');
+                if (!wrap?.dataset.url) {
+                    return;
+                }
+
+                const original = approveMemberBtn.innerHTML;
+                setButtonLoading(approveMemberBtn, true);
+
+                try {
+                    const data = await apiRequest(wrap.dataset.url, 'PATCH');
+                    setMahjongMemberApprovalState(wrap.dataset.memberId, true);
+                    showToast(data.message);
+                } catch (e) {
+                    showToast(e.message, 'error');
+                    setButtonLoading(approveMemberBtn, false, original);
+                }
+                return;
+            }
+
+            const approveGroupBtn = event.target.closest('.btn-mahjong-approve-group');
+            if (approveGroupBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (!approveGroupBtn.dataset.url) {
+                    return;
+                }
+
+                const original = approveGroupBtn.innerHTML;
+                setButtonLoading(approveGroupBtn, true);
+
+                try {
+                    const data = await apiRequest(approveGroupBtn.dataset.url, 'PATCH');
+                    (data?.data?.members || []).forEach((member) => {
+                        setMahjongMemberApprovalState(member.id, true);
+                    });
+                    showToast(data.message);
+                } catch (e) {
+                    showToast(e.message, 'error');
+                } finally {
+                    setButtonLoading(approveGroupBtn, false, original);
+                }
+            }
+        });
+
         function formatMahjongEntryLabel(poin) {
             const value = parseInt(poin, 10) || 0;
             return (value > 0 ? '+' : '') + value;
@@ -2150,6 +2242,9 @@ const BornPadelAdmin = (function () {
             if (adjustment && data.poin_penyesuaian != null && !useTableScores) {
                 adjustment.dataset.poin = String(parseInt(data.poin_penyesuaian, 10) || 0);
                 adjustment.textContent = formatMahjongAdjustment(data.poin_penyesuaian);
+            }
+            if (data.poin_disetujui != null) {
+                setMahjongMemberApprovalState(memberId, !!data.poin_disetujui);
             }
         }
 

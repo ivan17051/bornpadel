@@ -267,10 +267,13 @@ class MahjongTeamMatchmakingService
             throw new RuntimeException('Meja belum dapat diacak ulang.');
         }
 
+        $this->assertScoresApprovedForProgression($turnamen, $idKategori);
+
         $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
         $babak = (int) ($kategori->activeGrup()->max('babak') ?: 1);
 
         return DB::transaction(function () use ($turnamen, $kategori, $babak) {
+            $this->clearActiveScoreApprovals($kategori);
             $this->deactivateActiveMeja($kategori->id);
 
             return $this->createMejaForActiveTeams($turnamen, $kategori, $babak);
@@ -456,7 +459,10 @@ class MahjongTeamMatchmakingService
         return DB::transaction(function () use ($scores, $membersById) {
             foreach ($scores as $score) {
                 $member = $membersById->get((int) $score['id']);
-                $member->update(['poin_penyesuaian' => (int) $score['poin']]);
+                $member->update([
+                    'poin_penyesuaian' => (int) $score['poin'],
+                    'poin_disetujui' => false,
+                ]);
             }
 
             return $membersById->values()->map(function (GrupMember $member) {
@@ -553,6 +559,8 @@ class MahjongTeamMatchmakingService
         $idKategori = null,
         ?array $tiebreakTimIds = null
     ): array {
+        $this->assertScoresApprovedForProgression($turnamen, $idKategori);
+
         $selection = $this->resolveAdvanceSelection(
             $turnamen,
             $jumlahTimLolos,
@@ -593,6 +601,8 @@ class MahjongTeamMatchmakingService
         $idKategori = null,
         ?array $tiebreakTimIds = null
     ): array {
+        $this->assertScoresApprovedForProgression($turnamen, $idKategori);
+
         $selection = $this->resolveAdvanceSelection(
             $turnamen,
             $jumlahTimLolos,
@@ -649,6 +659,7 @@ class MahjongTeamMatchmakingService
                     $member->update([
                         'poin_didapat' => 0,
                         'poin_akumulasi' => 0,
+                        'poin_disetujui' => false,
                     ]);
                 }
             }
@@ -910,7 +921,103 @@ class MahjongTeamMatchmakingService
             })
             ->sum('poin');
 
-        $member->update(['poin_didapat' => $sum]);
+        $member->update([
+            'poin_didapat' => $sum,
+            'poin_disetujui' => false,
+        ]);
+    }
+
+    public function approveMemberScore(GrupMember $member): GrupMember
+    {
+        $this->assertActiveMahjongTeamMember($member);
+
+        if (! $this->activeMejaForMember($member)) {
+            throw new RuntimeException('Pemain tidak duduk di meja aktif.');
+        }
+
+        $member->update(['poin_disetujui' => true]);
+
+        return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
+    }
+
+    /**
+     * @return Collection<int, GrupMember>
+     */
+    public function approveMejaScores(TurnamenMeja $meja): Collection
+    {
+        $turnamen = $meja->turnamen ?? Turnamen::find($meja->id_turnamen);
+
+        if (! $turnamen || ! $turnamen->isMahjongTeam()) {
+            throw new RuntimeException('Persetujuan skor hanya untuk Mahjong Tim.');
+        }
+
+        if (! $meja->is_aktif) {
+            throw new RuntimeException('Meja tidak aktif.');
+        }
+
+        $members = $meja->seatedMembers();
+
+        if ($members->count() !== MahjongTeamSeatingService::TABLE_SIZE) {
+            throw new RuntimeException('Meja harus berisi 4 pemain.');
+        }
+
+        foreach ($members as $member) {
+            $member->update(['poin_disetujui' => true]);
+        }
+
+        return $members->map(function (GrupMember $member) {
+            return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
+        })->values();
+    }
+
+    public function assertScoresApprovedForProgression(Turnamen $turnamen, $idKategori = null): void
+    {
+        if (! $turnamen->isMahjongTeam() || ! $turnamen->categoryMahjongRequireScoreApproval($idKategori)) {
+            return;
+        }
+
+        $unapproved = $this->getActiveSeatedMembers($turnamen, $idKategori)
+            ->filter(fn (GrupMember $member) => ! $member->poin_disetujui);
+
+        if ($unapproved->isEmpty()) {
+            return;
+        }
+
+        throw new RuntimeException(sprintf(
+            'Setujui skor semua pemain dulu sebelum reshuffle atau akhiri babak (%d pemain belum disetujui).',
+            $unapproved->count()
+        ));
+    }
+
+    /**
+     * @return Collection<int, GrupMember>
+     */
+    protected function getActiveSeatedMembers(Turnamen $turnamen, $idKategori = null): Collection
+    {
+        $kategori = $this->resolveCompetitionKategori($turnamen, $idKategori);
+
+        $memberIds = TurnamenMejaSeat::query()
+            ->whereHas('meja', function ($query) use ($kategori) {
+                $query->where('id_kategori', $kategori->id)->where('is_aktif', true);
+            })
+            ->pluck('id_grup_member');
+
+        if ($memberIds->isEmpty()) {
+            return collect();
+        }
+
+        return GrupMember::query()
+            ->whereIn('id', $memberIds)
+            ->get();
+    }
+
+    protected function clearActiveScoreApprovals(TurnamenKategori $kategori): void
+    {
+        GrupMember::query()
+            ->whereHas('grup', function ($query) use ($kategori) {
+                $query->where('id_kategori', $kategori->id)->where('is_aktif', true);
+            })
+            ->update(['poin_disetujui' => false]);
     }
 
     protected function assertActiveMahjongTeamMember(GrupMember $member): void

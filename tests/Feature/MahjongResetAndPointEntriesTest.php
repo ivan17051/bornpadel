@@ -1123,6 +1123,122 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertStringContainsString('masih seri', $section['advance_note']);
     }
 
+    public function test_score_approval_toggle_gates_reshuffle_and_end_babak(): void
+    {
+        $admin = $this->makeAdmin();
+        $mahjong = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $mahjong->generateGroups($turnamen, 'random');
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-score-approval'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.mahjong_require_score_approval', true);
+
+        $this->assertTrue($mahjong->isScoreApprovalRequired($turnamen->fresh()));
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.reshuffle-groups'), [
+                'id_turnamen' => $turnamen->id,
+                'mode' => 'random',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Setujui skor semua pemain dulu sebelum reshuffle atau akhiri babak (8 pemain belum disetujui).');
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.end-group-stage'), [
+                'id_turnamen' => $turnamen->id,
+                'jumlah_lolos' => 4,
+                'preview' => true,
+            ])
+            ->assertStatus(422);
+
+        $html = $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('mahjong-score-approval-toggle', $html);
+        $this->assertStringContainsString('btn-mahjong-approve-score', $html);
+        $this->assertStringContainsString('btn-mahjong-approve-group', $html);
+
+        $groups = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->get();
+
+        foreach ($groups as $grup) {
+            $this->actingAs($admin)
+                ->patchJson(route('admin.matchmaking.mahjong-group-score-approval', $grup))
+                ->assertOk()
+                ->assertJsonPath('success', true);
+        }
+
+        $this->assertSame(0, GrupMember::query()
+            ->whereHas('grup', function ($query) use ($turnamen) {
+                $query->where('id_turnamen', $turnamen->id)->where('is_aktif', true);
+            })
+            ->where('poin_disetujui', false)
+            ->count());
+
+        $member = GrupMember::query()
+            ->whereHas('grup', function ($query) use ($turnamen) {
+                $query->where('id_turnamen', $turnamen->id)->where('is_aktif', true);
+            })
+            ->with('grup.members')
+            ->first();
+
+        $scores = $member->grup->members->values()->map(function (GrupMember $item, int $index) {
+            return ['id' => $item->id, 'poin' => [8, -2, -3, -3][$index]];
+        })->all();
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-group-point-entries.store', $member->grup), [
+                'scores' => $scores,
+                'id_grup_member_pemenang' => (int) $member->id,
+            ])
+            ->assertOk();
+
+        $this->assertFalse((bool) $member->fresh()->poin_disetujui);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.reshuffle-groups'), [
+                'id_turnamen' => $turnamen->id,
+                'mode' => 'random',
+            ])
+            ->assertStatus(422);
+
+        $groups = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->get();
+
+        foreach ($groups as $grup) {
+            $this->actingAs($admin)
+                ->patchJson(route('admin.matchmaking.mahjong-group-score-approval', $grup))
+                ->assertOk();
+        }
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.reshuffle-groups'), [
+                'id_turnamen' => $turnamen->id,
+                'mode' => 'random',
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.mahjong-score-approval'), [
+                'id_turnamen' => $turnamen->id,
+                'enabled' => false,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.mahjong_require_score_approval', false);
+    }
+
     protected function seedDistinctMahjongGroupScores(MahjongMatchmakingService $service, Turnamen $turnamen): void
     {
         $groups = Grup::query()
