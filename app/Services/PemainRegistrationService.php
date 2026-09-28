@@ -733,6 +733,106 @@ class PemainRegistrationService
             ->values();
     }
 
+    /**
+     * Approved players with no registration team, for building a Mahjong Tim roster.
+     *
+     * @return Collection<int, TurnamenPeserta>
+     */
+    public function ungroupedApprovedPeserta(Turnamen $turnamen, $idKategori = null): Collection
+    {
+        if (! $turnamen->isMahjongTeam() || ! $this->canEditRegistrationGroups($turnamen, $idKategori)) {
+            return collect();
+        }
+
+        $kategori = $turnamen->resolveKategori($idKategori);
+
+        return TurnamenPeserta::query()
+            ->forKategori((int) $kategori->id)
+            ->approved()
+            ->whereDoesntHave('grupPendaftaranMember')
+            ->with('pemain1')
+            ->get()
+            ->sortBy(function (TurnamenPeserta $peserta) {
+                return mb_strtolower((string) optional($peserta->pemain1)->nama);
+            })
+            ->values();
+    }
+
+    /**
+     * Create one registration team from approved players who are not in a team yet.
+     *
+     * @param  array<int, int|string>  $pesertaIds
+     */
+    public function createMahjongTeamFromUngrouped(
+        Turnamen $turnamen,
+        string $nama,
+        array $pesertaIds,
+        $idKategori = null
+    ): TurnamenGrupPendaftaran {
+        if (! $turnamen->isMahjongTeam()) {
+            throw new RuntimeException('Membuat tim dari pemain individu hanya untuk Mahjong Tim.');
+        }
+
+        if (! $this->canEditRegistrationGroups($turnamen, $idKategori)) {
+            throw new RuntimeException('Tidak dapat membuat tim saat ini.');
+        }
+
+        $kategori = $turnamen->resolveKategori($idKategori);
+        $expected = $kategori->registrationRosterSize();
+        $ids = array_values(array_map('intval', $pesertaIds));
+
+        if (count($ids) !== count(array_unique($ids)) || count($ids) !== $expected) {
+            throw new RuntimeException("Tim harus berisi tepat {$expected} pemain.");
+        }
+
+        $this->assertGroupNameAvailable($turnamen, $nama, $kategori->id);
+
+        return DB::transaction(function () use ($turnamen, $kategori, $nama, $ids, $expected) {
+            $this->assertGroupNameAvailable($turnamen, $nama, $kategori->id);
+
+            $pesertaRows = TurnamenPeserta::query()
+                ->forKategori((int) $kategori->id)
+                ->whereIn('id', $ids)
+                ->lockForUpdate()
+                ->get();
+
+            if ($pesertaRows->count() !== $expected) {
+                throw new RuntimeException('Semua pemain harus terdaftar pada kategori ini.');
+            }
+
+            foreach ($pesertaRows as $peserta) {
+                if ($peserta->status !== 'approved') {
+                    throw new RuntimeException('Semua pemain harus berstatus approved dan belum berkelompok.');
+                }
+
+                $alreadyGrouped = TurnamenGrupPendaftaranMember::query()
+                    ->where('id_peserta', $peserta->id)
+                    ->lockForUpdate()
+                    ->exists();
+
+                if ($alreadyGrouped) {
+                    throw new RuntimeException('Semua pemain harus berstatus approved dan belum berkelompok.');
+                }
+            }
+
+            $group = TurnamenGrupPendaftaran::create([
+                'id_turnamen' => $turnamen->id,
+                'id_kategori' => $kategori->id,
+                'nama' => trim($nama),
+            ]);
+
+            foreach ($ids as $index => $pesertaId) {
+                TurnamenGrupPendaftaranMember::create([
+                    'id_grup_pendaftaran' => $group->id,
+                    'id_peserta' => $pesertaId,
+                    'urutan' => $index + 1,
+                ]);
+            }
+
+            return $group->fresh('members');
+        });
+    }
+
     public function assignPesertaToRegistrationGroup(
         Turnamen $turnamen,
         int $pesertaId,

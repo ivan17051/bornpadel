@@ -947,6 +947,76 @@ const BornPadelAdmin = (function () {
                 }
             });
         }
+
+        const createModalEl = document.getElementById('mahjongTeamCreateModal');
+        const createUrl = panel.dataset.regCreateUrl || '';
+        const expectedSize = parseInt(panel.dataset.regPlayersPerGroup, 10) || 4;
+
+        if (createModalEl && createUrl) {
+            const createModal = new bootstrap.Modal(createModalEl);
+            const nameInput = document.getElementById('mahjong-team-create-name');
+            const saveBtn = document.getElementById('btn-save-mahjong-team-create');
+            const countEl = document.getElementById('mahjong-team-create-count');
+            const createChecks = () => Array.from(createModalEl.querySelectorAll('.mahjong-team-create-check'));
+
+            const updateCreateCount = () => {
+                const selected = createChecks().filter((el) => el.checked).length;
+                if (countEl) {
+                    countEl.textContent = `Terpilih ${selected} dari ${expectedSize}`;
+                    countEl.classList.toggle('text-danger', selected !== expectedSize);
+                    countEl.classList.toggle('text-success', selected === expectedSize);
+                }
+                if (saveBtn) {
+                    const nama = (nameInput?.value || '').trim();
+                    saveBtn.disabled = selected !== expectedSize || nama === '';
+                }
+            };
+
+            createChecks().forEach((el) => el.addEventListener('change', updateCreateCount));
+            if (nameInput) {
+                nameInput.addEventListener('input', updateCreateCount);
+            }
+            updateCreateCount();
+
+            if (saveBtn) {
+                saveBtn.addEventListener('click', async () => {
+                    const nama = (nameInput?.value || '').trim();
+                    const pesertaIds = createChecks()
+                        .filter((el) => el.checked)
+                        .map((el) => parseInt(el.value, 10))
+                        .filter((id) => id > 0);
+
+                    if (!nama) {
+                        showAlert('Nama tim wajib diisi.', 'warning');
+                        return;
+                    }
+
+                    if (pesertaIds.length !== expectedSize) {
+                        showAlert(`Tim harus berisi tepat ${expectedSize} pemain.`, 'warning');
+                        return;
+                    }
+
+                    const original = saveBtn.innerHTML;
+                    setButtonLoading(saveBtn, true);
+
+                    try {
+                        await apiRequest(createUrl, 'POST', {
+                            ...basePayload(),
+                            nama,
+                            peserta_ids: pesertaIds,
+                        });
+                        createModal.hide();
+                        showAlert('Tim berhasil dibuat dari pemain individu.', 'success');
+                        reloadPage();
+                    } catch (e) {
+                        showAlert(e.message, 'error');
+                    } finally {
+                        setButtonLoading(saveBtn, false, original);
+                        updateCreateCount();
+                    }
+                });
+            }
+        }
     };
 
     const initMatchmakingActions = () => {

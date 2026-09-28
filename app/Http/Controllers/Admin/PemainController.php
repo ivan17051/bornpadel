@@ -789,6 +789,43 @@ class PemainController extends Controller
         ]);
     }
 
+    public function storeMahjongTeamFromUngrouped(Request $request)
+    {
+        $request->validate([
+            'id_turnamen' => ['required', 'exists:m_turnamen,id'],
+            'id_kategori' => ['nullable', 'integer'],
+            'nama' => ['required', 'string', 'max:255'],
+            'peserta_ids' => ['required', 'array', 'min:1', 'max:'.Turnamen::MAHJONG_TEAM_MAX_PLAYERS_PER_TEAM],
+            'peserta_ids.*' => ['integer', 'distinct', 'exists:turnamen_peserta,id'],
+        ], [
+            'nama.required' => 'Nama tim wajib diisi.',
+            'peserta_ids.required' => 'Pilih pemain untuk tim.',
+            'peserta_ids.max' => 'Jumlah pemain melebihi batas tim.',
+            'peserta_ids.*.distinct' => 'Pemain tidak boleh dipilih dua kali.',
+        ]);
+
+        try {
+            $this->tournamentAccess->assertTurnamenId((int) $request->input('id_turnamen'));
+            $turnamen = $this->resolveRegistrationGroupTournament((int) $request->input('id_turnamen'));
+            $kategoriId = $this->resolveKategoriId($request, $turnamen);
+
+            $group = $this->registrationService->createMahjongTeamFromUngrouped(
+                $turnamen,
+                $request->input('nama'),
+                $request->input('peserta_ids', []),
+                $kategoriId
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tim berhasil dibuat dari pemain individu.',
+            'data' => ['id' => $group->id, 'nama' => $group->nama],
+        ]);
+    }
+
     public function renameFriendlyRegistrationGroup(Request $request, TurnamenGrupPendaftaran $group)
     {
         $request->validate([

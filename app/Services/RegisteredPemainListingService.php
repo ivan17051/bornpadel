@@ -25,6 +25,7 @@ class RegisteredPemainListingService
                 'soloPesertaOptions' => collect(),
                 'canEditRegistrationGroups' => false,
                 'friendlyRegistrationGroupTargets' => collect(),
+                'ungroupedApprovedForTeam' => collect(),
             ];
         }
 
@@ -60,6 +61,7 @@ class RegisteredPemainListingService
                 'soloPesertaOptions' => collect(),
                 'canEditRegistrationGroups' => false,
                 'friendlyRegistrationGroupTargets' => collect(),
+                'ungroupedApprovedForTeam' => collect(),
             ];
         }
 
@@ -109,6 +111,8 @@ class RegisteredPemainListingService
             'soloPesertaOptions' => $this->resolveSoloPesertaOptions($turnamen, $kategoriId),
             'canEditRegistrationGroups' => $this->canEditRegistrationGroups($turnamen, $kategoriId),
             'friendlyRegistrationGroupTargets' => $this->resolveRegistrationGroupTargets($turnamen, $kategoriId),
+            'ungroupedApprovedForTeam' => app(PemainRegistrationService::class)
+                ->ungroupedApprovedPeserta($turnamen, $kategoriId),
         ];
     }
 

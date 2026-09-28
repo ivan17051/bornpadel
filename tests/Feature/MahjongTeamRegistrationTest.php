@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Grup;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenGrupPendaftaran;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\GroupMatchmakingService;
@@ -256,6 +257,230 @@ class MahjongTeamRegistrationTest extends TestCase
         ]);
     }
 
+    public function test_admin_and_panitia_can_create_team_from_ungrouped_players(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->createOpenMahjongTeam();
+        $solos = collect(range(1, 4))->map(function ($index) use ($turnamen) {
+            return $this->createSoloPeserta($turnamen, "Solo Builder {$index}");
+        });
+
+        $this->actingAs($admin)
+            ->get(route('admin.pemain.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->assertSee('Buat Tim dari Pemain Individu', false)
+            ->assertSee('Solo Builder 1', false)
+            ->assertSee('data-reg-create-url', false);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Built Squad',
+                'peserta_ids' => $solos->pluck('id')->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Tim berhasil dibuat dari pemain individu.')
+            ->assertJsonPath('data.nama', 'Built Squad');
+
+        $group = TurnamenGrupPendaftaran::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('nama', 'Built Squad')
+            ->first();
+
+        $this->assertNotNull($group);
+        $this->assertTrue($group->isFullyApproved($turnamen));
+        $this->assertSame(
+            $solos->pluck('id')->sort()->values()->all(),
+            $group->members()->pluck('id_peserta')->sort()->values()->all()
+        );
+
+        $panitia = User::create([
+            'name' => 'Team Builder Panitia',
+            'username' => 'team-builder-'.uniqid(),
+            'email' => uniqid().'@example.test',
+            'password' => Hash::make('12345678'),
+            'role' => 'panitia',
+            'id_turnamen' => $turnamen->id,
+        ]);
+        $panitiaSolos = collect(range(1, 4))->map(function ($index) use ($turnamen) {
+            return $this->createSoloPeserta($turnamen, "Panitia Solo {$index}");
+        });
+
+        $this->actingAs($panitia)
+            ->get(route('admin.pemain.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->assertSee('Buat Tim dari Pemain Individu', false)
+            ->assertSee('Panitia Solo 1', false);
+
+        $this->actingAs($panitia)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Panitia Squad',
+                'peserta_ids' => $panitiaSolos->pluck('id')->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.nama', 'Panitia Squad');
+
+        $other = $this->createOpenMahjongTeam();
+        $outsider = User::create([
+            'name' => 'Other Panitia',
+            'username' => 'other-panitia-'.uniqid(),
+            'email' => uniqid().'@example.test',
+            'password' => Hash::make('12345678'),
+            'role' => 'panitia',
+            'id_turnamen' => $other->id,
+        ]);
+
+        $this->actingAs($outsider)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Should Fail',
+                'peserta_ids' => $solos->pluck('id')->all(),
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('turnamen_grup_pendaftaran', [
+            'id_turnamen' => $turnamen->id,
+            'nama' => 'Should Fail',
+        ]);
+    }
+
+    public function test_create_team_from_ungrouped_rejects_invalid_rosters(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->createOpenMahjongTeam();
+        $service = app(PemainRegistrationService::class);
+
+        $existing = $service->registerGroup(
+            $turnamen,
+            'Dragon Squad',
+            $this->playerPayloads(11),
+            [],
+            null,
+            TurnamenPeserta::SUMBER_INTERNAL,
+            false,
+            'approved'
+        );
+        $groupedMember = $existing['grup_pendaftaran']->members()->first();
+
+        $approved = collect(range(1, 3))->map(function ($index) use ($turnamen) {
+            return $this->createSoloPeserta($turnamen, "Free Solo {$index}");
+        });
+        $pending = $this->createSoloPeserta($turnamen, 'Pending Solo', 'pending');
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Too Small',
+                'peserta_ids' => $approved->pluck('id')->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Tim harus berisi tepat 4 pemain.');
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Has Pending',
+                'peserta_ids' => $approved->pluck('id')->push($pending->id)->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Semua pemain harus berstatus approved dan belum berkelompok.');
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Steals Member',
+                'peserta_ids' => $approved->pluck('id')->push($groupedMember->id_peserta)->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Semua pemain harus berstatus approved dan belum berkelompok.');
+
+        $this->assertDatabaseHas('turnamen_grup_pendaftaran_member', [
+            'id_peserta' => $groupedMember->id_peserta,
+            'id_grup_pendaftaran' => $existing['grup_pendaftaran']->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'dragon squad',
+                'peserta_ids' => $approved->pluck('id')->push($this->createSoloPeserta($turnamen, 'Fourth Free')->id)->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Nama tim sudah digunakan pada kategori ini.');
+
+        $sized = $this->createOpenMahjongTeam(5);
+        $five = collect(range(1, 5))->map(function ($index) use ($sized) {
+            return $this->createSoloPeserta($sized, "Sized Solo {$index}");
+        });
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $sized->id,
+                'nama' => 'Four Of Five',
+                'peserta_ids' => $five->take(4)->pluck('id')->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Tim harus berisi tepat 5 pemain.');
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $sized->id,
+                'nama' => 'Five Built',
+                'peserta_ids' => $five->pluck('id')->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.nama', 'Five Built');
+
+        $friendly = Turnamen::create([
+            'nama' => 'Friendly Not Team '.uniqid(),
+            'tanggal' => now()->toDateString(),
+            'harga' => 0,
+            'maks_peserta' => 16,
+            'jenis' => 'friendly',
+            'players_per_group' => 4,
+            'status' => 'open',
+        ]);
+        $friendlySolos = collect(range(1, 4))->map(function ($index) use ($friendly) {
+            return $this->createSoloPeserta($friendly, "Friendly Solo {$index}");
+        });
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $friendly->id,
+                'nama' => 'Not Mahjong',
+                'peserta_ids' => $friendlySolos->pluck('id')->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Membuat tim dari pemain individu hanya untuk Mahjong Tim.');
+
+        Grup::create([
+            'id_turnamen' => $turnamen->id,
+            'nama' => 'Competition Lock',
+        ]);
+
+        $this->assertFalse($service->canEditRegistrationGroups($turnamen->fresh()));
+
+        $this->actingAs($admin)
+            ->get(route('admin.pemain.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->assertDontSee('Buat Tim dari Pemain Individu', false);
+
+        $freshApproved = collect(range(1, 4))->map(function ($index) use ($turnamen) {
+            return $this->createSoloPeserta($turnamen, "Late Solo {$index}");
+        });
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.pemain.mahjong-team.registration-group.store'), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'After Lock',
+                'peserta_ids' => $freshApproved->pluck('id')->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Tidak dapat membuat tim saat ini.');
+    }
+
     public function test_generate_teams_keeps_registered_team_rosters(): void
     {
         $turnamen = $this->createOpenMahjongTeam();
@@ -461,6 +686,23 @@ class MahjongTeamRegistrationTest extends TestCase
             ->assertSessionHasErrors('players_per_group');
 
         $this->assertSame(5, $turnamen->fresh()->mahjongPlayersPerTeam());
+    }
+
+    protected function createSoloPeserta(Turnamen $turnamen, string $nama, string $status = 'approved'): TurnamenPeserta
+    {
+        $pemain = Pemain::create([
+            'nama' => $nama,
+            'gender' => 'male',
+            'no_hp' => '+62817'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+            'rating' => 2.5,
+        ]);
+
+        return TurnamenPeserta::create([
+            'id_turnamen' => $turnamen->id,
+            'id_pemain1' => $pemain->id,
+            'status' => $status,
+            'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+        ]);
     }
 
     protected function createOpenMahjongTeam(int $playersPerTeam = 4): Turnamen

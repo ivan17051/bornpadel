@@ -9,6 +9,7 @@
     $showFriendlyGroups = $turnamen && $turnamen->allowsGroupRegistration() && empty($isDoubleView) && ! request()->filled('sort');
     $canEditRegistrationGroups = $canEditRegistrationGroups ?? false;
     $friendlyRegistrationGroupTargets = collect($friendlyRegistrationGroupTargets ?? []);
+    $ungroupedApprovedForTeam = collect($ungroupedApprovedForTeam ?? []);
     $friendlyPlayersPerGroup = $turnamen && $turnamen->allowsGroupRegistration()
         ? (isset($kategori) && $kategori
             ? $kategori->registrationRosterSize()
@@ -107,6 +108,9 @@
      data-reg-remove-url="{{ route('admin.pemain.friendly.registration-group.remove') }}"
      data-reg-rename-url-template="{{ route('admin.pemain.friendly.registration-group.rename', ['group' => '__ID__']) }}"
      data-reg-groups='@json($friendlyRegistrationGroupTargets->values())'
+     @if ($turnamen->isMahjongTeam())
+     data-reg-create-url="{{ route('admin.pemain.mahjong-team.registration-group.store') }}"
+     @endif
      @endif
      @endif>
     <div class="card-header d-flex justify-content-between align-items-center row border-top-0">
@@ -156,6 +160,14 @@
                             disabled
                             title="Pilih peserta pada tabel terlebih dahulu">
                         <i class="bi bi-trash me-1"></i> Hapus Terpilih
+                    </button>
+                @endif
+                @if ($canEditRegistrationGroups && $turnamen && $turnamen->isMahjongTeam())
+                    <button type="button"
+                            class="btn btn-primary btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#mahjongTeamCreateModal">
+                        <i class="bi bi-people me-1"></i> Buat Tim
                     </button>
                 @endif
                 @if ($turnamen)
@@ -453,6 +465,65 @@
             </div>
         </div>
     </div>
+
+    @if ($turnamen && $turnamen->isMahjongTeam())
+        <div class="modal fade" id="mahjongTeamCreateModal" tabindex="-1" aria-labelledby="mahjongTeamCreateModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="mahjongTeamCreateModalLabel">Buat Tim dari Pemain Individu</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small">
+                            Pilih tepat {{ $friendlyPlayersPerGroup }} pemain approved yang belum berkelompok.
+                            Tim lengkap ini dipertahankan saat buat tim.
+                        </p>
+                        <label for="mahjong-team-create-name" class="form-label">Nama tim</label>
+                        <input type="text" class="form-control mb-3" id="mahjong-team-create-name" maxlength="255" autocomplete="off">
+                        @if ($ungroupedApprovedForTeam->isEmpty())
+                            <div class="alert alert-warning small mb-0">
+                                Belum ada pemain approved yang belum berkelompok.
+                            </div>
+                        @else
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="form-label mb-0">Pemain individu</span>
+                                <span class="small text-danger" id="mahjong-team-create-count">Terpilih 0 dari {{ $friendlyPlayersPerGroup }}</span>
+                            </div>
+                            @if ($ungroupedApprovedForTeam->count() < $friendlyPlayersPerGroup)
+                                <div class="alert alert-warning small">
+                                    Dibutuhkan {{ $friendlyPlayersPerGroup }} pemain. Saat ini ada {{ $ungroupedApprovedForTeam->count() }} pemain individu yang approved.
+                                </div>
+                            @endif
+                            <div class="border rounded" style="max-height: 280px; overflow-y: auto;">
+                                @foreach ($ungroupedApprovedForTeam as $solo)
+                                    @php $soloPemain = $solo->pemain1; @endphp
+                                    @if ($soloPemain)
+                                        <label class="d-flex align-items-center gap-2 px-3 py-2 border-bottom mb-0" for="mahjong-team-create-peserta-{{ $solo->id }}">
+                                            <input type="checkbox"
+                                                   class="form-check-input mahjong-team-create-check flex-shrink-0 m-0"
+                                                   id="mahjong-team-create-peserta-{{ $solo->id }}"
+                                                   value="{{ $solo->id }}">
+                                            <span>
+                                                <span class="d-block">{{ $soloPemain->nama }}</span>
+                                                <span class="small text-muted">{{ $soloPemain->no_hp }} · rating {{ number_format($soloPemain->rating, 1) }}</span>
+                                            </span>
+                                        </label>
+                                    @endif
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-primary" id="btn-save-mahjong-team-create" disabled>
+                            <i class="bi bi-check-lg me-1"></i> Buat Tim
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     <div class="modal fade friendly-reg-modal" id="friendlyRegRenameModal" tabindex="-1" aria-labelledby="friendlyRegRenameModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">

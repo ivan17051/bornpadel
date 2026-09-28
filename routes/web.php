@@ -108,6 +108,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             ->name('pemain.friendly.registration-group.remove');
         Route::patch('/pemain/friendly/registration-group/{group}', [PemainController::class, 'renameFriendlyRegistrationGroup'])
             ->name('pemain.friendly.registration-group.rename');
+        Route::post('/pemain/mahjong-team/registration-group', [PemainController::class, 'storeMahjongTeamFromUngrouped'])
+            ->name('pemain.mahjong-team.registration-group.store');
 
         Route::get('/matchmaking', [MatchmakingController::class, 'index'])->name('matchmaking.index');
         Route::post('/matchmaking/close-registration', [MatchmakingController::class, 'closeRegistration'])->name('matchmaking.close-registration');
