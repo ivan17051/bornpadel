@@ -13,6 +13,8 @@
     'requireTurnamenSelection' => true,
     'turnamen' => $turnamen,
     'turnamenList' => $turnamenList,
+    'kategori' => $kategori ?? null,
+    'kategoriList' => $kategoriList ?? collect(),
 ])
 
 @if ($turnamen)

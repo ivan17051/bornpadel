@@ -2,6 +2,7 @@
     <x-mahjong-leaderboard
         :standings="$standings"
         :turnamen="$turnamen"
+        :kategori="$kategori ?? null"
         :refreshable="true"
     />
     @include('admin.matchmaking.partials.mahjong-history', [
@@ -14,6 +15,7 @@
     <x-mahjong-team-leaderboard
         :standings="$standings"
         :turnamen="$turnamen"
+        :kategori="$kategori ?? null"
         :refreshable="true"
     />
     @include('admin.matchmaking.partials.mahjong-team-history', [
@@ -26,6 +28,7 @@
     <x-friendly-leaderboard
         :standings="$standings"
         :turnamen="$turnamen"
+        :kategori="$kategori ?? null"
         :refreshable="true"
         :match-sessions="$friendlyMatchSessions ?? collect()"
     />
@@ -33,6 +36,7 @@
     <x-group-leaderboard
         :standings="$standings"
         :turnamen="$turnamen"
+        :kategori="$kategori ?? null"
         :refreshable="true"
     />
 @endif

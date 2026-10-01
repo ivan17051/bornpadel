@@ -59,7 +59,7 @@ class TournamentController extends Controller
         ]);
     }
 
-    public function groupStandings(int $id): JsonResponse
+    public function groupStandings(Request $request, int $id): JsonResponse
     {
         $turnamen = Turnamen::find($id);
 
@@ -77,8 +77,21 @@ class TournamentController extends Controller
             ], 422);
         }
 
+        try {
+            $kategoriId = $this->resolveApiKategori($turnamen, $request->input('id_kategori'))->id;
+        } catch (RuntimeException $e) {
+            if ($request->filled('id_kategori')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                ], 422);
+            }
+
+            $kategoriId = optional($turnamen->defaultKategori())->id;
+        }
+
         if ($turnamen->isMahjongTeam()) {
-            $groups = $this->leaderboardService->getMahjongTeamStandings($turnamen);
+            $groups = $this->leaderboardService->getMahjongTeamStandings($turnamen, $kategoriId);
 
             return response()->json([
                 'success' => true,
@@ -95,7 +108,7 @@ class TournamentController extends Controller
             ]);
         }
 
-        $standings = $this->leaderboardService->getMahjongStandingsByBabak($turnamen->id);
+        $standings = $this->leaderboardService->getMahjongStandingsByBabak($turnamen->id, $kategoriId);
 
         return response()->json([
             'success' => true,

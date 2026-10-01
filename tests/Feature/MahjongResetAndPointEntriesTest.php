@@ -7,6 +7,7 @@ use App\Models\GrupMember;
 use App\Models\MahjongPoinEntry;
 use App\Models\Pemain;
 use App\Models\Turnamen;
+use App\Models\TurnamenKategori;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\GroupMatchmakingService;
@@ -1057,6 +1058,61 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertStringContainsString('Lolos*', $adminHtml);
         $this->assertStringContainsString('>W<', $adminHtml);
         $this->assertStringNotContainsString('>Status<', $adminHtml);
+    }
+
+    public function test_admin_and_guest_standings_refresh_keeps_selected_category(): void
+    {
+        $service = app(MahjongMatchmakingService::class);
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service->generateGroups($turnamen, 'random');
+        $default = $turnamen->defaultKategori();
+        $other = TurnamenKategori::create([
+            'id_turnamen' => $turnamen->id,
+            'nama' => 'Kategori Lain',
+            'is_default' => false,
+            'urutan' => 2,
+            'harga' => 100000,
+            'maks_peserta' => 8,
+            'status' => 'ongoing',
+        ]);
+
+        $query = [
+            'id_turnamen' => $turnamen->id,
+            'id_kategori' => $other->id,
+        ];
+        $refreshNeedle = 'id_kategori='.$other->id;
+
+        $admin = $this->makeAdmin();
+        $adminHtml = $this->actingAs($admin)
+            ->get(route('admin.standings.index', $query))
+            ->assertOk()
+            ->getContent();
+        $guestHtml = $this->get(route('guest.standings', $query))
+            ->assertOk()
+            ->getContent();
+        $operasiHtml = $this->actingAs($admin)
+            ->get(route('admin.turnamen-operasi.index', $query + ['tab' => 'klasemen']))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString($refreshNeedle, $adminHtml);
+        $this->assertStringContainsString($refreshNeedle, $guestHtml);
+        $this->assertStringContainsString($refreshNeedle, $operasiHtml);
+        $this->assertStringNotContainsString('Mahjong Player 1', $adminHtml);
+        $this->assertStringNotContainsString('Mahjong Player 1', $guestHtml);
+
+        $this->getJson(route('api.guest.standings', $query))
+            ->assertOk()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Belum ada data klasemen.')
+            ->assertJsonPath('data.sections', []);
+
+        $defaultResponse = $this->getJson(route('api.guest.standings', [
+            'id_turnamen' => $turnamen->id,
+            'id_kategori' => $default->id,
+        ]))->assertOk()->assertJsonPath('success', true);
+
+        $this->assertNotEmpty($defaultResponse->json('data.sections'));
     }
 
     public function test_mahjong_standings_marks_confirmed_advancers_after_advance(): void

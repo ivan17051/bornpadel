@@ -235,7 +235,9 @@
                         ? `<a href="${profileBase}${member.id_pemain}" class="pemain-profile-link">${member.nama || '—'}</a>`
                         : (member.nama || '—');
 
-                    return `<li>${name} <span class="ms-1">${member.poin_didapat ?? 0}</span></li>`;
+                    const poin = member.poin_babak ?? member.poin_didapat ?? 0;
+
+                    return `<li>${name} <span class="ms-1">${poin}</span></li>`;
                 }).join('')}</ul>`
                 : '';
 
