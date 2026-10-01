@@ -45,6 +45,7 @@ class StoreNewPemainToTurnamenRequest extends FormRequest
             'no_hp' => ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'],
             'rating' => ['nullable', 'numeric', 'min:0', 'max:10'],
             'status' => ['required', 'in:pending,approved,rejected,unpaid,paid'],
+            'payment_status' => ['nullable', 'in:unpaid,paid'],
             'bukti_bayar' => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:5120'],
             'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ];

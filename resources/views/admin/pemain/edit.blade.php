@@ -89,9 +89,7 @@
                                                 @endif
                                             </td>
                                             <td>
-                                                <span class="badge status-badge-{{ $peserta->status }}">
-                                                    {{ ucfirst($peserta->status) }}
-                                                </span>
+                                                <x-peserta-status-badges :peserta="$peserta" />
                                             </td>
                                         </tr>
                                     @endforeach

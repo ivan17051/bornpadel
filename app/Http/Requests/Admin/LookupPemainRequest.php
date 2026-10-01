@@ -26,6 +26,7 @@ class LookupPemainRequest extends FormRequest
             'id_turnamen' => ['required', 'exists:m_turnamen,id'],
             'no_hp' => ['required', 'string', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
             'status' => ['nullable', 'in:pending,approved,rejected,unpaid,paid'],
+            'payment_status' => ['nullable', 'in:unpaid,paid'],
         ];
 
         $turnamen = Turnamen::find($this->input('id_turnamen'));

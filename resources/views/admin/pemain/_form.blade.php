@@ -42,13 +42,34 @@
         </div>
 
         <div class="mb-3">
-            <label for="lookup_status" class="form-label">Status Pendaftaran <span class="text-danger">*</span></label>
+            <label for="lookup_status" class="form-label">Verifikasi <span class="text-danger">*</span></label>
             <select name="status" id="lookup_status" class="form-select" required>
-                @foreach (['pending' => 'Pending', 'unpaid' => 'Unpaid', 'paid' => 'Paid', 'approved' => 'Approved', 'rejected' => 'Rejected'] as $value => $label)
-                    <option value="{{ $value }}" {{ old('status', request('status', 'approved')) === $value ? 'selected' : '' }}>
+                @foreach (['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected'] as $value => $label)
+                    @php
+                        $selectedStatus = old('status', request('status', 'approved'));
+                        if (in_array($selectedStatus, ['unpaid', 'paid'], true)) {
+                            $selectedStatus = 'pending';
+                        }
+                    @endphp
+                    <option value="{{ $value }}" {{ $selectedStatus === $value ? 'selected' : '' }}>
                         {{ $label }}
                     </option>
                 @endforeach
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label for="lookup_payment_status" class="form-label">Pembayaran <span class="text-danger">*</span></label>
+            <select name="payment_status" id="lookup_payment_status" class="form-select" required>
+                @php
+                    $selectedPayment = old('payment_status', request('payment_status'));
+                    if (! $selectedPayment) {
+                        $legacy = old('status', request('status'));
+                        $selectedPayment = $legacy === 'paid' ? 'paid' : 'unpaid';
+                    }
+                @endphp
+                <option value="unpaid" {{ $selectedPayment === 'unpaid' ? 'selected' : '' }}>Unpaid</option>
+                <option value="paid" {{ $selectedPayment === 'paid' ? 'selected' : '' }}>Paid</option>
             </select>
         </div>
 
@@ -81,6 +102,7 @@
 @else
     <input type="hidden" name="id_turnamen" value="{{ old('id_turnamen', $selectedTurnamen->id) }}">
     <input type="hidden" name="status" value="{{ old('status', request('status', 'approved')) }}">
+    <input type="hidden" name="payment_status" value="{{ old('payment_status', request('payment_status', 'unpaid')) }}">
 
     @if ($selectedTurnamen && $selectedTurnamen->randomizesPartners())
         <div class="alert alert-light border mb-3">

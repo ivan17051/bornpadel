@@ -52,11 +52,11 @@ class DashboardService
         $registration = [
             'total' => (clone $pesertaQuery)->count(),
             'pending' => (clone $pesertaQuery)->where('status', 'pending')->count(),
-            'unpaid' => (clone $pesertaQuery)->where('status', 'unpaid')->count(),
-            'paid' => (clone $pesertaQuery)->where('status', 'paid')->count(),
+            'unpaid' => (clone $pesertaQuery)->where('payment_status', 'unpaid')->count(),
+            'paid' => (clone $pesertaQuery)->where('payment_status', 'paid')->count(),
             'approved' => (clone $pesertaQuery)->where('status', 'approved')->count(),
             'rejected' => (clone $pesertaQuery)->where('status', 'rejected')->count(),
-            'needs_review' => (clone $pesertaQuery)->whereIn('status', ['pending', 'paid'])->count(),
+            'needs_review' => (clone $pesertaQuery)->where('status', 'pending')->count(),
         ];
 
         $matchesQuery = Pertandingan::where('id_turnamen', $turnamen->id);
@@ -103,10 +103,11 @@ class DashboardService
 
         return [
             'total' => (clone $query)->count(),
-            'needs_review' => (clone $query)->whereIn('status', ['pending', 'paid'])->count(),
+            'needs_review' => (clone $query)->where('status', 'pending')->count(),
             'approved' => (clone $query)->where('status', 'approved')->count(),
             'pending' => (clone $query)->where('status', 'pending')->count(),
-            'paid' => (clone $query)->where('status', 'paid')->count(),
+            'paid' => (clone $query)->where('payment_status', 'paid')->count(),
+            'unpaid' => (clone $query)->where('payment_status', 'unpaid')->count(),
         ];
     }
 
@@ -114,7 +115,7 @@ class DashboardService
     {
         $query = TurnamenPeserta::query()
             ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1', 'turnamen'])
-            ->whereIn('status', ['pending', 'paid', 'unpaid']);
+            ->where('status', 'pending');
 
         if ($turnamenIds !== null) {
             $query->whereIn('id_turnamen', $turnamenIds !== [] ? $turnamenIds : [0]);
@@ -146,7 +147,7 @@ class DashboardService
         return TurnamenPeserta::query()
             ->forTurnamen($turnamen->id)
             ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1'])
-            ->whereIn('status', ['pending', 'paid', 'unpaid'])
+            ->where('status', 'pending')
             ->latest('updated_at')
             ->limit($limit)
             ->get();

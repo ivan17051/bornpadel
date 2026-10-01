@@ -20,6 +20,7 @@ class TurnamenPeserta extends Model
         'id_kategori',
         'id_pemain1',
         'status',
+        'payment_status',
         'sumber',
         'bukti_bayar',
     ];
@@ -261,14 +262,57 @@ class TurnamenPeserta extends Model
     public function getStatusLabelAttribute(): string
     {
         $labels = [
-            'pending' => 'Menunggu',
-            'approved' => 'Disetujui',
-            'rejected' => 'Ditolak',
-            'unpaid' => 'Belum Bayar',
-            'paid' => 'Sudah Bayar',
+            'pending' => 'Pending',
+            'approved' => 'Approved',
+            'rejected' => 'Rejected',
         ];
 
         return $labels[$this->status] ?? ucfirst((string) $this->status);
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->payment_status === 'paid';
+    }
+
+    public function getPaymentStatusLabelAttribute(): string
+    {
+        return $this->isPaid() ? 'Paid' : 'Unpaid';
+    }
+
+    /**
+     * Split legacy combined status values (unpaid/paid) from verification.
+     *
+     * @return array{status: string, payment_status: string}
+     */
+    public static function normalizeRegistrationState(
+        ?string $status = null,
+        ?string $paymentStatus = null,
+        bool $hasReceipt = false
+    ): array {
+        $verification = $status;
+        $payment = $paymentStatus;
+
+        if ($verification === 'paid') {
+            $payment = $payment ?: 'paid';
+            $verification = 'pending';
+        } elseif ($verification === 'unpaid') {
+            $payment = $payment ?: 'unpaid';
+            $verification = 'pending';
+        }
+
+        if (! in_array($verification, ['pending', 'approved', 'rejected'], true)) {
+            $verification = 'pending';
+        }
+
+        if (! in_array($payment, ['unpaid', 'paid'], true)) {
+            $payment = $hasReceipt ? 'paid' : 'unpaid';
+        }
+
+        return [
+            'status' => $verification,
+            'payment_status' => $payment,
+        ];
     }
 
     public function getSumberLabelAttribute(): string

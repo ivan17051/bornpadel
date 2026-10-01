@@ -30,6 +30,7 @@ class RegisterPlayerRequest extends FormRequest
             'tgl_lahir' => ['nullable', 'date', 'before:today'],
             'rating' => ['nullable', 'numeric', 'min:0', 'max:10'],
             'status' => ['nullable', 'in:pending,approved,rejected,unpaid,paid'],
+            'payment_status' => ['nullable', 'in:unpaid,paid'],
             'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ];
     }

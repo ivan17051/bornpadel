@@ -84,6 +84,7 @@ class DoublePartnerManagementService
                 'id_turnamen' => $turnamen->id,
                 'id_pemain1' => $pemain->id,
                 'status' => $primary->status,
+                'payment_status' => $primary->payment_status ?: 'unpaid',
                 'bukti_bayar' => $primary->bukti_bayar,
                 'sumber' => $primary->sumber ?? TurnamenPeserta::SUMBER_INTERNAL,
             ]);

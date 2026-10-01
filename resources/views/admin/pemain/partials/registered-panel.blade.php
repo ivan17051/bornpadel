@@ -62,20 +62,26 @@
             @if (request('dir'))
                 <input type="hidden" name="dir" value="{{ request('dir') }}">
             @endif
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <label class="form-label small text-muted">Cari</label>
                 <input type="text" name="search" class="form-control" placeholder="Nama atau no. HP..."
                        value="{{ request('search') }}">
             </div>
-            <div class="col-md-3">
-                <label class="form-label small text-muted">Status Pendaftaran</label>
+            <div class="col-md-2">
+                <label class="form-label small text-muted">Verifikasi</label>
                 <select name="status" class="form-select">
-                    <option value="">Semua Status</option>
+                    <option value="">Semua</option>
                     <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
-                    <option value="unpaid" {{ request('status') === 'unpaid' ? 'selected' : '' }}>Unpaid</option>
-                    <option value="paid" {{ request('status') === 'paid' ? 'selected' : '' }}>Paid</option>
                     <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
                     <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-muted">Pembayaran</label>
+                <select name="payment_status" class="form-select">
+                    <option value="">Semua</option>
+                    <option value="unpaid" {{ request('payment_status') === 'unpaid' || request('status') === 'unpaid' ? 'selected' : '' }}>Unpaid</option>
+                    <option value="paid" {{ request('payment_status') === 'paid' || request('status') === 'paid' ? 'selected' : '' }}>Paid</option>
                 </select>
             </div>
             <div class="col-md-4">
@@ -240,9 +246,7 @@
                                     {{ $pemain2 ? number_format($pemain2->rating, 1) : '—' }}
                                 </td>
                                 <td>
-                                    <span class="badge status-badge-{{ $entry->status }}" data-status-cell>
-                                        {{ ucfirst($entry->status) }}
-                                    </span>
+                                    <x-peserta-status-badges :peserta="$entry" />
                                 </td>
                                 <td class="text-end text-nowrap">
                                     @include('admin.pemain.partials.pemain-pair-row-actions', [
@@ -277,7 +281,7 @@
                                 $pesertaRow = $turnamen ? $item->turnamenPesertaAsPemain1->first() : null;
                                 $partnerPemain = $showPartnerColumn ? optional($pesertaRow)->partner_pemain : null;
                                 $registrationStatus = optional($pesertaRow)->status;
-                                $canBulkApprove = $showBulkActions && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
+                                $canBulkApprove = $showBulkActions && in_array($registrationStatus, ['pending', 'rejected'], true);
                                 $friendlyGroup = $showFriendlyGroups
                                     ? optional(optional($pesertaRow)->grupPendaftaranMember)->grupPendaftaran
                                     : null;
@@ -357,13 +361,7 @@
                                 <td class="d-none d-lg-table-cell">{{ $item->gender === 'male' ? 'Laki-laki' : 'Perempuan' }}</td>
                                 <td class="d-none d-lg-table-cell">{{ number_format($item->rating, 1) }}</td>
                                 <td>
-                                    @if ($registrationStatus)
-                                        <span class="badge status-badge-{{ $registrationStatus }}" data-status-cell>
-                                            {{ ucfirst($registrationStatus) }}
-                                        </span>
-                                    @else
-                                        <span class="text-muted small">—</span>
-                                    @endif
+                                    <x-peserta-status-badges :peserta="$pesertaRow" />
                                 </td>
                                 <td class="text-end text-nowrap">
                                     @php

@@ -406,11 +406,14 @@ class RegistrationController extends Controller
 
     protected function playerPayload(Pemain $pemain, $turnamen, $idKategori = null): array
     {
+        $peserta = $pemain->pesertaForTurnamen($turnamen, $idKategori);
+
         return [
             'id' => $pemain->id,
             'nama' => $pemain->nama,
             'no_hp' => $pemain->no_hp,
-            'status' => $this->registrationService->getRegistrationStatus($pemain, $turnamen, $idKategori),
+            'status' => optional($peserta)->status,
+            'payment_status' => optional($peserta)->payment_status,
         ];
     }
 

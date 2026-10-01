@@ -35,8 +35,8 @@ class RegisteredPemainListingService
                 ->whereHas('pasanganAsPeserta1')
                 ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1']);
 
-            if ($request->filled('status')) {
-                $pesertaQuery->where('status', $request->status);
+            if ($request->filled('status') || $request->filled('payment_status')) {
+                $this->applyRegistrationFilters($pesertaQuery, $request);
             }
 
             if ($request->filled('search')) {
@@ -70,9 +70,7 @@ class RegisteredPemainListingService
         $query->where(function ($builder) use ($kategoriId, $request) {
             $builder->whereHas('turnamenPesertaAsPemain1', function ($q) use ($kategoriId, $request) {
                 $q->where('id_kategori', $kategoriId);
-                if ($request->filled('status')) {
-                    $q->where('status', $request->status);
-                }
+                $this->applyRegistrationFilters($q, $request);
             });
         });
 
@@ -87,10 +85,7 @@ class RegisteredPemainListingService
         $query->with([
             'turnamenPesertaAsPemain1' => function ($q) use ($kategoriId, $request, $turnamen) {
                 $q->where('id_kategori', $kategoriId);
-
-                if ($request->filled('status')) {
-                    $q->where('status', $request->status);
-                }
+                $this->applyRegistrationFilters($q, $request);
 
                 if ($turnamen->requiresPairRegistration()) {
                     $q->with(TurnamenPeserta::partnerPemainEagerLoads());
@@ -147,7 +142,7 @@ class RegisteredPemainListingService
             ? (int) $kategoriId
             : (int) $turnamen->resolveKategori()->id;
 
-        $allowed = ['nama', 'no_hp', 'gender', 'rating', 'status'];
+        $allowed = ['nama', 'no_hp', 'gender', 'rating', 'status', 'payment_status'];
 
         if ($turnamen->requiresPairRegistration()) {
             $allowed[] = 'partner';
@@ -170,6 +165,17 @@ class RegisteredPemainListingService
                         ->where('tp_sort.id_kategori', '=', $kategoriId);
                 })
                 ->orderBy('tp_sort.status', $dir);
+
+            return;
+        }
+
+        if ($sort === 'payment_status') {
+            $query->select('m_pemain.*')
+                ->join('turnamen_peserta as tp_pay_sort', function ($join) use ($kategoriId) {
+                    $join->on('m_pemain.id', '=', 'tp_pay_sort.id_pemain1')
+                        ->where('tp_pay_sort.id_kategori', '=', $kategoriId);
+                })
+                ->orderBy('tp_pay_sort.payment_status', $dir);
 
             return;
         }
@@ -223,6 +229,7 @@ class RegisteredPemainListingService
             'pemain2_gender',
             'pemain2_rating',
             'status',
+            'payment_status',
         ];
 
         if (! in_array($sort, $allowed, true)) {
@@ -251,7 +258,32 @@ class RegisteredPemainListingService
             return;
         }
 
+        if ($sort === 'payment_status') {
+            $query->orderBy('turnamen_peserta.payment_status', $dir);
+
+            return;
+        }
+
         $query->orderBy('turnamen_peserta.status', $dir);
+    }
+
+    protected function applyRegistrationFilters($query, Request $request): void
+    {
+        $status = $request->input('status');
+        $payment = $request->input('payment_status');
+
+        if (in_array($status, ['unpaid', 'paid'], true) && ! $request->filled('payment_status')) {
+            $payment = $status;
+            $status = null;
+        }
+
+        if (in_array($status, ['pending', 'approved', 'rejected'], true)) {
+            $query->where('status', $status);
+        }
+
+        if (in_array($payment, ['unpaid', 'paid'], true)) {
+            $query->where('payment_status', $payment);
+        }
     }
 
     protected function resolveSoloPesertaOptions(Turnamen $turnamen, $idKategori = null)

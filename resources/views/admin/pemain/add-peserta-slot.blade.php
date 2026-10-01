@@ -51,7 +51,7 @@
 
                 <div class="{{ $showForm ? 'mt-3' : '' }}">
                     <div class="text-muted small text-uppercase">Status Pendaftaran</div>
-                    <span class="badge status-badge-{{ $peserta->status }}">{{ ucfirst($peserta->status) }}</span>
+                    <x-peserta-status-badges :peserta="$peserta" />
                 </div>
             </div>
         </div>

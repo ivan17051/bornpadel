@@ -66,7 +66,7 @@
                 <p>Perlu Verifikasi</p>
             </div>
             <i class="small-box-icon bi bi-hourglass-split"></i>
-            <a href="{{ route('admin.pemain.index', array_merge(['status' => 'paid'], $dashboardTurnamenQuery)) }}" class="small-box-footer link-dark">
+            <a href="{{ route('admin.pemain.index', array_merge(['status' => 'pending'], $dashboardTurnamenQuery)) }}" class="small-box-footer link-dark">
                 Review <i class="bi bi-arrow-right-circle"></i>
             </a>
         </div>
@@ -199,7 +199,7 @@
                                             @endif
                                             <td class="fw-semibold">{{ $peserta->display_name }}</td>
                                             <td>
-                                                <span class="badge status-badge-{{ $peserta->status }}">{{ ucfirst($peserta->status) }}</span>
+                                                <x-peserta-status-badges :peserta="$peserta" />
                                             </td>
                                             <td class="d-none d-lg-table-cell text-muted small">
                                                 {{ optional($peserta->updated_at)->diffForHumans() }}

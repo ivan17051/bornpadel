@@ -69,7 +69,7 @@
         </div>
 
         <div class="card guest-card">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <div class="card-header py-3 d-flex justify-content-end align-items-center gap-2">
                 <span>
                     <i class="bi bi-people me-2"></i>
                     @if ($participantType === 'pairs')
@@ -96,7 +96,13 @@
                                     <span class="text-muted small me-2">#{{ $index + 1 }}</span>
                                     <strong>{{ $item['label'] }}</strong>
                                 </div>
-                                <span class="badge status-badge-{{ $item['status'] }}">{{ ucfirst($item['status']) }}</span>
+                                <x-peserta-status-badges
+                                    class="justify-content-end"
+                                    :status="$item['status']"
+                                    :payment-status="$item['payment_status'] ?? 'unpaid'"
+                                    :status-label="$item['status_label'] ?? null"
+                                    :payment-label="$item['payment_status_label'] ?? null"
+                                />
                             </div>
                         @endforeach
                     </div>
@@ -115,7 +121,7 @@
                                     @if ($participantType === 'double_individual')
                                         <th>Pasangan</th>
                                     @endif
-                                    <th>Status</th>
+                                    <th class="text-end">Status</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -144,8 +150,14 @@
                                                 @endif
                                             </td>
                                         @endif
-                                        <td>
-                                            <span class="badge status-badge-{{ $item['status'] }}">{{ ucfirst($item['status']) }}</span>
+                                        <td class="text-end">
+                                            <x-peserta-status-badges
+                                                class="justify-content-end"
+                                                :status="$item['status']"
+                                                :payment-status="$item['payment_status'] ?? 'unpaid'"
+                                                :status-label="$item['status_label'] ?? null"
+                                                :payment-label="$item['payment_status_label'] ?? null"
+                                            />
                                         </td>
                                     </tr>
                                 @endforeach

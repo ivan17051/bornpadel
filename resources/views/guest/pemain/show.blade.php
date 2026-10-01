@@ -71,9 +71,12 @@
                                             @endif
                                         </td>
                                         <td>
-                                            <span class="badge status-badge-{{ $entry['status'] }}">
-                                                {{ $entry['status_label'] }}
-                                            </span>
+                                            <x-peserta-status-badges
+                                                :status="$entry['status']"
+                                                :payment-status="$entry['payment_status'] ?? 'unpaid'"
+                                                :status-label="$entry['status_label'] ?? null"
+                                                :payment-label="$entry['payment_status_label'] ?? null"
+                                            />
                                         </td>
                                         <td class="d-none d-md-table-cell text-muted small">
                                             {{ optional($entry['registered_at'])->format('d M Y') }}

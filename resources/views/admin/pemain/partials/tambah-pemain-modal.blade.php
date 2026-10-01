@@ -17,11 +17,19 @@
                 <input type="hidden" name="id_turnamen" value="{{ $turnamen->id }}">
 
                 <div class="mb-3">
-                    <label for="modal_status" class="form-label">Status Pendaftaran <span class="text-danger">*</span></label>
+                    <label for="modal_status" class="form-label">Verifikasi <span class="text-danger">*</span></label>
                     <select name="status" id="modal_status" class="form-select" required>
-                        @foreach (['approved' => 'Approved', 'pending' => 'Pending', 'unpaid' => 'Unpaid', 'paid' => 'Paid'] as $value => $label)
+                        @foreach (['approved' => 'Approved', 'pending' => 'Pending'] as $value => $label)
                             <option value="{{ $value }}" {{ $value === 'approved' ? 'selected' : '' }}>{{ $label }}</option>
                         @endforeach
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="modal_payment_status" class="form-label">Pembayaran <span class="text-danger">*</span></label>
+                    <select name="payment_status" id="modal_payment_status" class="form-select" required>
+                        <option value="unpaid" selected>Unpaid</option>
+                        <option value="paid">Paid</option>
                     </select>
                 </div>
 

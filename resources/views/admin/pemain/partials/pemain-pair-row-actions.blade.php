@@ -2,7 +2,7 @@
     $pemainEditFrom = $pemainEditFrom ?? 'index';
     $pemainEditParams = array_filter(array_merge(
         ['from' => $pemainEditFrom],
-        request()->only(['id_turnamen', 'search', 'status']),
+        request()->only(['id_turnamen', 'search', 'status', 'payment_status']),
         $pemainEditFrom === 'turnamen-operasi' ? ['tab' => 'pemain'] : []
     ), function ($value) {
         return $value !== null && $value !== '';
@@ -14,9 +14,11 @@
 
     $representativePemain = $pemain1 ?? $pemain2;
     $missingSlot = ! $pemain1 ? 1 : (! $pemain2 ? 2 : null);
-    $hasPairApprove = $turnamen && $representativePemain && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
+    $hasPairApprove = $turnamen && $representativePemain && in_array($registrationStatus, ['pending', 'rejected'], true);
     $hasPairReject = $turnamen && $representativePemain && ! $turnamenOngoing
-        && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'approved'], true);
+        && in_array($registrationStatus, ['pending', 'approved'], true);
+    $hasMarkPaid = $turnamen && $representativePemain && optional($peserta)->payment_status !== 'paid';
+    $hasMarkUnpaid = $turnamen && $representativePemain && optional($peserta)->payment_status === 'paid';
     $hasDelete = $turnamen && ! $turnamenOngoing;
 @endphp
 
@@ -60,6 +62,30 @@
             'peserta' => $peserta ?? null,
             'turnamen' => $turnamen ?? null,
         ])
+
+        @if ($hasMarkPaid)
+            <li><hr class="dropdown-divider"></li>
+            <li>
+                <button type="button"
+                        class="dropdown-item btn-mark-paid"
+                        data-url="{{ route('admin.pemain.status', $representativePemain) }}"
+                        data-turnamen="{{ $turnamen->id }}">
+                    <i class="bi bi-cash-coin me-2"></i> Tandai Sudah Bayar
+                </button>
+            </li>
+        @endif
+
+        @if ($hasMarkUnpaid)
+            <li><hr class="dropdown-divider"></li>
+            <li>
+                <button type="button"
+                        class="dropdown-item btn-mark-unpaid"
+                        data-url="{{ route('admin.pemain.status', $representativePemain) }}"
+                        data-turnamen="{{ $turnamen->id }}">
+                    <i class="bi bi-cash me-2"></i> Tandai Belum Bayar
+                </button>
+            </li>
+        @endif
 
         @if ($hasPairApprove)
             <li><hr class="dropdown-divider"></li>

@@ -163,7 +163,8 @@ class PemainController extends Controller
                 $turnamen,
                 $request->pemain_ids,
                 $status,
-                $this->capacityService
+                $this->capacityService,
+                $request->input('payment_status')
             );
         } catch (\RuntimeException $e) {
             return response()->json([
@@ -206,7 +207,8 @@ class PemainController extends Controller
                 $data['status'],
                 $request->file('foto'),
                 $request->file('bukti_bayar'),
-                $this->capacityService
+                $this->capacityService,
+                $data['payment_status'] ?? null
             );
         } catch (\RuntimeException $e) {
             return response()->json([
@@ -265,6 +267,7 @@ class PemainController extends Controller
             'id_turnamen' => $turnamen->id,
             'no_hp' => $noHp,
             'status' => $request->input('status', 'approved'),
+            'payment_status' => $request->input('payment_status', 'unpaid'),
         ];
 
         $existingPemain = Pemain::where('no_hp', $noHp)->first();
@@ -302,15 +305,23 @@ class PemainController extends Controller
                 throw new \RuntimeException('Pemain sudah terdaftar pada turnamen ini.');
             }
 
-            if ($status === 'approved') {
+            $buktiPath = $this->registrationService->storeBuktiBayar($buktiBayar);
+            $state = TurnamenPeserta::normalizeRegistrationState(
+                $status,
+                $data['payment_status'] ?? null,
+                (bool) $buktiPath
+            );
+
+            if ($state['status'] === 'approved') {
                 $this->capacityService->assertCanApprove($turnamen, 1);
             }
 
             TurnamenPeserta::create([
                 'id_turnamen' => $turnamen->id,
                 'id_pemain1' => $pemain->id,
-                'status' => $status,
-                'bukti_bayar' => $this->registrationService->storeBuktiBayar($buktiBayar),
+                'status' => $state['status'],
+                'payment_status' => $state['payment_status'],
+                'bukti_bayar' => $buktiPath,
                 'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]);
         } catch (\RuntimeException $e) {
@@ -457,6 +468,7 @@ class PemainController extends Controller
                 'id_turnamen' => $peserta->id_turnamen,
                 'id_pemain1' => $pemain->id,
                 'status' => $peserta->status,
+                'payment_status' => $peserta->payment_status ?: 'unpaid',
                 'bukti_bayar' => $peserta->bukti_bayar,
                 'sumber' => $peserta->sumber ?? TurnamenPeserta::SUMBER_INTERNAL,
             ]);
@@ -559,10 +571,18 @@ class PemainController extends Controller
     public function updateStatus(Request $request, Pemain $pemain)
     {
         $request->validate([
-            'status' => ['required', 'in:approved,rejected,pending,unpaid,paid'],
+            'status' => ['nullable', 'in:approved,rejected,pending,unpaid,paid'],
+            'payment_status' => ['nullable', 'in:unpaid,paid'],
             'id_turnamen' => ['required', 'exists:m_turnamen,id'],
             'bukti_bayar' => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:5120'],
         ]);
+
+        if (! $request->filled('status') && ! $request->filled('payment_status') && ! $request->hasFile('bukti_bayar')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pilih status verifikasi atau pembayaran.',
+            ], 422);
+        }
 
         $this->tournamentAccess->assertTurnamenId((int) $request->id_turnamen);
         $this->tournamentAccess->assertPemainInAssignedTurnamen($pemain);
@@ -585,7 +605,15 @@ class PemainController extends Controller
             $peserta->refresh();
         }
 
-        if ($request->status === 'approved' && $peserta->status !== 'approved') {
+        $verification = $request->input('status');
+        $payment = $request->input('payment_status');
+
+        if (in_array($verification, ['unpaid', 'paid'], true)) {
+            $payment = $payment ?: $verification;
+            $verification = null;
+        }
+
+        if ($verification === 'approved' && $peserta->status !== 'approved') {
             try {
                 $this->approvalService->approvePeserta($peserta, $peserta->turnamen);
             } catch (\RuntimeException $e) {
@@ -599,23 +627,33 @@ class PemainController extends Controller
             }
 
             $peserta->refresh();
-        } elseif ($request->status !== 'approved') {
-            $peserta->update(['status' => $request->status]);
+        } elseif (in_array($verification, ['pending', 'rejected'], true)) {
+            $peserta->update(['status' => $verification]);
         }
 
+        if (in_array($payment, ['unpaid', 'paid'], true)) {
+            $peserta->update(['payment_status' => $payment]);
+        }
+
+        $peserta->refresh();
         $isPairEntry = $peserta->turnamen && $peserta->turnamen->playsAsPairs() && $peserta->isCompletePair();
 
-        $messages = [
-            'approved' => $isPairEntry ? 'Pasangan berhasil disetujui.' : 'Pemain berhasil disetujui.',
-            'rejected' => $isPairEntry ? 'Pasangan ditolak.' : 'Pemain ditolak.',
-            'pending' => $isPairEntry ? 'Status pasangan dikembalikan ke pending.' : 'Status pemain dikembalikan ke pending.',
-            'unpaid' => $isPairEntry ? 'Status pasangan diubah menjadi unpaid.' : 'Status pemain diubah menjadi unpaid.',
-            'paid' => $isPairEntry ? 'Status pasangan diubah menjadi paid.' : 'Status pemain diubah menjadi paid.',
-        ];
+        $message = 'Status pendaftaran diperbarui.';
+        if ($verification === 'approved') {
+            $message = $isPairEntry ? 'Pasangan berhasil disetujui.' : 'Pemain berhasil disetujui.';
+        } elseif ($verification === 'rejected') {
+            $message = $isPairEntry ? 'Pasangan ditolak.' : 'Pemain ditolak.';
+        } elseif ($verification === 'pending') {
+            $message = $isPairEntry ? 'Status pasangan dikembalikan ke menunggu.' : 'Status pemain dikembalikan ke menunggu.';
+        } elseif ($payment === 'paid') {
+            $message = $isPairEntry ? 'Pembayaran pasangan ditandai sudah bayar.' : 'Pembayaran ditandai sudah bayar.';
+        } elseif ($payment === 'unpaid') {
+            $message = $isPairEntry ? 'Pembayaran pasangan ditandai belum bayar.' : 'Pembayaran ditandai belum bayar.';
+        }
 
         return response()->json([
             'success' => true,
-            'message' => $messages[$request->status],
+            'message' => $message,
             'data' => $peserta->fresh(),
         ]);
     }
@@ -898,7 +936,7 @@ class PemainController extends Controller
         if ($from === 'turnamen-operasi') {
             return array_filter(array_merge(
                 ['from' => 'turnamen-operasi', 'tab' => 'pemain'],
-                $request->only(['id_turnamen', 'search', 'status'])
+                $request->only(['id_turnamen', 'search', 'status', 'payment_status'])
             ), function ($value) {
                 return $value !== null && $value !== '';
             });
@@ -906,7 +944,7 @@ class PemainController extends Controller
 
         return array_filter(array_merge(
             ['from' => 'index'],
-            $request->only(['id_turnamen', 'search', 'status'])
+            $request->only(['id_turnamen', 'search', 'status', 'payment_status'])
         ), function ($value) {
             return $value !== null && $value !== '';
         });
@@ -927,10 +965,10 @@ class PemainController extends Controller
         if ($from === 'turnamen-operasi') {
             return route('admin.turnamen-operasi.index', array_merge(
                 ['tab' => 'pemain'],
-                $request->only(['id_turnamen', 'search', 'status'])
+                $request->only(['id_turnamen', 'search', 'status', 'payment_status'])
             ));
         }
 
-        return route('admin.pemain.index', $request->only(['id_turnamen', 'search', 'status']));
+        return route('admin.pemain.index', $request->only(['id_turnamen', 'search', 'status', 'payment_status']));
     }
 }

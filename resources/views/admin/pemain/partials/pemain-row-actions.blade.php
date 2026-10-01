@@ -2,7 +2,7 @@
     $pemainEditFrom = $pemainEditFrom ?? 'index';
     $pemainEditParams = array_filter(array_merge(
         ['from' => $pemainEditFrom],
-        request()->only(['id_turnamen', 'search', 'status']),
+        request()->only(['id_turnamen', 'search', 'status', 'payment_status']),
         $pemainEditFrom === 'turnamen-operasi' ? ['tab' => 'pemain'] : []
     ), function ($value) {
         return $value !== null && $value !== '';
@@ -12,8 +12,10 @@
         $pemainEditParams['id_turnamen'] = $turnamen->id;
     }
 
-    $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'rejected'], true);
-    $hasReject = $turnamen && ! $turnamenOngoing && in_array($registrationStatus, ['pending', 'unpaid', 'paid', 'approved'], true);
+    $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'rejected'], true);
+    $hasReject = $turnamen && ! $turnamenOngoing && in_array($registrationStatus, ['pending', 'approved'], true);
+    $hasMarkPaid = $turnamen && $peserta && optional($peserta)->payment_status !== 'paid';
+    $hasMarkUnpaid = $turnamen && $peserta && optional($peserta)->payment_status === 'paid';
     $hasDelete = $turnamen && ! $turnamenOngoing;
     $canManagePartner = ($showPartnerActions ?? false) && $peserta;
     $hasSetPartner = $canManagePartner && ! $peserta->isPaired();
@@ -95,6 +97,28 @@
                     </button>
                 </li>
             @endif
+        @endif
+
+        @if ($hasMarkPaid)
+            <li>
+                <button type="button"
+                        class="dropdown-item btn-mark-paid"
+                        data-url="{{ route('admin.pemain.status', $pemain) }}"
+                        data-turnamen="{{ $turnamen->id }}">
+                    <i class="bi bi-cash-coin me-2"></i> Tandai Sudah Bayar
+                </button>
+            </li>
+        @endif
+
+        @if ($hasMarkUnpaid)
+            <li>
+                <button type="button"
+                        class="dropdown-item btn-mark-unpaid"
+                        data-url="{{ route('admin.pemain.status', $pemain) }}"
+                        data-turnamen="{{ $turnamen->id }}">
+                    <i class="bi bi-cash me-2"></i> Tandai Belum Bayar
+                </button>
+            </li>
         @endif
 
         @if ($hasApprove)

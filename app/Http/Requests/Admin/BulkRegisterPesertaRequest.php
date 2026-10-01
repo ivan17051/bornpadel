@@ -18,6 +18,7 @@ class BulkRegisterPesertaRequest extends FormRequest
             'pemain_ids' => ['required', 'array', 'min:1'],
             'pemain_ids.*' => ['integer', 'distinct', 'exists:m_pemain,id'],
             'status' => ['nullable', 'in:pending,approved,rejected,unpaid,paid'],
+            'payment_status' => ['nullable', 'in:unpaid,paid'],
         ];
     }
 

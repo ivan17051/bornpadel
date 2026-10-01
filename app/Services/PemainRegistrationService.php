@@ -221,7 +221,8 @@ class PemainRegistrationService
         Turnamen $turnamen,
         array $pemainIds,
         string $status = 'approved',
-        ?TournamentCapacityService $capacityService = null
+        ?TournamentCapacityService $capacityService = null,
+        ?string $paymentStatus = null
     ): array {
         $pemainIds = array_values(array_unique(array_map('intval', $pemainIds)));
 
@@ -259,8 +260,9 @@ class PemainRegistrationService
         }
 
         $capacityService = $capacityService ?? app(TournamentCapacityService::class);
+        $state = TurnamenPeserta::normalizeRegistrationState($status, $paymentStatus, false);
 
-        if ($status === 'approved') {
+        if ($state['status'] === 'approved') {
             $capacityService->assertCanApprove($turnamen, count($toRegister));
         }
 
@@ -270,7 +272,8 @@ class PemainRegistrationService
             $registered->push(TurnamenPeserta::create([
                 'id_turnamen' => $turnamen->id,
                 'id_pemain1' => $pemain->id,
-                'status' => $status,
+                'status' => $state['status'],
+                'payment_status' => $state['payment_status'],
                 'bukti_bayar' => null,
                 'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
             ]));
@@ -292,7 +295,8 @@ class PemainRegistrationService
         string $status = 'approved',
         ?UploadedFile $foto = null,
         ?UploadedFile $buktiBayar = null,
-        ?TournamentCapacityService $capacityService = null
+        ?TournamentCapacityService $capacityService = null,
+        ?string $paymentStatus = null
     ): Pemain {
         if ($this->findPemainByPhone($data['no_hp'])) {
             throw new RuntimeException(
@@ -301,8 +305,10 @@ class PemainRegistrationService
         }
 
         $capacityService = $capacityService ?? app(TournamentCapacityService::class);
+        $buktiPath = $this->storeBuktiBayar($buktiBayar);
+        $state = TurnamenPeserta::normalizeRegistrationState($status, $paymentStatus, (bool) $buktiPath);
 
-        if ($status === 'approved') {
+        if ($state['status'] === 'approved') {
             $capacityService->assertCanApprove($turnamen, 1);
         }
 
@@ -311,8 +317,9 @@ class PemainRegistrationService
         TurnamenPeserta::create([
             'id_turnamen' => $turnamen->id,
             'id_pemain1' => $pemain->id,
-            'status' => $status,
-            'bukti_bayar' => $this->storeBuktiBayar($buktiBayar),
+            'status' => $state['status'],
+            'payment_status' => $state['payment_status'],
+            'bukti_bayar' => $buktiPath,
             'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
         ]);
 
@@ -342,6 +349,9 @@ class PemainRegistrationService
                         'pemain1' => optional($entry->pemain1)->nama,
                         'pemain2' => optional(optional($partner)->pemain1)->nama,
                         'status' => $entry->status,
+                        'status_label' => $entry->status_label,
+                        'payment_status' => $entry->payment_status,
+                        'payment_status_label' => $entry->payment_status_label,
                     ];
                 });
 
@@ -388,6 +398,9 @@ class PemainRegistrationService
                     ? trim((optional($peserta->pemain1)->nama ?? '') . ' / ' . $partnerName)
                     : (optional($peserta->pemain1)->nama ?? '-'),
                 'status' => $peserta->status,
+                'status_label' => $peserta->status_label,
+                'payment_status' => $peserta->payment_status,
+                'payment_status_label' => $peserta->payment_status_label,
                 'is_paired' => $peserta->isPaired(),
                 'group_id' => $group ? (int) $group->id : null,
                 'group_nama' => $group ? (string) $group->nama : null,
@@ -431,12 +444,14 @@ class PemainRegistrationService
         }
 
         $buktiPath = $this->storeBuktiBayar($buktiBayar);
+        $state = TurnamenPeserta::normalizeRegistrationState(null, null, (bool) $buktiPath);
 
         TurnamenPeserta::create([
             'id_turnamen' => $turnamen->id,
             'id_kategori' => $kategori->id,
             'id_pemain1' => $pemain->id,
-            'status' => $this->resolveRegistrationStatusFromBukti($buktiPath),
+            'status' => $state['status'],
+            'payment_status' => $state['payment_status'],
             'bukti_bayar' => $buktiPath,
             'sumber' => $sumber,
         ]);
@@ -481,10 +496,10 @@ class PemainRegistrationService
             throw new RuntimeException('Nomor HP pemain 2 sudah terdaftar pada kategori ini.');
         }
 
-        $status = $statusOverride ?: $this->resolveRegistrationStatusFromBukti(null, $buktiBayar);
+        $state = TurnamenPeserta::normalizeRegistrationState($statusOverride, null, (bool) $buktiBayar);
         $capacityService = $capacityService ?? app(TournamentCapacityService::class);
 
-        if ($status === 'approved') {
+        if ($state['status'] === 'approved') {
             $capacityService->assertCanApprove($turnamen, 2, $kategori->id);
         }
 
@@ -498,7 +513,7 @@ class PemainRegistrationService
             $buktiBayar,
             $sumber,
             $updateExistingProfile,
-            $status
+            $state
         ) {
             $pemain = $this->upsertPemain($player1, $foto1, $updateExistingProfile);
             $partner = $this->upsertPemain($player2, $foto2, $updateExistingProfile);
@@ -508,7 +523,8 @@ class PemainRegistrationService
                 'id_turnamen' => $turnamen->id,
                 'id_kategori' => $kategori->id,
                 'id_pemain1' => $pemain->id,
-                'status' => $status,
+                'status' => $state['status'],
+                'payment_status' => $state['payment_status'],
                 'bukti_bayar' => $buktiPath,
                 'sumber' => $sumber,
             ]);
@@ -517,7 +533,8 @@ class PemainRegistrationService
                 'id_turnamen' => $turnamen->id,
                 'id_kategori' => $kategori->id,
                 'id_pemain1' => $partner->id,
-                'status' => $status,
+                'status' => $state['status'],
+                'payment_status' => $state['payment_status'],
                 'bukti_bayar' => $buktiPath,
                 'sumber' => $sumber,
             ]);
@@ -585,10 +602,10 @@ class PemainRegistrationService
 
         $this->assertGroupNameAvailable($turnamen, $namaGrup, $kategori->id);
 
-        $status = $statusOverride ?: $this->resolveRegistrationStatusFromBukti(null, $buktiBayar);
+        $state = TurnamenPeserta::normalizeRegistrationState($statusOverride, null, (bool) $buktiBayar);
         $capacityService = $capacityService ?? app(TournamentCapacityService::class);
 
-        if ($status === 'approved') {
+        if ($state['status'] === 'approved') {
             $capacityService->assertCanApprove($turnamen, $expectedSize, $kategori->id);
         }
 
@@ -601,7 +618,7 @@ class PemainRegistrationService
             $buktiBayar,
             $sumber,
             $updateExistingProfile,
-            $status
+            $state
         ) {
             $this->assertGroupNameAvailable($turnamen, $namaGrup, $kategori->id);
 
@@ -621,7 +638,8 @@ class PemainRegistrationService
                     'id_turnamen' => $turnamen->id,
                     'id_kategori' => $kategori->id,
                     'id_pemain1' => $pemain->id,
-                    'status' => $status,
+                    'status' => $state['status'],
+                    'payment_status' => $state['payment_status'],
                     'bukti_bayar' => $buktiPath,
                     'sumber' => $sumber,
                 ]);
@@ -1169,13 +1187,21 @@ class PemainRegistrationService
         $peserta->delete();
     }
 
-    public function resolveRegistrationStatusFromBukti(?string $buktiBayarPath = null, ?UploadedFile $buktiBayar = null): string
+    public function resolvePaymentStatusFromBukti(?string $buktiBayarPath = null, ?UploadedFile $buktiBayar = null): string
     {
         if ($buktiBayar || $buktiBayarPath) {
             return 'paid';
         }
 
         return 'unpaid';
+    }
+
+    /**
+     * @deprecated Use resolvePaymentStatusFromBukti(); verification is now a separate field.
+     */
+    public function resolveRegistrationStatusFromBukti(?string $buktiBayarPath = null, ?UploadedFile $buktiBayar = null): string
+    {
+        return $this->resolvePaymentStatusFromBukti($buktiBayarPath, $buktiBayar);
     }
 
     public function storeBuktiBayar(?UploadedFile $buktiBayar): ?string
@@ -1196,11 +1222,8 @@ class PemainRegistrationService
         $this->paymentReceiptService->delete($peserta->bukti_bayar);
         $updates = [
             'bukti_bayar' => $this->paymentReceiptService->store($buktiBayar),
+            'payment_status' => 'paid',
         ];
-
-        if (in_array($peserta->status, ['unpaid', 'pending'], true)) {
-            $updates['status'] = 'paid';
-        }
 
         $peserta->update($updates);
     }

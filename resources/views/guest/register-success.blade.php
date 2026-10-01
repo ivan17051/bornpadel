@@ -69,7 +69,8 @@
 
                 @foreach ($players as $index => $player)
                     @php
-                        $playerStatus = $player['status'] ?? 'unpaid';
+                        $playerStatus = $player['status'] ?? 'pending';
+                        $playerPayment = $player['payment_status'] ?? 'unpaid';
                     @endphp
                     <div class="card bg-light border-0 text-start {{ $loop->last ? 'mb-4' : 'mb-3' }}">
                         <div class="card-body py-3">
@@ -89,19 +90,10 @@
                                 </div>
                                 <div class="col-12">
                                     <div class="info-label">Status</div>
-                                    @if ($playerStatus === 'paid')
-                                        <span class="badge bg-info text-dark">
-                                            <i class="bi bi-hourglass-split me-1"></i> Menunggu Verifikasi Admin
-                                        </span>
-                                    @elseif ($playerStatus === 'approved')
-                                        <span class="badge bg-success">
-                                            <i class="bi bi-check-circle me-1"></i> Disetujui
-                                        </span>
-                                    @else
-                                        <span class="badge bg-warning text-dark">
-                                            <i class="bi bi-credit-card me-1"></i> Belum Upload Bukti Bayar
-                                        </span>
-                                    @endif
+                                    <x-peserta-status-badges
+                                        :status="$playerStatus"
+                                        :payment-status="$playerPayment"
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -109,7 +101,7 @@
                 @endforeach
 
                 <p class="small text-muted mb-4">
-                    @if (collect($players)->contains(fn ($player) => ($player['status'] ?? 'unpaid') === 'unpaid'))
+                    @if (collect($players)->contains(fn ($player) => ($player['payment_status'] ?? 'unpaid') === 'unpaid'))
                         Silakan unggah bukti pembayaran jika belum dilakukan. Tim kami akan memverifikasi setelah bukti diterima.
                     @else
                         Tim kami akan menghubungi Anda melalui WhatsApp setelah pendaftaran disetujui.

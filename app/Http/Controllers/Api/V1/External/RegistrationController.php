@@ -63,15 +63,20 @@ class RegistrationController extends Controller
             ], 422);
         }
 
-        if ($request->filled('status') && $request->status !== 'pending') {
+        if ($request->filled('status') || $request->filled('payment_status')) {
             $peserta = $pemain->pesertaForTurnamen($turnamen, $kategori->id);
 
             if ($peserta) {
-                $peserta->update([
-                    'status' => $request->status,
-                ]);
+                $state = TurnamenPeserta::normalizeRegistrationState(
+                    $request->input('status', $peserta->status),
+                    $request->input('payment_status'),
+                    (bool) $peserta->bukti_bayar
+                );
+                $peserta->update($state);
             }
         }
+
+        $peserta = $pemain->pesertaForTurnamen($turnamen, $kategori->id);
 
         return response()->json([
             'success' => true,
@@ -83,7 +88,8 @@ class RegistrationController extends Controller
                 'nama' => $pemain->nama,
                 'no_hp' => $pemain->no_hp,
                 'foto_url' => $pemain->foto_url,
-                'status' => optional($pemain->pesertaForTurnamen($turnamen, $kategori->id))->status,
+                'status' => optional($peserta)->status,
+                'payment_status' => optional($peserta)->payment_status,
             ],
         ], 201);
     }
@@ -138,6 +144,7 @@ class RegistrationController extends Controller
                 'registration' => $peserta ? [
                     'peserta_id' => $peserta->id,
                     'status' => $peserta->status,
+                    'payment_status' => $peserta->payment_status,
                     'sumber' => $peserta->sumber,
                     'bukti_bayar_url' => $peserta->bukti_bayar_url,
                     'paired_at' => $peserta->paired_at
@@ -183,6 +190,7 @@ class RegistrationController extends Controller
                 'pemain_id' => $peserta->id_pemain1,
                 'nama' => $peserta->display_name,
                 'status' => $peserta->status,
+                'payment_status' => $peserta->payment_status,
                 'bukti_bayar' => $peserta->bukti_bayar,
                 'bukti_bayar_url' => $peserta->bukti_bayar_url,
             ],

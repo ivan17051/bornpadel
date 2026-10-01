@@ -27,7 +27,7 @@
                 </div>
                 <div>
                     <div class="text-muted small text-uppercase">Status</div>
-                    <span class="badge status-badge-{{ $peserta->status }}">{{ ucfirst($peserta->status) }}</span>
+                    <x-peserta-status-badges :peserta="$peserta" />
                 </div>
             </div>
         </div>

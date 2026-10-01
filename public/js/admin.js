@@ -445,7 +445,7 @@ const BornPadelAdmin = (function () {
 
             const confirmed = await confirmAction({
                 title: `Daftarkan ${ids.length} pemain terpilih?`,
-                text: 'Pemain akan didaftarkan dengan status Approved. Termasuk pilihan dari hasil pencarian lain.',
+                text: 'Pemain akan didaftarkan dengan status Approved. Pembayaran tetap Unpaid sampai ditandai Paid.',
                 confirmText: 'Ya, daftarkan',
                 icon: 'question',
                 confirmButtonColor: '#198754',
@@ -673,6 +673,52 @@ const BornPadelAdmin = (function () {
                         id_turnamen: parseInt(btn.dataset.turnamen, 10),
                     });
                     showAlert('Pemain ditolak.', 'warning');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                }
+            });
+        });
+
+        document.querySelectorAll('.btn-mark-paid').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const confirmed = await confirmAction({
+                    title: 'Tandai sudah bayar?',
+                    confirmText: 'Ya, sudah bayar',
+                    icon: 'question',
+                    confirmButtonColor: '#0dcaf0',
+                });
+                if (!confirmed) return;
+
+                try {
+                    await apiRequest(btn.dataset.url, 'PATCH', {
+                        payment_status: 'paid',
+                        id_turnamen: parseInt(btn.dataset.turnamen, 10),
+                    });
+                    showAlert('Pembayaran ditandai sudah bayar.', 'success');
+                    reloadPage();
+                } catch (e) {
+                    showAlert(e.message, 'error');
+                }
+            });
+        });
+
+        document.querySelectorAll('.btn-mark-unpaid').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const confirmed = await confirmAction({
+                    title: 'Tandai belum bayar?',
+                    confirmText: 'Ya, belum bayar',
+                    icon: 'warning',
+                    confirmButtonColor: '#fd7e14',
+                });
+                if (!confirmed) return;
+
+                try {
+                    await apiRequest(btn.dataset.url, 'PATCH', {
+                        payment_status: 'unpaid',
+                        id_turnamen: parseInt(btn.dataset.turnamen, 10),
+                    });
+                    showAlert('Pembayaran ditandai belum bayar.', 'warning');
                     reloadPage();
                 } catch (e) {
                     showAlert(e.message, 'error');
