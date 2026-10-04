@@ -93,9 +93,21 @@
                                                     }
                                                 @endphp
                                                 <div class="mb-3 {{ $loop->last ? 'mb-0' : '' }}">
-                                                    <h6 class="small fw-semibold mb-2">
-                                                        <i class="bi bi-table me-1"></i>{{ $histMeja->nama }}
-                                                        <span class="text-muted fw-normal">— {{ $histMembers->count() }} pemain</span>
+                                                    <h6 class="small fw-semibold mb-2 d-flex align-items-center gap-2">
+                                                        <span>
+                                                            <i class="bi bi-table me-1"></i><span class="mahjong-table-name-label">{{ $histMeja->nama }}</span>
+                                                            <span class="text-muted fw-normal">— {{ $histMembers->count() }} pemain</span>
+                                                        </span>
+                                                        @if ($editable)
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-secondary btn-rename-mahjong-table"
+                                                                    data-url="{{ route('admin.matchmaking.meja.rename', $histMeja) }}"
+                                                                    data-turnamen="{{ $turnamen->id }}"
+                                                                    data-nama="{{ $histMeja->nama }}"
+                                                                    title="Ubah nama meja">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
+                                                        @endif
                                                     </h6>
                                                     <div class="table-responsive border rounded">
                                                         <table class="table table-sm table-bordered table-hover mb-0 align-middle {{ $editable ? 'mahjong-group-score-table' : '' }}"

@@ -1357,21 +1357,46 @@ class MatchmakingController extends Controller
 
         try {
             $turnamen = $this->resolveTournament($request);
-            [, $kategoriId] = $this->resolveKategoriFromRequest($request, $turnamen);
+            $this->resolveKategoriFromRequest($request, $turnamen);
 
-            if (! $turnamen->isFriendly()) {
-                throw new RuntimeException('Rename grup saat ini hanya untuk Group Match.');
+            if ($turnamen->isFriendly()) {
+                $grup = $this->friendlyService->renameGroup($turnamen, $grup, $request->input('nama'));
+                $message = 'Nama grup berhasil diperbarui.';
+            } elseif ($turnamen->isMahjong()) {
+                $grup = $this->mahjongService->renameGroup($turnamen, $grup, $request->input('nama'));
+                $message = 'Nama meja berhasil diperbarui.';
+            } else {
+                throw new RuntimeException('Ubah nama hanya untuk Mahjong atau Group Match.');
             }
-
-            $grup = $this->friendlyService->renameGroup($turnamen, $grup, $request->input('nama'));
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Nama grup berhasil diperbarui.',
+            'message' => $message,
             'data' => ['id' => $grup->id, 'nama' => $grup->nama],
+        ]);
+    }
+
+    public function renameMeja(Request $request, TurnamenMeja $meja)
+    {
+        $request->validate([
+            'nama' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $turnamen = $this->resolveTournament($request);
+            $this->resolveKategoriFromRequest($request, $turnamen);
+            $meja = $this->mahjongTeamService->renameMeja($turnamen, $meja, $request->input('nama'));
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Nama meja berhasil diperbarui.',
+            'data' => ['id' => $meja->id, 'nama' => $meja->nama],
         ]);
     }
 

@@ -891,6 +891,42 @@ class MahjongMatchmakingService
         $this->assertActiveMahjongGroup($member->grup);
     }
 
+    public function renameGroup(Turnamen $turnamen, Grup $grup, string $nama): Grup
+    {
+        $this->assertMahjongGroup($grup);
+
+        if ((int) $grup->id_turnamen !== (int) $turnamen->id) {
+            throw new RuntimeException('Grup tidak termasuk turnamen ini.');
+        }
+
+        $nama = trim($nama);
+
+        if ($nama === '') {
+            throw new RuntimeException('Nama meja wajib diisi.');
+        }
+
+        if (mb_strlen($nama) > 255) {
+            throw new RuntimeException('Nama meja maksimal 255 karakter.');
+        }
+
+        $duplicate = Grup::query()
+            ->where('id_kategori', $grup->id_kategori)
+            ->where('babak', $grup->babak)
+            ->where('ronde', $grup->ronde)
+            ->where('is_aktif', $grup->is_aktif)
+            ->where('nama', $nama)
+            ->where('id', '!=', $grup->id)
+            ->exists();
+
+        if ($duplicate) {
+            throw new RuntimeException('Nama meja sudah digunakan pada seating ini.');
+        }
+
+        $grup->update(['nama' => $nama]);
+
+        return $grup->fresh();
+    }
+
     protected function assertMahjongGroup(Grup $grup): void
     {
         $grup->loadMissing('turnamen');

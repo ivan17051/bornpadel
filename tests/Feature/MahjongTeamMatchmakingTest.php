@@ -410,6 +410,7 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertStringContainsString('>Subtotal<', $emptyHtml);
         $this->assertStringContainsString('Belum ada ronde.', $emptyHtml);
         $this->assertStringContainsString('btn-mahjong-input-poin', $emptyHtml);
+        $this->assertStringContainsString('btn-rename-mahjong-table', $emptyHtml);
         $this->assertStringContainsString('mahjongGroupPointsModal', $emptyHtml);
         $this->assertStringNotContainsString('btn-mahjong-team-meja-points', $emptyHtml);
 
@@ -1061,6 +1062,47 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertTrue((bool) $seated->poin_disetujui);
         $this->assertSame($poinBefore, (int) $seated->poin_didapat);
         $this->assertSame(12, (int) $entries[$oldMembers[0]->id]->fresh()->poin);
+    }
+
+    public function test_admin_can_rename_mahjong_team_meja(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->prepareTournament(16);
+        app(MahjongTeamMatchmakingService::class)->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->orderBy('id')
+            ->first();
+        $other = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->where('id', '!=', $meja->id)
+            ->first();
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.meja.rename', $meja), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Meja Teras',
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.nama', 'Meja Teras');
+
+        $this->assertSame('Meja Teras', $meja->fresh()->nama);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.meja.rename', $other), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Meja Teras',
+            ])
+            ->assertStatus(422);
+
+        $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->assertSee('Meja Teras', false);
     }
 
     protected function prepareTournament(int $playerCount, int $playersPerTeam = 4): Turnamen

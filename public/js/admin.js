@@ -2106,6 +2106,61 @@ const BornPadelAdmin = (function () {
             }
         })();
 
+        document.addEventListener('click', async (event) => {
+            const renameBtn = event.target.closest('.btn-rename-mahjong-table');
+            if (!renameBtn) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const currentName = renameBtn.dataset.nama || '';
+            const url = renameBtn.dataset.url;
+            if (!url) {
+                showToast('URL ubah nama meja tidak ditemukan.', 'error');
+                return;
+            }
+
+            let nextName = currentName;
+            if (window.Swal) {
+                const result = await window.Swal.fire({
+                    title: 'Ubah nama meja',
+                    input: 'text',
+                    inputValue: currentName,
+                    showCancelButton: true,
+                    confirmButtonText: 'Simpan',
+                    cancelButtonText: 'Batal',
+                    inputValidator: (value) => {
+                        if (!String(value || '').trim()) {
+                            return 'Nama meja wajib diisi';
+                        }
+                        return null;
+                    },
+                });
+                if (!result.isConfirmed) {
+                    return;
+                }
+                nextName = String(result.value || '').trim();
+            } else {
+                nextName = String(window.prompt('Nama meja baru', currentName) || '').trim();
+                if (!nextName) {
+                    return;
+                }
+            }
+
+            try {
+                const data = await apiRequest(url, 'PATCH', {
+                    id_turnamen: parseInt(renameBtn.dataset.turnamen, 10),
+                    nama: nextName,
+                });
+                showToast(data.message || 'Nama meja diperbarui.');
+                reloadPage();
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
+        });
+
         const reshuffleBtn = document.getElementById('btn-reshuffle-groups');
 
         if (reshuffleBtn) {

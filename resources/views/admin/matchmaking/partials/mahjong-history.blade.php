@@ -60,7 +60,7 @@
                                             $historyColCount = 1 + $historyMembers->count();
                                         @endphp
                                         <div class="accordion-item">
-                                            <h2 class="accordion-header" id="{{ $historyCollapseId }}-heading">
+                                            <h2 class="accordion-header d-flex align-items-stretch" id="{{ $historyCollapseId }}-heading">
                                                 <button class="accordion-button collapsed"
                                                         type="button"
                                                         data-bs-toggle="collapse"
@@ -69,13 +69,25 @@
                                                         aria-controls="{{ $historyCollapseId }}">
                                                     <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
                                                         <span>
-                                                            <i class="bi bi-diagram-3 me-1"></i>{{ $historyGrup->nama }}
+                                                            <i class="bi bi-diagram-3 me-1"></i><span class="mahjong-table-name-label">{{ $historyGrup->nama }}</span>
                                                         </span>
                                                         <span class="badge text-bg-secondary ms-auto">
                                                             {{ $historyMembers->count() }} pemain
                                                         </span>
                                                     </span>
                                                 </button>
+                                                @if ($editable)
+                                                    <div class="friendly-grup-header-actions d-flex align-items-center gap-1 px-2">
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-secondary btn-rename-mahjong-table"
+                                                                data-url="{{ route('admin.matchmaking.grup.rename', $historyGrup) }}"
+                                                                data-turnamen="{{ $turnamen->id }}"
+                                                                data-nama="{{ $historyGrup->nama }}"
+                                                                title="Ubah nama meja">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </button>
+                                                    </div>
+                                                @endif
                                             </h2>
                                             <div id="{{ $historyCollapseId }}"
                                                  class="accordion-collapse collapse"

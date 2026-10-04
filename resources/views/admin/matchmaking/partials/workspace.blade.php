@@ -420,7 +420,7 @@
                                 aria-controls="group-collapse-{{ $g->id }}">
                             <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
                                 <span>
-                                    <i class="bi bi-diagram-3 me-1"></i>{{ $g->nama }}
+                                    <i class="bi bi-diagram-3 me-1"></i><span class="mahjong-table-name-label">{{ $g->nama }}</span>
                                     @if ($g->babak)
                                         <small class="text-muted fw-normal">— Babak {{ $g->babak }}</small>
                                     @endif
@@ -429,6 +429,14 @@
                             </span>
                         </button>
                         <div class="friendly-grup-header-actions d-flex align-items-center gap-1 px-2">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary btn-rename-mahjong-table"
+                                    data-url="{{ route('admin.matchmaking.grup.rename', $g) }}"
+                                    data-turnamen="{{ $turnamen->id }}"
+                                    data-nama="{{ $g->nama }}"
+                                    title="Ubah nama meja">
+                                <i class="bi bi-pencil"></i>
+                            </button>
                             <button type="button"
                                     class="btn btn-sm btn-primary btn-mahjong-input-poin"
                                     data-grup-id="{{ $g->id }}"

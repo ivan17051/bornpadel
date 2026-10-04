@@ -286,6 +286,43 @@ class MahjongTeamMatchmakingService
     /**
      * @param  list<array{id: int, poin: int}>  $scores
      */
+    public function renameMeja(Turnamen $turnamen, TurnamenMeja $meja, string $nama): TurnamenMeja
+    {
+        if (! $turnamen->isMahjongTeam()) {
+            throw new RuntimeException('Ubah nama meja hanya untuk Mahjong Tim.');
+        }
+
+        if ((int) $meja->id_turnamen !== (int) $turnamen->id) {
+            throw new RuntimeException('Meja tidak termasuk turnamen ini.');
+        }
+
+        $nama = trim($nama);
+
+        if ($nama === '') {
+            throw new RuntimeException('Nama meja wajib diisi.');
+        }
+
+        if (mb_strlen($nama) > 255) {
+            throw new RuntimeException('Nama meja maksimal 255 karakter.');
+        }
+
+        $duplicate = TurnamenMeja::query()
+            ->where('id_kategori', $meja->id_kategori)
+            ->where('babak', $meja->babak)
+            ->where('ronde', $meja->ronde)
+            ->where('nama', $nama)
+            ->where('id', '!=', $meja->id)
+            ->exists();
+
+        if ($duplicate) {
+            throw new RuntimeException('Nama meja sudah digunakan pada seating ini.');
+        }
+
+        $meja->update(['nama' => $nama]);
+
+        return $meja->fresh();
+    }
+
     public function addMejaPointEntries(
         TurnamenMeja $meja,
         array $scores,

@@ -135,6 +135,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/matchmaking/meja/{meja}/point-entries', [MatchmakingController::class, 'destroyMahjongTeamMejaPointEntries'])->name('matchmaking.mahjong-team-meja-point-entries.destroy');
         Route::patch('/matchmaking/meja/{meja}/point-adjustments', [MatchmakingController::class, 'updateMahjongTeamMejaAdjustments'])->name('matchmaking.mahjong-team-meja-point-adjustments.update');
         Route::patch('/matchmaking/meja/{meja}/score-approval', [MatchmakingController::class, 'approveMahjongTeamMejaScores'])->name('matchmaking.mahjong-team-meja-score-approval');
+        Route::patch('/matchmaking/meja/{meja}', [MatchmakingController::class, 'renameMeja'])->name('matchmaking.meja.rename');
         Route::delete('/matchmaking/grup-member/{member}/point-entries/{entry}', [MatchmakingController::class, 'destroyMahjongPointEntry'])->name('matchmaking.mahjong-point-entries.destroy');
         Route::post('/matchmaking/complete-tournament', [MatchmakingController::class, 'completeTournament'])->name('matchmaking.complete-tournament');
         Route::post('/matchmaking/friendly-match', [MatchmakingController::class, 'createFriendlyMatch'])->name('matchmaking.friendly-match.store');

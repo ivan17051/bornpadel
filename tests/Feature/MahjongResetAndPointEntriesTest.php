@@ -1031,6 +1031,48 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertStringNotContainsString('btn-delete-mahjong-poin', $html);
         $this->assertStringContainsString('bi-trophy-fill', $html);
         $this->assertStringContainsString('btn-mahjong-input-poin', $html);
+        $this->assertStringContainsString('btn-rename-mahjong-table', $html);
+    }
+
+    public function test_admin_can_rename_mahjong_table(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->prepareMahjongTournament(8);
+        app(MahjongMatchmakingService::class)->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->orderBy('id')
+            ->first();
+        $other = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->where('id', '!=', $grup->id)
+            ->first();
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.grup.rename', $grup), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Meja Jendela',
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.nama', 'Meja Jendela');
+
+        $this->assertSame('Meja Jendela', $grup->fresh()->nama);
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.matchmaking.grup.rename', $other), [
+                'id_turnamen' => $turnamen->id,
+                'nama' => 'Meja Jendela',
+            ])
+            ->assertStatus(422);
+
+        $this->actingAs($admin)
+            ->get(route('admin.matchmaking.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->assertSee('Meja Jendela', false);
     }
 
     public function test_mahjong_standings_preview_marks_projected_qualifiers_and_ranking_columns(): void

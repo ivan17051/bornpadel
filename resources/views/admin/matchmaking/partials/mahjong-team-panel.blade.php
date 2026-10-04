@@ -156,7 +156,7 @@
                                     aria-controls="{{ $mejaCollapseId }}">
                                 <span class="d-flex flex-wrap align-items-center gap-2 w-100 me-2">
                                     <span>
-                                        <i class="bi bi-table me-1"></i>{{ $meja->nama }}
+                                        <i class="bi bi-table me-1"></i><span class="mahjong-table-name-label">{{ $meja->nama }}</span>
                                         @if ($meja->ronde)
                                             <small class="text-muted fw-normal">— Seating {{ $meja->ronde }}</small>
                                         @endif
@@ -165,6 +165,14 @@
                                 </span>
                             </button>
                             <div class="friendly-grup-header-actions d-flex align-items-center gap-1 px-2">
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-secondary btn-rename-mahjong-table"
+                                        data-url="{{ route('admin.matchmaking.meja.rename', $meja) }}"
+                                        data-turnamen="{{ $turnamen->id }}"
+                                        data-nama="{{ $meja->nama }}"
+                                        title="Ubah nama meja">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
                                 <button type="button"
                                         class="btn btn-sm btn-primary btn-mahjong-input-poin"
                                         data-grup-id="{{ $meja->id }}"
