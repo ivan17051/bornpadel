@@ -18,7 +18,7 @@
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0 align-middle">
+            <table class="table table-sm table-hover mb-0 align-middle mahjong-team-klasemen-table">
                 <thead class="table-light">
                     <tr>
                         <th style="width:3rem">#</th>
@@ -28,8 +28,20 @@
                 </thead>
                 <tbody>
                     @forelse ($mahjongTeamStandings as $index => $row)
-                        <tr class="{{ $index === 0 ? 'table-success' : '' }}">
-                            <td class="text-muted">{{ $index + 1 }}</td>
+                        @php
+                            $nextRow = $mahjongTeamStandings[$index + 1] ?? null;
+                            $isUniqueLeader = $index === 0 && (
+                                $nextRow === null
+                                || (int) ($row['total_poin'] ?? 0) !== (int) ($nextRow['total_poin'] ?? 0)
+                                || (int) ($row['menang'] ?? 0) !== (int) ($nextRow['menang'] ?? 0)
+                                || (int) ($row['poin_akumulasi'] ?? 0) !== (int) ($nextRow['poin_akumulasi'] ?? 0)
+                            );
+                        @endphp
+                        <tr class="{{ $isUniqueLeader ? 'table-success' : '' }}"
+                            data-team-id="{{ $row['id_tim'] ?? '' }}"
+                            data-team-menang="{{ (int) ($row['menang'] ?? 0) }}"
+                            data-team-akumulasi="{{ (int) ($row['poin_akumulasi'] ?? 0) }}">
+                            <td class="text-muted mahjong-team-rank">{{ $index + 1 }}</td>
                             <td>
                                 <div class="fw-semibold">{{ $row['nama'] }}</div>
                                 @if (! empty($row['members']))
@@ -37,14 +49,17 @@
                                         @foreach ($row['members'] as $member)
                                             <li>
                                                 {{ $member['nama'] ?? '—' }}
-                                                <span class="ms-1">{{ (int) ($member['poin_babak'] ?? $member['poin_didapat'] ?? 0) }}</span>
+                                                <span class="ms-1 mahjong-team-member-total"
+                                                      data-member-id="{{ $member['id'] ?? '' }}"
+                                                      data-menang="{{ (int) ($member['menang'] ?? 0) }}"
+                                                      data-akumulasi="{{ (int) ($member['poin_akumulasi'] ?? 0) }}">{{ (int) ($member['total_poin'] ?? $member['poin_babak'] ?? $member['poin_didapat'] ?? 0) }}</span>
                                             </li>
                                         @endforeach
                                     </ul>
                                 @endif
                             </td>
                             <td class="text-center">
-                                <span class="badge text-bg-primary">{{ (int) $row['total_poin'] }}</span>
+                                <span class="badge text-bg-primary mahjong-team-total">{{ (int) $row['total_poin'] }}</span>
                             </td>
                         </tr>
                     @empty
@@ -56,7 +71,8 @@
             </table>
         </div>
         <div class="px-3 py-2 small text-muted border-top">
-            Poin menumpuk antar ronde dalam babak yang sama, dan di-reset saat ganti babak.
+            Subtotal meja adalah seating saat ini. Total menumpuk antar seating dalam babak yang sama, dan di-reset saat ganti babak.
+            Urutan: total poin, lalu menang, lalu akumulasi. Jika masih seri, pilih manual saat Akhiri Babak.
         </div>
     </div>
 </div>
@@ -176,8 +192,11 @@
                                 <div class="table-responsive">
                                     <table class="table table-sm table-bordered table-hover mb-0 align-middle mahjong-group-score-table"
                                            data-grup-id="{{ $meja->id }}"
+                                           data-meja-id="{{ $meja->id }}"
                                            data-grup-name="{{ $meja->nama }}"
+                                           data-score-scope="table"
                                            data-update-url="{{ route('admin.matchmaking.mahjong-team-meja-point-entries.update', $meja) }}"
+                                           data-delete-url="{{ route('admin.matchmaking.mahjong-team-meja-point-entries.destroy', $meja) }}"
                                            data-adjust-url="{{ route('admin.matchmaking.mahjong-team-meja-point-adjustments.update', $meja) }}">
                                         <thead class="table-light">
                                             <tr>
@@ -217,12 +236,19 @@
                                             @forelse ($mahjongRounds as $roundIndex => $round)
                                                 <tr class="mahjong-round-row" data-round="{{ $roundIndex + 1 }}">
                                                     <td class="text-center mahjong-round-number-cell">
-                                                        <button type="button"
-                                                                class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
-                                                                title="Edit ronde {{ $roundIndex + 1 }}">
-                                                            <span class="mahjong-round-label">{{ $roundIndex + 1 }}</span>
-                                                            <i class="bi bi-pencil-square ms-1"></i>
-                                                        </button>
+                                                        <div class="d-inline-flex align-items-center justify-content-center gap-1">
+                                                            <button type="button"
+                                                                    class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
+                                                                    title="Edit ronde {{ $roundIndex + 1 }}">
+                                                                <span class="mahjong-round-label">{{ $roundIndex + 1 }}</span>
+                                                                <i class="bi bi-pencil-square ms-1"></i>
+                                                            </button>
+                                                            <button type="button"
+                                                                    class="btn btn-link btn-sm text-decoration-none p-0 btn-mahjong-delete-ronde"
+                                                                    title="Hapus ronde {{ $roundIndex + 1 }}">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                     @foreach ($mahjongMembers as $member)
                                                         @php
@@ -274,12 +300,21 @@
                                             <tr class="mahjong-subtotal-row">
                                                 <th>Subtotal</th>
                                                 @foreach ($mahjongMembers as $member)
+                                                    @php
+                                                        $mejaMenang = 0;
+                                                        foreach ($mahjongRounds as $round) {
+                                                            $entry = $round[(int) $member->id] ?? null;
+                                                            if ($entry && $entry->is_winner) {
+                                                                $mejaMenang++;
+                                                            }
+                                                        }
+                                                    @endphp
                                                     <th class="text-center">
                                                         <span class="mahjong-subtotal" data-member-id="{{ $member->id }}">
-                                                            {{ (int) $member->poin_babak }} ({{ (int) $member->menang }})
+                                                            {{ (int) $member->poin_didapat }} ({{ $mejaMenang }})
                                                         </span>
-                                                        <span class="d-none mahjong-poin-babak" data-member-id="{{ $member->id }}">{{ (int) $member->poin_babak }}</span>
-                                                        <span class="d-none mahjong-menang" data-member-id="{{ $member->id }}">{{ (int) $member->menang }}</span>
+                                                        <span class="d-none mahjong-poin-babak" data-member-id="{{ $member->id }}">{{ (int) $member->poin_didapat }}</span>
+                                                        <span class="d-none mahjong-menang" data-member-id="{{ $member->id }}">{{ $mejaMenang }}</span>
                                                     </th>
                                                 @endforeach
                                             </tr>
@@ -320,6 +355,7 @@
             <div class="modal-body">
                 <p class="small text-muted">
                     Pilih berapa tim yang lolos. Poin babak di-reset untuk babak berikutnya.
+                    Urutan: total poin, lalu menang, lalu akumulasi. Jika masih seri, pilih manual.
                     Pilih 1 untuk menentukan juara (tanpa peringkat individu).
                 </p>
                 <label class="form-label" for="mahjong-team-jumlah-lolos">Jumlah tim lolos</label>

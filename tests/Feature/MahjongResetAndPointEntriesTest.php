@@ -172,6 +172,22 @@ class MahjongResetAndPointEntriesTest extends TestCase
         $this->assertSame(1, (int) $winner->menang);
         $response->assertJsonPath('data.members.0.poin_didapat', $scores[0]['poin']);
         $this->assertSame(1, (int) collect($membersPayload)->firstWhere('id', $winnerId)['menang']);
+
+        $entryIds = $grup->members->map(function (GrupMember $member) {
+            return (int) $member->poinEntries()->first()->id;
+        })->all();
+
+        $this->actingAs($admin)
+            ->deleteJson(route('admin.matchmaking.mahjong-group-point-entries.destroy', $grup), [
+                'entry_ids' => $entryIds,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        foreach ($grup->members as $member) {
+            $this->assertSame(0, (int) $member->fresh()->poin_didapat);
+            $this->assertSame(0, $member->fresh()->poinEntries()->count());
+        }
     }
 
     public function test_group_point_entries_allow_missing_winner(): void
@@ -869,8 +885,9 @@ class MahjongResetAndPointEntriesTest extends TestCase
 
         $this->assertStringContainsString('id="mahjong-history-card"', $matchmakingHtml);
         $this->assertStringContainsString('data-score-scope="table"', $matchmakingHtml);
-        $this->assertStringContainsString('Klik nomor ronde untuk mengubah skor.', $matchmakingHtml);
+        $this->assertStringContainsString('Klik nomor ronde untuk mengubah skor, atau ikon sampah untuk menghapus.', $matchmakingHtml);
         $this->assertStringContainsString('btn-mahjong-edit-ronde', $matchmakingHtml);
+        $this->assertStringContainsString('btn-mahjong-delete-ronde', $matchmakingHtml);
     }
 
     public function test_matchmaking_history_point_entries_can_be_updated_after_reshuffle(): void
@@ -1008,6 +1025,7 @@ class MahjongResetAndPointEntriesTest extends TestCase
         }
 
         $this->assertStringContainsString('btn-mahjong-edit-ronde', $html);
+        $this->assertStringContainsString('btn-mahjong-delete-ronde', $html);
         $this->assertStringContainsString('Bonus/Penalti', $html);
         $this->assertStringContainsString('btn-mahjong-edit-adjustment', $html);
         $this->assertStringNotContainsString('btn-delete-mahjong-poin', $html);

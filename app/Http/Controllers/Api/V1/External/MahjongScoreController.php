@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\External;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ResolvesPublicKategori;
 use App\Http\Requests\Api\External\StoreMahjongGroupScoresRequest;
 use App\Http\Requests\Api\External\StoreMahjongMemberScoreRequest;
 use App\Http\Requests\Api\External\UpdateMahjongScoreRequest;
@@ -14,11 +15,14 @@ use App\Models\TurnamenMeja;
 use App\Services\MahjongMatchmakingService;
 use App\Services\MahjongTeamMatchmakingService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use RuntimeException;
 
 class MahjongScoreController extends Controller
 {
+    use ResolvesPublicKategori;
+
     protected $mahjongService;
 
     protected $mahjongTeamService;
@@ -31,7 +35,7 @@ class MahjongScoreController extends Controller
         $this->mahjongTeamService = $mahjongTeamService;
     }
 
-    public function groups(int $id): JsonResponse
+    public function groups(Request $request, int $id): JsonResponse
     {
         $turnamen = $this->findMahjongTurnamen($id);
 
@@ -39,10 +43,22 @@ class MahjongScoreController extends Controller
             return $turnamen;
         }
 
+        try {
+            $kategori = $this->resolveApiKategori($turnamen, $request->input('id_kategori'));
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $kategoriId = (int) $kategori->id;
+
         $groups = $turnamen->isMahjongTeam()
-            ? $this->mahjongTeamGroupPayloads($turnamen)
+            ? $this->mahjongTeamGroupPayloads($turnamen, $kategoriId)
             : Grup::query()
                 ->where('id_turnamen', $turnamen->id)
+                ->where('id_kategori', $kategoriId)
                 ->where('is_aktif', true)
                 ->with(['members.pemain', 'members.poinEntries', 'members.turnamenPeserta.pemain1'])
                 ->orderBy('nama')
@@ -56,7 +72,7 @@ class MahjongScoreController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'turnamen' => $this->turnamenPayload($turnamen),
+                'turnamen' => $this->turnamenPayload($turnamen, $kategoriId),
                 'groups' => $groups,
             ],
         ]);
@@ -171,7 +187,7 @@ class MahjongScoreController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Poin berhasil ditambahkan.',
-            'data' => $this->memberPayload($updated),
+            'data' => $this->memberPayload($updated, $this->activeMejaIdForMember($updated, $turnamen)),
         ], 201);
     }
 
@@ -212,6 +228,58 @@ class MahjongScoreController extends Controller
                     (int) $request->input('poin')
                 );
         } catch (RuntimeException $e) {
+            return $this->scoreWriteErrorResponse($e, $turnamen, $member->grup->id_kategori ?? null);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin berhasil diperbarui.',
+            'data' => $this->memberPayload($updated, $this->activeMejaIdForMember($updated, $turnamen)),
+        ]);
+    }
+
+    public function destroyRound(\Illuminate\Http\Request $request, int $id): JsonResponse
+    {
+        $turnamen = $this->findMahjongTurnamen($id);
+
+        if ($turnamen instanceof JsonResponse) {
+            return $turnamen;
+        }
+
+        $request->validate([
+            'entry_ids' => ['required', 'array', 'min:1'],
+            'entry_ids.*' => ['required', 'integer'],
+            'id_grup' => ['required_without:id_meja', 'integer'],
+            'id_meja' => ['nullable', 'integer'],
+            'id_kategori' => ['nullable', 'integer', 'exists:turnamen_kategori,id'],
+        ]);
+
+        if ($blocked = $this->rejectIfExternalScoringDisabled(
+            $turnamen,
+            $request->input('id_kategori')
+        )) {
+            return $blocked;
+        }
+
+        try {
+            if ($turnamen->isMahjongTeam()) {
+                return $this->destroyMahjongTeamRound($request, $turnamen);
+            }
+
+            $grup = Grup::with('members')->find($request->input('id_grup'));
+
+            if (! $grup || (int) $grup->id_turnamen !== (int) $turnamen->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Grup tidak ditemukan pada turnamen ini.',
+                ], 404);
+            }
+
+            $updatedMembers = $this->mahjongService->deleteGroupPointEntries(
+                $grup,
+                $request->input('entry_ids')
+            );
+        } catch (RuntimeException $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
@@ -220,8 +288,14 @@ class MahjongScoreController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Poin berhasil diperbarui.',
-            'data' => $this->memberPayload($updated),
+            'message' => 'Poin ronde dihapus.',
+            'data' => [
+                'turnamen' => $this->turnamenPayload($turnamen->fresh()),
+                'grup' => $this->groupPayload($grup->fresh(['members.pemain', 'members.poinEntries', 'members.turnamenPeserta.pemain1'])),
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->memberPayload($member);
+                })->values(),
+            ],
         ]);
     }
 
@@ -307,10 +381,7 @@ class MahjongScoreController extends Controller
 
             $this->mahjongTeamService->addMejaPointEntries($meja, $scores, $winnerMemberId);
         } catch (RuntimeException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 422);
+            return $this->scoreWriteErrorResponse($e, $turnamen, $meja->id_kategori);
         }
 
         $payload = $this->mejaAsGroupPayload(
@@ -337,11 +408,17 @@ class MahjongScoreController extends Controller
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    protected function mahjongTeamGroupPayloads(Turnamen $turnamen): Collection
+    protected function mahjongTeamGroupPayloads(Turnamen $turnamen, $idKategori = null): Collection
     {
-        return TurnamenMeja::query()
+        $query = TurnamenMeja::query()
             ->where('id_turnamen', $turnamen->id)
-            ->where('is_aktif', true)
+            ->where('is_aktif', true);
+
+        if ($idKategori) {
+            $query->where('id_kategori', (int) $idKategori);
+        }
+
+        return $query
             ->with([
                 'seats.grupMember.pemain',
                 'seats.grupMember.poinEntries',
@@ -422,16 +499,100 @@ class MahjongScoreController extends Controller
         return null;
     }
 
-    protected function turnamenPayload(Turnamen $turnamen): array
+    protected function destroyMahjongTeamRound(\Illuminate\Http\Request $request, Turnamen $turnamen): JsonResponse
     {
-        return [
+        $mejaId = (int) ($request->input('id_meja') ?: $request->input('id_grup'));
+        $meja = TurnamenMeja::with('seats.grupMember')->find($mejaId);
+
+        if (! $meja || (int) $meja->id_turnamen !== (int) $turnamen->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Meja tidak ditemukan pada turnamen ini.',
+            ], 404);
+        }
+
+        try {
+            $updatedMembers = $this->mahjongTeamService->deleteMejaPointEntries(
+                $meja,
+                $request->input('entry_ids')
+            );
+        } catch (RuntimeException $e) {
+            return $this->scoreWriteErrorResponse($e, $turnamen, $meja->id_kategori);
+        }
+
+        $payload = $this->mejaAsGroupPayload(
+            $meja->fresh([
+                'seats.grupMember.pemain',
+                'seats.grupMember.poinEntries',
+                'seats.grupMember.turnamenPeserta.pemain1',
+                'seats.grupMember.grup',
+            ])
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin ronde dihapus.',
+            'data' => [
+                'turnamen' => $this->turnamenPayload($turnamen->fresh()),
+                'grup' => $payload,
+                'meja' => $payload,
+                'members' => $payload['members'],
+            ],
+        ]);
+    }
+
+    protected function scoreWriteErrorResponse(RuntimeException $e, Turnamen $turnamen, $idKategori = null): JsonResponse
+    {
+        $message = $e->getMessage();
+        $data = [];
+
+        if (
+            stripos($message, 'Meja tidak aktif') !== false
+            || stripos($message, 'seating aktif') !== false
+            || stripos($message, 'Grup tidak aktif') !== false
+        ) {
+            if (stripos($message, 'Grup tidak aktif') !== false) {
+                $message = 'Entri poin bukan dari grup aktif. Ambil ulang mahjong-groups setelah reshuffle.';
+            } elseif (stripos($message, 'seating aktif') !== false) {
+                $message = 'Entri poin bukan dari seating aktif. Ambil ulang mahjong-groups setelah reshuffle.';
+            } else {
+                $message = 'Meja tidak aktif. Ambil ulang mahjong-groups setelah reshuffle.';
+            }
+
+            if ($turnamen->isMahjongTeam()) {
+                $data['active_meja_ids'] = $this->activeMejaIds($turnamen, $idKategori);
+                $data['seating_ronde'] = $this->activeSeatingRonde($turnamen, $idKategori);
+            }
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'data' => $data !== [] ? $data : null,
+        ], 422);
+    }
+
+    protected function turnamenPayload(Turnamen $turnamen, $idKategori = null): array
+    {
+        $payload = [
             'id' => $turnamen->id,
             'nama' => $turnamen->nama,
             'jenis' => $turnamen->jenis,
             'status' => $turnamen->status,
             'mahjong_is_final' => (bool) $turnamen->mahjong_is_final,
-            'mahjong_external_scoring_enabled' => $this->mahjongService->isExternalScoringEnabled($turnamen),
+            'mahjong_external_scoring_enabled' => $this->mahjongService->isExternalScoringEnabled($turnamen, $idKategori),
         ];
+
+        if ($idKategori) {
+            $payload['id_kategori'] = (int) $idKategori;
+        }
+
+        if ($turnamen->isMahjongTeam()) {
+            $payload['seating_ronde'] = $this->activeSeatingRonde($turnamen, $idKategori);
+            $payload['active_meja_ids'] = $this->activeMejaIds($turnamen, $idKategori);
+        }
+
+        return $payload;
     }
 
     protected function groupPayload(Grup $grup): array
@@ -440,6 +601,7 @@ class MahjongScoreController extends Controller
 
         return [
             'id' => $grup->id,
+            'id_kategori' => $grup->id_kategori ? (int) $grup->id_kategori : null,
             'nama' => $grup->nama,
             'babak' => (int) $grup->babak,
             'is_aktif' => (bool) $grup->is_aktif,
@@ -466,18 +628,19 @@ class MahjongScoreController extends Controller
         return [
             'id' => $meja->id,
             'id_meja' => $meja->id,
+            'id_kategori' => $meja->id_kategori ? (int) $meja->id_kategori : null,
             'nama' => $meja->nama,
             'babak' => (int) $meja->babak,
             'ronde' => (int) $meja->ronde,
             'is_aktif' => (bool) $meja->is_aktif,
-            'members' => $meja->seats->map(function ($seat) {
+            'members' => $meja->seats->map(function ($seat) use ($meja) {
                 $member = $seat->grupMember;
 
                 if (! $member) {
                     return null;
                 }
 
-                $payload = $this->memberPayload($member);
+                $payload = $this->memberPayload($member, (int) $meja->id);
                 $payload['id_tim'] = $member->id_grup;
                 $payload['tim'] = optional($member->grup)->nama;
                 $payload['seat_order'] = (int) $seat->seat_order;
@@ -487,9 +650,16 @@ class MahjongScoreController extends Controller
         ];
     }
 
-    protected function memberPayload(GrupMember $member): array
+    protected function memberPayload(GrupMember $member, ?int $mejaId = null): array
     {
         $member->loadMissing(['pemain', 'poinEntries', 'turnamenPeserta.pemain1']);
+
+        $entries = $member->poinEntries;
+        if ($mejaId !== null) {
+            $entries = $entries->where('id_meja', $mejaId)->values();
+        }
+
+        $totalPoin = (int) $member->total_poin;
 
         return [
             'id_grup_member' => $member->id,
@@ -499,15 +669,68 @@ class MahjongScoreController extends Controller
             'poin_didapat' => (int) $member->poin_didapat,
             'poin_akumulasi' => (int) $member->poin_akumulasi,
             'poin_penyesuaian' => (int) $member->poin_penyesuaian,
-            'total_poin' => $member->total_poin,
-            'menang' => (int) $member->menang,
-            'entries' => $member->poinEntries->map(function (MahjongPoinEntry $entry) {
+            'poin_babak' => (int) $member->poin_babak,
+            'total_poin' => $totalPoin,
+            'poin' => (int) $member->poin_didapat,
+            'menang' => (int) $entries->where('is_winner', true)->count(),
+            'entries' => $entries->map(function (MahjongPoinEntry $entry) {
                 return [
                     'id' => $entry->id,
+                    'id_meja' => $entry->id_meja ? (int) $entry->id_meja : null,
                     'poin' => (int) $entry->poin,
                     'is_winner' => (bool) $entry->is_winner,
                 ];
             })->values(),
         ];
+    }
+
+    protected function activeMejaIdForMember(GrupMember $member, Turnamen $turnamen): ?int
+    {
+        if (! $turnamen->isMahjongTeam()) {
+            return null;
+        }
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->whereHas('seats', function ($query) use ($member) {
+                $query->where('id_grup_member', $member->id);
+            })
+            ->first();
+
+        return $meja ? (int) $meja->id : null;
+    }
+
+    /**
+     * @return list<int>
+     */
+    protected function activeMejaIds(Turnamen $turnamen, $idKategori = null): array
+    {
+        $query = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true);
+
+        if ($idKategori) {
+            $query->where('id_kategori', (int) $idKategori);
+        }
+
+        return $query
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    protected function activeSeatingRonde(Turnamen $turnamen, $idKategori = null): int
+    {
+        $query = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true);
+
+        if ($idKategori) {
+            $query->where('id_kategori', (int) $idKategori);
+        }
+
+        return (int) ($query->max('ronde') ?: 0);
     }
 }

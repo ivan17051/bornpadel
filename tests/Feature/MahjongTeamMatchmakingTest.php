@@ -33,7 +33,7 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertSame(4, TurnamenMeja::where('id_turnamen', $turnamen->id)->where('is_aktif', true)->count());
     }
 
-    public function test_reshuffle_keeps_babak_points(): void
+    public function test_reshuffle_resets_subtotal_and_keeps_babak_total(): void
     {
         $service = app(MahjongTeamMatchmakingService::class);
         $turnamen = $this->prepareTournament(16);
@@ -46,16 +46,56 @@ class MahjongTeamMatchmakingTest extends TestCase
         ])->all();
         $service->addMejaPointEntries($meja, $scores);
 
-        $before = GrupMember::whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+        $beforeDidapat = (int) GrupMember::whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
             ->sum('poin_didapat');
+        $firstMember = GrupMember::findOrFail($scores[0]['id']);
+        $firstMember->update(['poin_penyesuaian' => 3]);
+        $this->assertSame(10, (int) $firstMember->poin_didapat);
+        $this->assertSame(0, (int) $firstMember->poin_akumulasi);
+        $this->assertSame(13, (int) $firstMember->fresh()->total_poin);
 
         $service->reshuffleMeja($turnamen);
 
-        $after = GrupMember::whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
-            ->sum('poin_didapat');
+        $firstMember->refresh();
+        $this->assertSame(0, (int) $firstMember->poin_didapat);
+        $this->assertSame(3, (int) $firstMember->poin_penyesuaian);
+        $this->assertSame(10, (int) $firstMember->poin_akumulasi);
+        $this->assertSame(13, (int) $firstMember->total_poin);
 
-        $this->assertSame((int) $before, (int) $after);
+        $afterDidapat = (int) GrupMember::whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->sum('poin_didapat');
+        $afterAkumulasi = (int) GrupMember::whereHas('grup', fn ($q) => $q->where('id_turnamen', $turnamen->id)->where('is_aktif', true))
+            ->sum('poin_akumulasi');
+
+        $this->assertSame(0, $afterDidapat);
+        $this->assertSame($beforeDidapat, $afterAkumulasi);
         $this->assertSame(2, TurnamenMeja::where('id_turnamen', $turnamen->id)->where('babak', 1)->max('ronde'));
+
+        $newMeja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->whereHas('seats', fn ($q) => $q->where('id_grup_member', $firstMember->id))
+            ->with('seats')
+            ->first();
+        $this->assertNotNull($newMeja);
+
+        $newScores = $newMeja->seats->map(function ($seat) use ($firstMember) {
+            return [
+                'id' => (int) $seat->id_grup_member,
+                'poin' => (int) $seat->id_grup_member === (int) $firstMember->id ? 4 : -1,
+            ];
+        })->all();
+        $service->addMejaPointEntries($newMeja, $newScores);
+
+        $firstMember->refresh();
+        $this->assertSame(4, (int) $firstMember->poin_didapat);
+        $this->assertSame(10, (int) $firstMember->poin_akumulasi);
+        $this->assertSame(3, (int) $firstMember->poin_penyesuaian);
+        $this->assertSame(17, (int) $firstMember->total_poin);
+
+        $standings = $service->teamStandings($turnamen);
+        $this->assertSame(17, (int) collect($standings)->flatMap(fn ($row) => $row['members'])->firstWhere('id', $firstMember->id)['total_poin']);
+        $this->assertSame(4, (int) collect($standings)->flatMap(fn ($row) => $row['members'])->firstWhere('id', $firstMember->id)['poin_didapat']);
     }
 
     public function test_advance_resets_points_and_can_crown_champion(): void
@@ -205,6 +245,55 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertSame(80, (int) $standings[1]['total_poin']);
     }
 
+    public function test_team_standings_break_ties_by_wins_then_akumulasi_not_team_id(): void
+    {
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $teams = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($teams[0]->members as $member) {
+            $member->update(['poin_didapat' => 10, 'poin_akumulasi' => 0]);
+        }
+        foreach ($teams[1]->members as $index => $member) {
+            $member->update(['poin_didapat' => 10, 'poin_akumulasi' => 0]);
+            if ($index === 0) {
+                MahjongPoinEntry::create([
+                    'id_grup_member' => $member->id,
+                    'poin' => 10,
+                    'is_winner' => true,
+                ]);
+            }
+        }
+
+        $standings = $service->teamStandings($turnamen);
+        $this->assertSame($teams[1]->id, (int) $standings[0]['id_tim']);
+        $this->assertSame(1, (int) $standings[0]['menang']);
+        $this->assertSame(0, (int) $standings[1]['menang']);
+
+        foreach ($teams[0]->members as $member) {
+            $member->update(['poin_didapat' => 2, 'poin_akumulasi' => 8]);
+            $member->poinEntries()->delete();
+        }
+        foreach ($teams[1]->members as $member) {
+            $member->update(['poin_didapat' => 10, 'poin_akumulasi' => 0]);
+            $member->poinEntries()->delete();
+        }
+
+        $standings = $service->teamStandings($turnamen);
+        $this->assertSame($teams[0]->id, (int) $standings[0]['id_tim']);
+        $this->assertSame(40, (int) $standings[0]['total_poin']);
+        $this->assertSame(32, (int) $standings[0]['poin_akumulasi']);
+        $this->assertSame(40, (int) $standings[1]['total_poin']);
+        $this->assertSame(0, (int) $standings[1]['poin_akumulasi']);
+    }
+
     public function test_close_registration_rejects_invalid_starting_roster(): void
     {
         $admin = $this->makeAdmin();
@@ -345,6 +434,15 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertStringContainsString('data-round="1"', $html);
         $this->assertStringContainsString('data-round="2"', $html);
         $this->assertStringContainsString('btn-mahjong-edit-ronde', $html);
+        $this->assertStringContainsString('btn-mahjong-delete-ronde', $html);
+        $this->assertStringContainsString('data-delete-url', $html);
+        $this->assertStringContainsString('data-meja-id', $html);
+        $this->assertStringContainsString('mahjong-team-member-total', $html);
+        $this->assertStringContainsString('mahjong-team-total', $html);
+        $this->assertStringContainsString('mahjong-team-klasemen-table', $html);
+        $this->assertStringContainsString('mahjong-team-rank', $html);
+        $this->assertStringContainsString('data-team-menang', $html);
+        $this->assertStringContainsString('pilih manual', $html);
         $this->assertStringContainsString('Bonus/Penalti', $html);
         $this->assertStringContainsString('btn-mahjong-edit-adjustment', $html);
         $this->assertStringContainsString('20 (2)', $html);
@@ -387,7 +485,11 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertStringContainsString('-5', $html);
         $this->assertStringContainsString($meja->nama, $html);
         $this->assertStringContainsString('data-score-scope="table"', $html);
-        $this->assertStringContainsString('Klik nomor ronde untuk mengubah skor.', $html);
+        $this->assertStringContainsString('Klik nomor ronde untuk mengubah skor, atau ikon sampah untuk menghapus.', $html);
+        $this->assertStringContainsString('btn-mahjong-delete-ronde', $html);
+        $this->assertStringContainsString('>Total<', $html);
+        $this->assertStringContainsString('Akumulasi', $html);
+        $this->assertStringContainsString('Subtotal meja adalah seating saat ini', $html);
 
         foreach ($members as $member) {
             $this->assertStringContainsString($member->display_name, $html);
@@ -403,6 +505,7 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertStringContainsString($meja->nama, $guestHtml);
         $this->assertStringContainsString('+10', $guestHtml);
         $this->assertStringNotContainsString('data-score-scope="table"', $guestHtml);
+        $this->assertStringNotContainsString('btn-mahjong-delete-ronde', $guestHtml);
         $this->assertLessThan(
             strpos($guestHtml, 'id="public-mahjong-team-history-card"'),
             strpos($guestHtml, 'id="live-leaderboard"')
@@ -494,6 +597,55 @@ class MahjongTeamMatchmakingTest extends TestCase
         $this->assertSame(-1, (int) $members[3]->fresh()->poin_penyesuaian);
     }
 
+    public function test_can_delete_mahjong_team_meja_round_and_keep_remaining_points(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $members = $meja->seats->map->grupMember->filter()->values();
+
+        $service->addMejaPointEntries($meja, $members->map(fn (GrupMember $member, int $index) => [
+            'id' => $member->id,
+            'poin' => [8, -2, -3, -3][$index],
+        ])->all(), (int) $members[0]->id);
+
+        $service->addMejaPointEntries($meja->fresh('seats.grupMember'), $members->map(fn (GrupMember $member, int $index) => [
+            'id' => $member->id,
+            'poin' => [12, -4, -4, -4][$index],
+        ])->all(), (int) $members[0]->id);
+
+        $roundOne = $members->mapWithKeys(function (GrupMember $member) use ($meja) {
+            $entry = MahjongPoinEntry::query()
+                ->where('id_grup_member', $member->id)
+                ->where('id_meja', $meja->id)
+                ->orderBy('id')
+                ->first();
+
+            return [$member->id => $entry];
+        });
+
+        $this->assertSame(20, (int) $members[0]->fresh()->poin_didapat);
+
+        $this->actingAs($admin)
+            ->deleteJson(route('admin.matchmaking.mahjong-team-meja-point-entries.destroy', $meja), [
+                'entry_ids' => $roundOne->map(fn ($entry) => $entry->id)->values()->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(12, (int) $members[0]->fresh()->poin_didapat);
+        $this->assertSame(-4, (int) $members[1]->fresh()->poin_didapat);
+        $this->assertSame(1, $members[0]->fresh()->poinEntries()->where('id_meja', $meja->id)->count());
+        $this->assertNull(MahjongPoinEntry::query()->find($roundOne[$members[0]->id]->id));
+    }
+
     public function test_meja_point_entries_treat_empty_poin_as_zero(): void
     {
         $admin = $this->makeAdmin();
@@ -562,7 +714,7 @@ class MahjongTeamMatchmakingTest extends TestCase
         $guest->assertSee($leader->nama, false);
         $guest->assertSee($topMember->display_name, false);
         $guest->assertSee('40', false);
-        $guest->assertSee('Peringkat berdasarkan total poin tim', false);
+        $guest->assertSee('total poin, lalu menang, lalu akumulasi', false);
         $guest->assertDontSee('class="group-leaderboard"', false);
 
         $adminPage = $this->actingAs($admin)
@@ -620,7 +772,7 @@ class MahjongTeamMatchmakingTest extends TestCase
         $meja->refresh();
         $this->assertFalse((bool) $meja->is_aktif);
 
-        $this->actingAs($admin)
+        $historyUpdate = $this->actingAs($admin)
             ->patchJson(route('admin.matchmaking.mahjong-team-meja-point-entries.update', $meja), [
                 'id_grup_member_pemenang' => (int) $members[1]->id,
                 'scores' => $members->map(function (GrupMember $member, int $index) use ($entries) {
@@ -632,12 +784,18 @@ class MahjongTeamMatchmakingTest extends TestCase
                 })->all(),
             ])
             ->assertOk()
-            ->assertJsonPath('success', true);
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.members.0.entries.0.id_meja', $meja->id);
+
+        $this->assertTrue(collect($historyUpdate->json('data.members.0.entries'))
+            ->every(fn ($entry) => (int) $entry['id_meja'] === (int) $meja->id));
 
         $this->assertSame(12, (int) $entries[$members[0]->id]->fresh()->poin);
         $this->assertFalse((bool) $entries[$members[0]->id]->fresh()->is_winner);
         $this->assertTrue((bool) $entries[$members[1]->id]->fresh()->is_winner);
-        $this->assertSame(12, (int) $members[0]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[0]->fresh()->poin_didapat);
+        $this->assertSame(12, (int) $members[0]->fresh()->poin_akumulasi);
+        $this->assertSame(12, (int) $members[0]->fresh()->total_poin);
 
         $this->actingAs($admin)
             ->postJson(route('admin.matchmaking.mahjong-team-meja-point-entries.store', $meja), [
@@ -648,6 +806,69 @@ class MahjongTeamMatchmakingTest extends TestCase
             ])
             ->assertStatus(422)
             ->assertJsonPath('message', 'Meja tidak aktif.');
+
+        $this->actingAs($admin)
+            ->deleteJson(route('admin.matchmaking.mahjong-team-meja-point-entries.destroy', $meja), [
+                'entry_ids' => $entries->map(fn ($entry) => $entry->id)->values()->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(0, (int) $members[0]->fresh()->poin_didapat);
+        $this->assertSame(0, (int) $members[0]->fresh()->poin_akumulasi);
+        $this->assertSame(0, $members[0]->fresh()->poinEntries()->where('id_meja', $meja->id)->count());
+    }
+
+    public function test_live_meja_score_payload_excludes_history_entries_after_reshuffle(): void
+    {
+        $admin = $this->makeAdmin();
+        $service = app(MahjongTeamMatchmakingService::class);
+        $turnamen = $this->prepareTournament(16);
+        $service->generateTeams($turnamen, 'random');
+
+        $oldMeja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $oldMembers = $oldMeja->seats->map->grupMember->filter()->values();
+        $service->addMejaPointEntries($oldMeja, $oldMembers->map(fn (GrupMember $member, int $index) => [
+            'id' => $member->id,
+            'poin' => [8, -2, -3, -3][$index],
+        ])->all(), (int) $oldMembers[0]->id);
+
+        $oldEntryIds = $oldMembers->map(
+            fn (GrupMember $member) => (int) $member->fresh()->poinEntries()->where('id_meja', $oldMeja->id)->value('id')
+        )->all();
+
+        $service->reshuffleMeja($turnamen);
+
+        $newMeja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->whereHas('seats', function ($query) use ($oldMembers) {
+                $query->where('id_grup_member', $oldMembers[0]->id);
+            })
+            ->with('seats.grupMember')
+            ->first();
+        $this->assertNotNull($newMeja);
+        $this->assertNotSame((int) $oldMeja->id, (int) $newMeja->id);
+
+        $newMembers = $newMeja->seats->map->grupMember->filter()->values();
+        $store = $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.mahjong-team-meja-point-entries.store', $newMeja), [
+                'scores' => $newMembers->map(fn (GrupMember $member, int $index) => [
+                    'id' => $member->id,
+                    'poin' => [4, -1, -1, -2][$index],
+                ])->all(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.meja_id', $newMeja->id);
+
+        $payloadEntries = collect($store->json('data.members'))->flatMap(fn ($member) => $member['entries'] ?? []);
+        $this->assertNotEmpty($payloadEntries);
+        $this->assertTrue($payloadEntries->every(fn ($entry) => (int) $entry['id_meja'] === (int) $newMeja->id));
+        $this->assertEmpty(array_intersect($oldEntryIds, $payloadEntries->pluck('id')->all()));
     }
 
     public function test_score_approval_toggle_gates_team_reshuffle_and_end_babak(): void

@@ -14,7 +14,7 @@
                 <i class="bi bi-clock-history me-1"></i> Riwayat Babak
             </h6>
             @if ($editable)
-                <span class="small text-muted">Klik nomor ronde untuk mengubah skor.</span>
+                <span class="small text-muted">Klik nomor ronde untuk mengubah skor, atau ikon sampah untuk menghapus.</span>
             @endif
         </div>
         <div class="card-body">
@@ -88,6 +88,7 @@
                                                                    data-grup-id="{{ $historyGrup->id }}"
                                                                    data-grup-name="{{ $historyGrup->nama }}"
                                                                    data-update-url="{{ route('admin.matchmaking.mahjong-group-point-entries.update', $historyGrup) }}"
+                                                                   data-delete-url="{{ route('admin.matchmaking.mahjong-group-point-entries.destroy', $historyGrup) }}"
                                                                    data-score-scope="table">
                                                                 <thead class="table-light">
                                                                     <tr>
@@ -107,12 +108,19 @@
                                                                     @forelse ($historyRounds as $roundIndex => $round)
                                                                         <tr class="mahjong-round-row" data-round="{{ $roundIndex + 1 }}">
                                                                             <td class="text-center mahjong-round-number-cell">
-                                                                                <button type="button"
-                                                                                        class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
-                                                                                        title="Edit ronde {{ $roundIndex + 1 }}">
-                                                                                    <span class="mahjong-round-label">{{ $roundIndex + 1 }}</span>
-                                                                                    <i class="bi bi-pencil-square ms-1"></i>
-                                                                                </button>
+                                                                                <div class="d-inline-flex align-items-center justify-content-center gap-1">
+                                                                                    <button type="button"
+                                                                                            class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
+                                                                                            title="Edit ronde {{ $roundIndex + 1 }}">
+                                                                                        <span class="mahjong-round-label">{{ $roundIndex + 1 }}</span>
+                                                                                        <i class="bi bi-pencil-square ms-1"></i>
+                                                                                    </button>
+                                                                                    <button type="button"
+                                                                                            class="btn btn-link btn-sm text-decoration-none p-0 btn-mahjong-delete-ronde"
+                                                                                            title="Hapus ronde {{ $roundIndex + 1 }}">
+                                                                                        <i class="bi bi-trash"></i>
+                                                                                    </button>
+                                                                                </div>
                                                                             </td>
                                                                             @foreach ($historyMembers as $member)
                                                                                 @php

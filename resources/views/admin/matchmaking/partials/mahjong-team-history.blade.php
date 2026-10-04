@@ -12,7 +12,7 @@
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <h6 class="mb-0"><i class="bi bi-clock-history me-1"></i> Riwayat Meja</h6>
             @if ($editable)
-                <span class="small text-muted">Klik nomor ronde untuk mengubah skor.</span>
+                <span class="small text-muted">Klik nomor ronde untuk mengubah skor, atau ikon sampah untuk menghapus.</span>
             @endif
         </div>
         <div class="card-body">
@@ -101,8 +101,10 @@
                                                         <table class="table table-sm table-bordered table-hover mb-0 align-middle {{ $editable ? 'mahjong-group-score-table' : '' }}"
                                                                @if ($editable)
                                                                    data-grup-id="{{ $histMeja->id }}"
+                                                                   data-meja-id="{{ $histMeja->id }}"
                                                                    data-grup-name="{{ $histMeja->nama }}"
                                                                    data-update-url="{{ route('admin.matchmaking.mahjong-team-meja-point-entries.update', $histMeja) }}"
+                                                                   data-delete-url="{{ route('admin.matchmaking.mahjong-team-meja-point-entries.destroy', $histMeja) }}"
                                                                    data-score-scope="table"
                                                                @endif>
                                                             <thead class="table-light">
@@ -139,12 +141,19 @@
                                                                     <tr class="{{ $editable ? 'mahjong-round-row' : '' }}" @if ($editable) data-round="{{ $histRoundIndex + 1 }}" @endif>
                                                                         <td class="text-center {{ $editable ? 'mahjong-round-number-cell' : 'fw-semibold text-muted' }}">
                                                                             @if ($editable)
-                                                                                <button type="button"
-                                                                                        class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
-                                                                                        title="Edit ronde {{ $histRoundIndex + 1 }}">
-                                                                                    <span class="mahjong-round-label">{{ $histRoundIndex + 1 }}</span>
-                                                                                    <i class="bi bi-pencil-square ms-1"></i>
-                                                                                </button>
+                                                                                <div class="d-inline-flex align-items-center justify-content-center gap-1">
+                                                                                    <button type="button"
+                                                                                            class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
+                                                                                            title="Edit ronde {{ $histRoundIndex + 1 }}">
+                                                                                        <span class="mahjong-round-label">{{ $histRoundIndex + 1 }}</span>
+                                                                                        <i class="bi bi-pencil-square ms-1"></i>
+                                                                                    </button>
+                                                                                    <button type="button"
+                                                                                            class="btn btn-link btn-sm text-decoration-none p-0 btn-mahjong-delete-ronde"
+                                                                                            title="Hapus ronde {{ $histRoundIndex + 1 }}">
+                                                                                        <i class="bi bi-trash"></i>
+                                                                                    </button>
+                                                                                </div>
                                                                             @else
                                                                                 {{ $histRoundIndex + 1 }}
                                                                             @endif

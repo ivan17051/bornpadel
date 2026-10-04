@@ -257,7 +257,8 @@ class MahjongTeamMatchmakingService
     }
 
     /**
-     * Reshuffle tables in the same babak. Points accumulate (poin_didapat kept).
+     * Reshuffle tables in the same babak. Current-ronde subtotal resets;
+     * previous ronde points stay in Total (poin_akumulasi).
      *
      * @return array{meja: list<array<string, mixed>>, babak: int, ronde: int}
      */
@@ -275,8 +276,10 @@ class MahjongTeamMatchmakingService
         return DB::transaction(function () use ($turnamen, $kategori, $babak) {
             $this->clearActiveScoreApprovals($kategori);
             $this->deactivateActiveMeja($kategori->id);
+            $result = $this->createMejaForActiveTeams($turnamen, $kategori, $babak);
+            $this->syncActiveTeamBabakPoints($kategori);
 
-            return $this->createMejaForActiveTeams($turnamen, $kategori, $babak);
+            return $result;
         });
     }
 
@@ -424,6 +427,63 @@ class MahjongTeamMatchmakingService
     }
 
     /**
+     * @param  list<int>  $entryIds
+     * @return Collection<int, GrupMember>
+     */
+    public function deleteMejaPointEntries(TurnamenMeja $meja, array $entryIds): Collection
+    {
+        $turnamen = $meja->turnamen ?? Turnamen::find($meja->id_turnamen);
+
+        if (! $turnamen || ! $turnamen->isMahjongTeam()) {
+            throw new RuntimeException('Hapus poin hanya untuk Mahjong Tim.');
+        }
+
+        $meja->loadMissing(['seats.grupMember']);
+
+        $membersById = $meja->seats
+            ->map(fn ($seat) => $seat->grupMember)
+            ->filter()
+            ->keyBy('id');
+
+        $entryIds = collect($entryIds)->map(fn ($id) => (int) $id)->filter()->unique()->values();
+
+        if ($entryIds->isEmpty()) {
+            throw new RuntimeException('Pilih ronde yang akan dihapus.');
+        }
+
+        $entries = MahjongPoinEntry::query()->whereIn('id', $entryIds)->get();
+
+        if ($entries->count() !== $entryIds->count()) {
+            throw new RuntimeException('Entri poin tidak ditemukan.');
+        }
+
+        foreach ($entries as $entry) {
+            if ((int) $entry->id_meja !== (int) $meja->id) {
+                throw new RuntimeException('Entri poin tidak cocok dengan meja ini.');
+            }
+
+            if (! $membersById->has((int) $entry->id_grup_member)) {
+                throw new RuntimeException('Entri poin tidak cocok dengan kursi meja.');
+            }
+        }
+
+        return DB::transaction(function () use ($meja, $entries, $membersById) {
+            MahjongPoinEntry::query()->whereIn('id', $entries->pluck('id'))->delete();
+
+            return $membersById->values()->map(function (GrupMember $member) use ($meja) {
+                $member->loadMissing('grup');
+                $currentBabak = (int) (optional($member->grup)->babak ?: 1);
+
+                if ((int) $meja->babak === $currentBabak) {
+                    $this->syncPoinDidapatFromEntries($member);
+                }
+
+                return $member->fresh(['poinEntries', 'pemain', 'turnamenPeserta.pemain1', 'grup']);
+            })->values();
+        });
+    }
+
+    /**
      * @param  list<array{id: int, poin: int}>  $scores
      * @return Collection<int, GrupMember>
      */
@@ -506,6 +566,12 @@ class MahjongTeamMatchmakingService
             throw new RuntimeException('Entri poin tidak cocok dengan anggota tim.');
         }
 
+        $activeMeja = $this->activeMejaForMember($member);
+
+        if (! $activeMeja || (int) $entry->id_meja !== (int) $activeMeja->id) {
+            throw new RuntimeException('Entri poin bukan dari seating aktif. Ambil ulang mahjong-groups setelah reshuffle.');
+        }
+
         $entry->update(['poin' => $poin]);
         $this->syncPoinDidapatFromEntries($member);
 
@@ -526,17 +592,27 @@ class MahjongTeamMatchmakingService
             ->get();
 
         return $teams->map(function (Grup $tim) {
-            $total = (int) $tim->members->sum(fn (GrupMember $m) => (int) $m->poin_babak);
+            $total = (int) $tim->members->sum(fn (GrupMember $m) => (int) $m->total_poin);
+            $menang = (int) $tim->members->sum(fn (GrupMember $m) => (int) $m->menang);
+            $akumulasi = (int) $tim->members->sum(fn (GrupMember $m) => (int) $m->poin_akumulasi);
 
             return [
                 'id_tim' => (int) $tim->id,
                 'nama' => $tim->nama,
                 'total_poin' => $total,
+                'menang' => $menang,
+                'poin_akumulasi' => $akumulasi,
                 'members' => $tim->members
                     ->sort(function (GrupMember $a, GrupMember $b) {
-                        $cmp = ((int) $b->poin_babak) <=> ((int) $a->poin_babak);
+                        $cmp = ((int) $b->total_poin) <=> ((int) $a->total_poin);
 
-                        return $cmp !== 0 ? $cmp : ((int) $a->id) <=> ((int) $b->id);
+                        if ($cmp !== 0) {
+                            return $cmp;
+                        }
+
+                        $wins = ((int) $b->menang) <=> ((int) $a->menang);
+
+                        return $wins !== 0 ? $wins : ((int) $b->poin_akumulasi) <=> ((int) $a->poin_akumulasi);
                     })
                     ->values()
                     ->map(fn (GrupMember $m) => [
@@ -544,15 +620,17 @@ class MahjongTeamMatchmakingService
                         'id_pemain' => $m->id_pemain ? (int) $m->id_pemain : null,
                         'nama' => $m->display_name,
                         'poin_didapat' => (int) $m->poin_didapat,
+                        'poin_akumulasi' => (int) $m->poin_akumulasi,
                         'poin_penyesuaian' => (int) $m->poin_penyesuaian,
                         'poin_babak' => (int) $m->poin_babak,
+                        'total_poin' => (int) $m->total_poin,
+                        'menang' => (int) $m->menang,
+                        'poin' => (int) $m->total_poin,
                     ])
                     ->all(),
             ];
         })->sort(function (array $a, array $b) {
-            $cmp = ((int) $b['total_poin']) <=> ((int) $a['total_poin']);
-
-            return $cmp !== 0 ? $cmp : ((int) $a['id_tim']) <=> ((int) $b['id_tim']);
+            return $this->ranker->compare($a, $b);
         })->values();
     }
 
@@ -703,7 +781,7 @@ class MahjongTeamMatchmakingService
                 'place' => 1,
                 'pemain_ids' => [(int) $member->id_pemain],
                 'peserta_id' => $member->id_turnamen_peserta ? (int) $member->id_turnamen_peserta : null,
-                'total_poin' => (int) $member->poin_didapat,
+                'total_poin' => (int) $member->total_poin,
                 'nama' => $member->display_name,
                 'tim_nama' => $team->nama,
             ];
@@ -917,20 +995,51 @@ class MahjongTeamMatchmakingService
         TurnamenMeja::query()->whereIn('id', $ids)->delete();
     }
 
+    protected function syncActiveTeamBabakPoints(TurnamenKategori $kategori): void
+    {
+        $members = GrupMember::query()
+            ->whereHas('grup', function ($query) use ($kategori) {
+                $query->where('id_kategori', $kategori->id)->where('is_aktif', true);
+            })
+            ->get();
+
+        foreach ($members as $member) {
+            $this->syncPoinDidapatFromEntries($member);
+        }
+    }
+
     protected function syncPoinDidapatFromEntries(GrupMember $member): void
     {
         $member->loadMissing('grup');
         $teamBabak = (int) (optional($member->grup)->babak ?: 1);
 
-        $sum = (int) MahjongPoinEntry::query()
-            ->where('id_grup_member', $member->id)
-            ->whereHas('meja', function ($query) use ($teamBabak) {
-                $query->where('babak', $teamBabak);
+        $meja = TurnamenMeja::query()
+            ->where('babak', $teamBabak)
+            ->whereHas('seats', function ($query) use ($member) {
+                $query->where('id_grup_member', $member->id);
             })
-            ->sum('poin');
+            ->get(['id', 'is_aktif']);
+
+        $activeIds = $meja->where('is_aktif', true)->pluck('id');
+        $previousIds = $meja->where('is_aktif', false)->pluck('id');
+
+        $currentSum = $activeIds->isEmpty()
+            ? 0
+            : (int) MahjongPoinEntry::query()
+                ->where('id_grup_member', $member->id)
+                ->whereIn('id_meja', $activeIds)
+                ->sum('poin');
+
+        $previousSum = $previousIds->isEmpty()
+            ? 0
+            : (int) MahjongPoinEntry::query()
+                ->where('id_grup_member', $member->id)
+                ->whereIn('id_meja', $previousIds)
+                ->sum('poin');
 
         $member->update([
-            'poin_didapat' => $sum,
+            'poin_didapat' => $currentSum,
+            'poin_akumulasi' => $previousSum,
             'poin_disetujui' => false,
         ]);
     }

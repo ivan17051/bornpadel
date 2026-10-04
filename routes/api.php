@@ -36,6 +36,7 @@ Route::prefix('v1/external')->middleware('external.api')->group(function () {
     Route::get('/tournaments/{id}/winners', [ExternalTournamentController::class, 'winners']);
     Route::get('/tournaments/{id}/mahjong-groups', [ExternalMahjongScoreController::class, 'groups']);
     Route::post('/tournaments/{id}/mahjong-scores', [ExternalMahjongScoreController::class, 'storeGroup']);
+    Route::delete('/tournaments/{id}/mahjong-scores', [ExternalMahjongScoreController::class, 'destroyRound']);
     Route::post('/tournaments/{id}/mahjong-members/{member}/scores', [ExternalMahjongScoreController::class, 'storeMember']);
     Route::patch('/tournaments/{id}/mahjong-scores/{entry}', [ExternalMahjongScoreController::class, 'update']);
 });

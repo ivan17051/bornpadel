@@ -510,6 +510,7 @@
                                    data-grup-id="{{ $g->id }}"
                                    data-grup-name="{{ $g->nama }}"
                                    data-update-url="{{ route('admin.matchmaking.mahjong-group-point-entries.update', $g) }}"
+                                   data-delete-url="{{ route('admin.matchmaking.mahjong-group-point-entries.destroy', $g) }}"
                                    data-adjust-url="{{ route('admin.matchmaking.mahjong-group-point-adjustments.update', $g) }}">
                                 <thead class="table-light">
                                     <tr>
@@ -569,12 +570,19 @@
                                     @forelse ($mahjongRounds as $roundIndex => $round)
                                         <tr class="mahjong-round-row" data-round="{{ $roundIndex + 1 }}">
                                             <td class="text-center mahjong-round-number-cell">
-                                                <button type="button"
-                                                        class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
-                                                        title="Edit ronde {{ $roundIndex + 1 }}">
-                                                    <span class="mahjong-round-label">{{ $roundIndex + 1 }}</span>
-                                                    <i class="bi bi-pencil-square ms-1"></i>
-                                                </button>
+                                                <div class="d-inline-flex align-items-center justify-content-center gap-1">
+                                                    <button type="button"
+                                                            class="btn btn-link btn-sm text-decoration-none fw-semibold p-0 btn-mahjong-edit-ronde"
+                                                            title="Edit ronde {{ $roundIndex + 1 }}">
+                                                        <span class="mahjong-round-label">{{ $roundIndex + 1 }}</span>
+                                                        <i class="bi bi-pencil-square ms-1"></i>
+                                                    </button>
+                                                    <button type="button"
+                                                            class="btn btn-link btn-sm text-decoration-none p-0 btn-mahjong-delete-ronde"
+                                                            title="Hapus ronde {{ $roundIndex + 1 }}">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
                                             </td>
                                             @foreach ($mahjongMembers as $member)
                                                 @php
@@ -1093,6 +1101,13 @@
     .mahjong-group-score-table .btn-mahjong-edit-ronde:hover,
     .mahjong-group-score-table .btn-mahjong-edit-ronde:focus {
         color: var(--bs-primary, #0d6efd);
+    }
+    .mahjong-group-score-table .btn-mahjong-delete-ronde {
+        color: var(--bs-danger, #dc3545);
+    }
+    .mahjong-group-score-table .btn-mahjong-delete-ronde:hover,
+    .mahjong-group-score-table .btn-mahjong-delete-ronde:focus {
+        color: var(--bs-danger, #dc3545);
     }
     .mahjong-group-score-table .btn-mahjong-edit-adjustment {
         color: inherit;

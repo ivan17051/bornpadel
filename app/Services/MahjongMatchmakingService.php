@@ -747,6 +747,60 @@ class MahjongMatchmakingService
     }
 
     /**
+     * @param  list<int>  $entryIds
+     * @return Collection<int, GrupMember>
+     */
+    public function deleteGroupPointEntries(Grup $grup, array $entryIds): Collection
+    {
+        return DB::transaction(function () use ($grup, $entryIds) {
+            $this->assertMahjongGroup($grup);
+
+            $grup->loadMissing('members.poinEntries');
+            $membersById = $grup->members->keyBy('id');
+            $wasActive = (bool) $grup->is_aktif;
+            $oldSums = $membersById->map(fn (GrupMember $member) => (int) $member->poinEntries->sum('poin'));
+
+            $entryIds = collect($entryIds)->map(fn ($id) => (int) $id)->filter()->unique()->values();
+
+            if ($entryIds->isEmpty()) {
+                throw new RuntimeException('Pilih ronde yang akan dihapus.');
+            }
+
+            $entries = MahjongPoinEntry::query()->whereIn('id', $entryIds)->get();
+
+            if ($entries->count() !== $entryIds->count()) {
+                throw new RuntimeException('Entri poin tidak ditemukan.');
+            }
+
+            foreach ($entries as $entry) {
+                if (! $membersById->has((int) $entry->id_grup_member)) {
+                    throw new RuntimeException('Entri poin tidak cocok dengan anggota grup.');
+                }
+            }
+
+            MahjongPoinEntry::query()->whereIn('id', $entryIds)->delete();
+
+            return $membersById->values()->map(function (GrupMember $member) use ($grup, $wasActive, $oldSums) {
+                if ($wasActive) {
+                    return $this->syncPoinDidapatFromEntries($member);
+                }
+
+                $newSum = (int) $member->poinEntries()->sum('poin');
+                $delta = $newSum - (int) $oldSums->get($member->id);
+
+                if ($delta !== 0) {
+                    $member->update([
+                        'poin_akumulasi' => (int) $member->poin_akumulasi + $delta,
+                    ]);
+                    $this->propagateMahjongSeatingDelta($grup, (int) $member->id_turnamen_peserta, $delta);
+                }
+
+                return $member->fresh(['poinEntries', 'grup.turnamen']);
+            })->values();
+        });
+    }
+
+    /**
      * Set bonus/penalty for every member in the active group (one value per player per babak seating).
      *
      * @param  array<int, array{id: int, poin: int}>  $scores

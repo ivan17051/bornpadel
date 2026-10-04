@@ -7,6 +7,41 @@ use Illuminate\Support\Collection;
 class MahjongTeamStandingRanker
 {
     /**
+     * Klasemen / cutline order: total poin → menang → akumulasi.
+     * Team id is never a ranking key; remaining ties stay for admin pick.
+     */
+    public function compareScores(array $a, array $b): int
+    {
+        $total = ((int) ($b['total_poin'] ?? 0)) <=> ((int) ($a['total_poin'] ?? 0));
+
+        if ($total !== 0) {
+            return $total;
+        }
+
+        $wins = ((int) ($b['menang'] ?? 0)) <=> ((int) ($a['menang'] ?? 0));
+
+        if ($wins !== 0) {
+            return $wins;
+        }
+
+        return ((int) ($b['poin_akumulasi'] ?? 0)) <=> ((int) ($a['poin_akumulasi'] ?? 0));
+    }
+
+    /**
+     * Display order after score compare. Nama is stable only — not used to decide lolos.
+     */
+    public function compare(array $a, array $b): int
+    {
+        $score = $this->compareScores($a, $b);
+
+        if ($score !== 0) {
+            return $score;
+        }
+
+        return strcasecmp((string) ($a['nama'] ?? ''), (string) ($b['nama'] ?? ''));
+    }
+
+    /**
      * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
      * @param  list<int>|null  $tiebreakTimIds
      * @return array{
@@ -24,13 +59,7 @@ class MahjongTeamStandingRanker
     ): array {
         $sorted = $rows
             ->sort(function (array $a, array $b) {
-                $score = ((int) ($b['total_poin'] ?? 0)) <=> ((int) ($a['total_poin'] ?? 0));
-
-                if ($score !== 0) {
-                    return $score;
-                }
-
-                return ((int) ($a['id_tim'] ?? 0)) <=> ((int) ($b['id_tim'] ?? 0));
+                return $this->compare($a, $b);
             })
             ->values();
 
@@ -57,7 +86,7 @@ class MahjongTeamStandingRanker
             $bubble = collect();
 
             for ($cursor = $index; $cursor < $sorted->count(); $cursor++) {
-                if (((int) ($sorted[$cursor]['total_poin'] ?? 0)) !== ((int) ($anchor['total_poin'] ?? 0))) {
+                if ($this->compareScores($sorted[$cursor], $anchor) !== 0) {
                     break;
                 }
 

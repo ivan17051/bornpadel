@@ -50,10 +50,17 @@
                             @foreach ($standings as $row)
                                 @php
                                     $members = collect($row['members'] ?? $row['standings'] ?? []);
+                                    $nextRow = $standings[$loop->index + 1] ?? null;
+                                    $isUniqueLeader = (int) ($row['rank'] ?? 0) === 1 && (
+                                        $nextRow === null
+                                        || (int) ($row['total_poin'] ?? 0) !== (int) ($nextRow['total_poin'] ?? 0)
+                                        || (int) ($row['menang'] ?? 0) !== (int) ($nextRow['menang'] ?? 0)
+                                        || (int) ($row['poin_akumulasi'] ?? 0) !== (int) ($nextRow['poin_akumulasi'] ?? 0)
+                                    );
                                 @endphp
-                                <tr class="{{ (int) ($row['rank'] ?? 0) === 1 ? 'table-success' : '' }}">
+                                <tr class="{{ $isUniqueLeader ? 'table-success' : '' }}">
                                     <td class="text-center fw-bold">
-                                        @if ((int) ($row['rank'] ?? 0) === 1)
+                                        @if ($isUniqueLeader)
                                             <i class="bi bi-trophy-fill text-warning"></i>
                                         @else
                                             {{ $row['rank'] }}
@@ -69,7 +76,7 @@
                                                             :id="$member['id_pemain'] ?? null"
                                                             :name="$member['nama'] ?? '—'"
                                                         />
-                                                        <span class="ms-1">{{ (int) ($member['poin_babak'] ?? $member['poin_didapat'] ?? 0) }}</span>
+                                                        <span class="ms-1">{{ (int) ($member['total_poin'] ?? $member['poin_babak'] ?? $member['poin_didapat'] ?? 0) }}</span>
                                                     </li>
                                                 @endforeach
                                             </ul>
@@ -84,7 +91,7 @@
                     </table>
                 </div>
                 <div class="px-3 py-2 border-top bg-light small text-muted">
-                    Peringkat berdasarkan total poin tim, termasuk bonus/penalti. Poin tiap pemain tercantum di bawah nama tim.
+                    Urutan: total poin, lalu menang, lalu akumulasi. Jika masih seri, admin memilih saat Akhiri Babak.
                 </div>
             </div>
         </div>

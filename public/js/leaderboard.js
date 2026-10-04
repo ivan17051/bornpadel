@@ -227,7 +227,7 @@
             return;
         }
 
-        const bodyRows = rows.map((team) => {
+        const bodyRows = rows.map((team, index) => {
             const members = team.members || team.standings || [];
             const memberList = members.length
                 ? `<ul class="list-unstyled mb-0 mt-1 small text-muted">${members.map((member) => {
@@ -235,16 +235,23 @@
                         ? `<a href="${profileBase}${member.id_pemain}" class="pemain-profile-link">${member.nama || '—'}</a>`
                         : (member.nama || '—');
 
-                    const poin = member.poin_babak ?? member.poin_didapat ?? 0;
+                    const poin = member.total_poin ?? member.poin_babak ?? member.poin_didapat ?? 0;
 
                     return `<li>${name} <span class="ms-1">${poin}</span></li>`;
                 }).join('')}</ul>`
                 : '';
+            const next = rows[index + 1];
+            const isUniqueLeader = Number(team.rank) === 1 && (
+                !next
+                || Number(team.total_poin || 0) !== Number(next.total_poin || 0)
+                || Number(team.menang || 0) !== Number(next.menang || 0)
+                || Number(team.poin_akumulasi || 0) !== Number(next.poin_akumulasi || 0)
+            );
 
             return `
-                <tr class="${Number(team.rank) === 1 ? 'table-success' : ''}">
+                <tr class="${isUniqueLeader ? 'table-success' : ''}">
                     <td class="text-center fw-bold">
-                        ${Number(team.rank) === 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : (team.rank ?? '')}
+                        ${isUniqueLeader ? '<i class="bi bi-trophy-fill text-warning"></i>' : (team.rank ?? '')}
                     </td>
                     <td>
                         <div class="fw-semibold">${team.nama || '—'}</div>
@@ -272,7 +279,7 @@
                         </table>
                     </div>
                     <div class="px-3 py-2 border-top bg-light small text-muted">
-                        Peringkat berdasarkan total poin tim. Poin tiap pemain tercantum di bawah nama tim.
+                        Urutan: total poin, lalu menang, lalu akumulasi. Jika masih seri, admin memilih saat Akhiri Babak.
                     </div>
                 </div>
             </div>

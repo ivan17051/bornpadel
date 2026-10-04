@@ -216,7 +216,7 @@ class LeaderboardService
     }
 
     /**
-     * Team standings for Mahjong Tim (aggregate poin babak, including bonus/penalti).
+     * Team standings for Mahjong Tim (babak total including previous seating and bonus/penalti).
      */
     public function getMahjongTeamStandings(Turnamen $turnamen, $idKategori = null): Collection
     {
@@ -234,19 +234,26 @@ class LeaderboardService
                 'is_mahjong_team' => true,
                 'matches_complete' => true,
                 'total_poin' => (int) $row['total_poin'],
+                'menang' => (int) ($row['menang'] ?? 0),
+                'poin_akumulasi' => (int) ($row['poin_akumulasi'] ?? 0),
                 'members' => $members->map(function ($member) {
+                    $totalPoin = (int) ($member['total_poin'] ?? $member['poin_babak'] ?? $member['poin_didapat'] ?? 0);
+
                     return [
                         'id' => isset($member['id']) ? (int) $member['id'] : null,
                         'id_pemain' => isset($member['id_pemain']) ? (int) $member['id_pemain'] : null,
                         'nama' => $member['nama'] ?? '—',
                         'poin_didapat' => (int) ($member['poin_didapat'] ?? 0),
+                        'poin_akumulasi' => (int) ($member['poin_akumulasi'] ?? 0),
                         'poin_penyesuaian' => (int) ($member['poin_penyesuaian'] ?? 0),
                         'poin_babak' => (int) ($member['poin_babak'] ?? $member['poin_didapat'] ?? 0),
+                        'total_poin' => $totalPoin,
+                        'poin' => $totalPoin,
                     ];
                 })->values()->all(),
                 'standings' => $members->map(function ($member, $memberIndex) use ($row) {
                     $pemainId = isset($member['id_pemain']) ? (int) $member['id_pemain'] : null;
-                    $poinBabak = (int) ($member['poin_babak'] ?? $member['poin_didapat'] ?? 0);
+                    $totalPoin = (int) ($member['total_poin'] ?? $member['poin_babak'] ?? $member['poin_didapat'] ?? 0);
 
                     return [
                         'rank' => $memberIndex + 1,
@@ -260,7 +267,8 @@ class LeaderboardService
                         'games_menang' => 0,
                         'games_diff_label' => '0',
                         'stats_reached_at' => null,
-                        'total_poin' => $poinBabak,
+                        'total_poin' => $totalPoin,
+                        'poin' => $totalPoin,
                     ];
                 })->values()->all(),
                 'rank' => $index + 1,

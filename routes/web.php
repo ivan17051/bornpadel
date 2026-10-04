@@ -128,9 +128,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/matchmaking/grup-member/{member}/point-entries', [MatchmakingController::class, 'storeMahjongPointEntry'])->name('matchmaking.mahjong-point-entries.store');
         Route::post('/matchmaking/grup/{grup}/point-entries', [MatchmakingController::class, 'storeMahjongGroupPointEntries'])->name('matchmaking.mahjong-group-point-entries.store');
         Route::patch('/matchmaking/grup/{grup}/point-entries', [MatchmakingController::class, 'updateMahjongGroupPointEntries'])->name('matchmaking.mahjong-group-point-entries.update');
+        Route::delete('/matchmaking/grup/{grup}/point-entries', [MatchmakingController::class, 'destroyMahjongGroupPointEntries'])->name('matchmaking.mahjong-group-point-entries.destroy');
         Route::patch('/matchmaking/grup/{grup}/point-adjustments', [MatchmakingController::class, 'updateMahjongGroupAdjustments'])->name('matchmaking.mahjong-group-point-adjustments.update');
         Route::post('/matchmaking/meja/{meja}/point-entries', [MatchmakingController::class, 'storeMahjongTeamMejaPointEntries'])->name('matchmaking.mahjong-team-meja-point-entries.store');
         Route::patch('/matchmaking/meja/{meja}/point-entries', [MatchmakingController::class, 'updateMahjongTeamMejaPointEntries'])->name('matchmaking.mahjong-team-meja-point-entries.update');
+        Route::delete('/matchmaking/meja/{meja}/point-entries', [MatchmakingController::class, 'destroyMahjongTeamMejaPointEntries'])->name('matchmaking.mahjong-team-meja-point-entries.destroy');
         Route::patch('/matchmaking/meja/{meja}/point-adjustments', [MatchmakingController::class, 'updateMahjongTeamMejaAdjustments'])->name('matchmaking.mahjong-team-meja-point-adjustments.update');
         Route::patch('/matchmaking/meja/{meja}/score-approval', [MatchmakingController::class, 'approveMahjongTeamMejaScores'])->name('matchmaking.mahjong-team-meja-score-approval');
         Route::delete('/matchmaking/grup-member/{member}/point-entries/{entry}', [MatchmakingController::class, 'destroyMahjongPointEntry'])->name('matchmaking.mahjong-point-entries.destroy');

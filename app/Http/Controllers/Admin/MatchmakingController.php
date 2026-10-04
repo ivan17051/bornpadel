@@ -466,8 +466,8 @@ class MatchmakingController extends Controller
             'success' => true,
             'message' => 'Skor semua pemain di '.$meja->nama.' disetujui.',
             'data' => [
-                'members' => $updatedMembers->map(function (GrupMember $member) {
-                    return $this->mahjongMemberPointsPayload($member);
+                'members' => $updatedMembers->map(function (GrupMember $member) use ($meja) {
+                    return $this->mahjongMemberPointsPayload($member, (int) $meja->id);
                 })->values(),
             ],
         ]);
@@ -598,6 +598,36 @@ class MatchmakingController extends Controller
         ]);
     }
 
+    public function destroyMahjongGroupPointEntries(Request $request, Grup $grup)
+    {
+        $request->validate([
+            'entry_ids' => ['required', 'array', 'min:1'],
+            'entry_ids.*' => ['required', 'integer'],
+        ]);
+
+        try {
+            $updatedMembers = $this->mahjongService->deleteGroupPointEntries(
+                $grup,
+                $request->input('entry_ids')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin ronde dihapus.',
+            'data' => [
+                'members' => $updatedMembers->map(function (GrupMember $member) {
+                    return $this->mahjongMemberPointsPayload($member);
+                })->values(),
+            ],
+        ]);
+    }
+
     public function updateMahjongGroupAdjustments(Request $request, Grup $grup)
     {
         $this->defaultEmptyMahjongPoin($request);
@@ -661,8 +691,8 @@ class MatchmakingController extends Controller
             'message' => 'Poin meja berhasil disimpan.',
             'data' => [
                 'meja_id' => $meja->id,
-                'members' => $updatedMembers->map(function (GrupMember $member) {
-                    return $this->mahjongMemberPointsPayload($member);
+                'members' => $updatedMembers->map(function (GrupMember $member) use ($meja) {
+                    return $this->mahjongMemberPointsPayload($member, (int) $meja->id);
                 })->values(),
             ],
         ]);
@@ -700,8 +730,39 @@ class MatchmakingController extends Controller
             'message' => 'Poin ronde berhasil diperbarui.',
             'data' => [
                 'meja_id' => $meja->id,
-                'members' => $updatedMembers->map(function (GrupMember $member) {
-                    return $this->mahjongMemberPointsPayload($member);
+                'members' => $updatedMembers->map(function (GrupMember $member) use ($meja) {
+                    return $this->mahjongMemberPointsPayload($member, (int) $meja->id);
+                })->values(),
+            ],
+        ]);
+    }
+
+    public function destroyMahjongTeamMejaPointEntries(Request $request, TurnamenMeja $meja)
+    {
+        $request->validate([
+            'entry_ids' => ['required', 'array', 'min:1'],
+            'entry_ids.*' => ['required', 'integer'],
+        ]);
+
+        try {
+            $updatedMembers = $this->mahjongTeamService->deleteMejaPointEntries(
+                $meja,
+                $request->input('entry_ids')
+            );
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poin ronde dihapus.',
+            'data' => [
+                'meja_id' => $meja->id,
+                'members' => $updatedMembers->map(function (GrupMember $member) use ($meja) {
+                    return $this->mahjongMemberPointsPayload($member, (int) $meja->id);
                 })->values(),
             ],
         ]);
@@ -733,8 +794,8 @@ class MatchmakingController extends Controller
             'message' => 'Bonus/penalti babak berhasil disimpan.',
             'data' => [
                 'meja_id' => $meja->id,
-                'members' => $updatedMembers->map(function (GrupMember $member) {
-                    return $this->mahjongMemberPointsPayload($member);
+                'members' => $updatedMembers->map(function (GrupMember $member) use ($meja) {
+                    return $this->mahjongMemberPointsPayload($member, (int) $meja->id);
                 })->values(),
             ],
         ]);
@@ -758,14 +819,27 @@ class MatchmakingController extends Controller
         ]);
     }
 
-    protected function mahjongMemberPointsPayload(GrupMember $member): array
+    protected function mahjongMemberPointsPayload(GrupMember $member, ?int $mejaId = null): array
     {
         $member->loadMissing(['poinEntries', 'grup.turnamen']);
+
+        if (
+            $mejaId === null
+            && optional($member->grup)->turnamen
+            && $member->grup->turnamen->isMahjongTeam()
+        ) {
+            $mejaId = $this->activeMahjongTeamMejaId($member);
+        }
+
+        $entries = $member->poinEntries;
+        if ($mejaId !== null) {
+            $entries = $entries->where('id_meja', $mejaId)->values();
+        }
 
         $poinBabak = (int) $member->poin_babak;
         $grup = $member->grup;
         if ($grup && ! $grup->is_aktif && optional($grup->turnamen)->isMahjong()) {
-            $poinBabak = (int) $member->poinEntries->sum('poin') + (int) $member->poin_penyesuaian;
+            $poinBabak = (int) $entries->sum('poin') + (int) $member->poin_penyesuaian;
         }
 
         return [
@@ -777,14 +851,34 @@ class MatchmakingController extends Controller
             'total_poin' => $member->total_poin,
             'menang' => (int) $member->menang,
             'poin_disetujui' => (bool) $member->poin_disetujui,
-            'entries' => $member->poinEntries->map(function ($entry) {
+            'entries' => $entries->map(function ($entry) {
                 return [
                     'id' => $entry->id,
+                    'id_meja' => $entry->id_meja ? (int) $entry->id_meja : null,
                     'poin' => (int) $entry->poin,
                     'is_winner' => (bool) $entry->is_winner,
                 ];
             })->values(),
         ];
+    }
+
+    protected function activeMahjongTeamMejaId(GrupMember $member): ?int
+    {
+        $member->loadMissing('grup');
+
+        if (! $member->grup) {
+            return null;
+        }
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $member->grup->id_turnamen)
+            ->where('is_aktif', true)
+            ->whereHas('seats', function ($query) use ($member) {
+                $query->where('id_grup_member', $member->id);
+            })
+            ->first();
+
+        return $meja ? (int) $meja->id : null;
     }
 
     public function completeTournament(Request $request)

@@ -81,6 +81,47 @@ class MahjongTeamSeatingAndRankerTest extends TestCase
         $this->assertSame([1, 3], $resolved['qualifiers']->pluck('id_tim')->all());
     }
 
+    public function test_ranker_auto_breaks_ties_by_wins_then_akumulasi(): void
+    {
+        $ranker = new MahjongTeamStandingRanker();
+        $byWins = new Collection([
+            ['id_tim' => 1, 'nama' => 'A', 'total_poin' => 30, 'menang' => 1, 'poin_akumulasi' => 0],
+            ['id_tim' => 2, 'nama' => 'B', 'total_poin' => 30, 'menang' => 3, 'poin_akumulasi' => 0],
+            ['id_tim' => 3, 'nama' => 'C', 'total_poin' => 10, 'menang' => 0, 'poin_akumulasi' => 0],
+        ]);
+
+        $resolvedWins = $ranker->resolveAdvanceTeams($byWins, 1);
+        $this->assertSame('resolved', $resolvedWins['status']);
+        $this->assertSame([2], $resolvedWins['qualifiers']->pluck('id_tim')->all());
+
+        $byAkumulasi = new Collection([
+            ['id_tim' => 1, 'nama' => 'A', 'total_poin' => 30, 'menang' => 1, 'poin_akumulasi' => 4],
+            ['id_tim' => 2, 'nama' => 'B', 'total_poin' => 30, 'menang' => 1, 'poin_akumulasi' => 12],
+            ['id_tim' => 3, 'nama' => 'C', 'total_poin' => 10, 'menang' => 0, 'poin_akumulasi' => 0],
+        ]);
+
+        $resolvedAkumulasi = $ranker->resolveAdvanceTeams($byAkumulasi, 1);
+        $this->assertSame('resolved', $resolvedAkumulasi['status']);
+        $this->assertSame([2], $resolvedAkumulasi['qualifiers']->pluck('id_tim')->all());
+    }
+
+    public function test_ranker_does_not_use_team_id_when_scores_are_tied(): void
+    {
+        $ranker = new MahjongTeamStandingRanker();
+        $rows = new Collection([
+            ['id_tim' => 1, 'nama' => 'A', 'total_poin' => 30, 'menang' => 1, 'poin_akumulasi' => 4],
+            ['id_tim' => 9, 'nama' => 'B', 'total_poin' => 30, 'menang' => 1, 'poin_akumulasi' => 4],
+        ]);
+
+        $first = $ranker->resolveAdvanceTeams($rows, 1);
+        $this->assertSame('needs_tiebreak', $first['status']);
+        $this->assertSame([1, 9], $first['contested']->pluck('id_tim')->all());
+
+        $pickedHigherId = $ranker->resolveAdvanceTeams($rows, 1, [9]);
+        $this->assertSame('resolved', $pickedHigherId['status']);
+        $this->assertSame([9], $pickedHigherId['qualifiers']->pluck('id_tim')->all());
+    }
+
     public function test_allowed_advance_counts(): void
     {
         $seating = new MahjongTeamSeatingService();

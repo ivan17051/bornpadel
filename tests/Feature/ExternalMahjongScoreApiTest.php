@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\MahjongMatchmakingService;
 use App\Services\MahjongTeamMatchmakingService;
 use App\Services\PemainRegistrationService;
+use App\Services\TurnamenKategoriService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -481,6 +482,105 @@ class ExternalMahjongScoreApiTest extends TestCase
         $this->assertSame($meja->id, (int) $member->fresh()->poinEntries()->first()->id_meja);
     }
 
+    public function test_external_mahjong_team_groups_scope_entries_after_reshuffle(): void
+    {
+        $turnamen = $this->prepareMahjongTeamTournament(16);
+        $service = app(MahjongTeamMatchmakingService::class);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $winnerId = (int) $meja->seats->first()->id_grup_member;
+        $service->addMejaPointEntries($meja, $meja->seats->values()->map(function ($seat, int $index) {
+            return [
+                'id' => (int) $seat->id_grup_member,
+                'poin' => [8, -2, -3, -3][$index],
+            ];
+        })->all(), $winnerId);
+
+        $service->reshuffleMeja($turnamen);
+
+        $groupsResponse = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-groups')
+            ->assertOk();
+
+        $groups = $groupsResponse->json('data.groups');
+        $this->assertNotEmpty($groups);
+        $this->assertNotContains($meja->id, collect($groups)->pluck('id')->all());
+        $this->assertContains($groups[0]['id'], $groupsResponse->json('data.turnamen.active_meja_ids'));
+        $this->assertSame(2, (int) $groupsResponse->json('data.turnamen.seating_ronde'));
+
+        $winnerPayload = collect($groups)->flatMap(fn ($group) => $group['members'])->firstWhere('id_grup_member', $winnerId);
+        $this->assertNotNull($winnerPayload);
+        $this->assertSame(0, (int) $winnerPayload['poin_didapat']);
+        $this->assertSame(8, (int) $winnerPayload['poin_akumulasi']);
+        $this->assertSame(8, (int) $winnerPayload['total_poin']);
+        $this->assertSame(0, (int) $winnerPayload['poin']);
+        $this->assertSame(0, (int) $winnerPayload['menang']);
+        $this->assertSame([], $winnerPayload['entries']);
+
+        $standings = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$turnamen->id.'/group-standings')
+            ->assertOk()
+            ->json('data.groups');
+        $standingMember = collect($standings)->flatMap(fn ($row) => $row['members'] ?? [])->firstWhere('id', $winnerId);
+        $this->assertSame(8, (int) $standingMember['total_poin']);
+        $this->assertSame(8, (int) $standingMember['poin']);
+        $this->assertSame(0, (int) $standingMember['poin_didapat']);
+    }
+
+    public function test_external_api_deletes_mahjong_team_round_and_rejects_stale_meja(): void
+    {
+        $turnamen = $this->prepareMahjongTeamTournament(16);
+        $service = app(MahjongTeamMatchmakingService::class);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $members = $meja->seats->map->grupMember->filter()->values();
+        $service->addMejaPointEntries($meja, $members->map(fn ($member, int $index) => [
+            'id' => $member->id,
+            'poin' => [8, -2, -3, -3][$index],
+        ])->all(), (int) $members[0]->id);
+
+        $entryIds = $members->map(fn ($member) => (int) $member->fresh()->poinEntries()->first()->id)->all();
+
+        $this->withHeaders($this->externalHeaders())
+            ->deleteJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores', [
+                'id_meja' => $meja->id,
+                'entry_ids' => $entryIds,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(0, (int) $members[0]->fresh()->poin_didapat);
+        $this->assertSame(0, $members[0]->fresh()->poinEntries()->count());
+
+        $service->addMejaPointEntries($meja->fresh('seats.grupMember'), $members->map(fn ($member, int $index) => [
+            'id' => $member->id,
+            'poin' => [4, -1, -1, -2][$index],
+        ])->all());
+        $service->reshuffleMeja($turnamen);
+
+        $this->withHeaders($this->externalHeaders())
+            ->postJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores', [
+                'id_grup' => $meja->id,
+                'scores' => $members->map(fn ($member) => [
+                    'id_grup_member' => $member->id,
+                    'poin' => 1,
+                ])->all(),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Meja tidak aktif. Ambil ulang mahjong-groups setelah reshuffle.')
+            ->assertJsonPath('data.seating_ronde', 2);
+    }
+
     public function test_mahjong_team_can_toggle_external_scoring_and_block_api_writes(): void
     {
         $admin = User::create([
@@ -525,6 +625,200 @@ class ExternalMahjongScoreApiTest extends TestCase
             ])
             ->assertStatus(403)
             ->assertJsonPath('data.mahjong_external_scoring_enabled', false);
+    }
+
+    public function test_external_api_rejects_stale_entry_patch_after_team_reshuffle(): void
+    {
+        $turnamen = $this->prepareMahjongTeamTournament(16);
+        $service = app(MahjongTeamMatchmakingService::class);
+        $service->generateTeams($turnamen, 'random');
+
+        $meja = TurnamenMeja::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('seats.grupMember')
+            ->first();
+        $member = $meja->seats->first()->grupMember;
+        $service->addMejaPointEntries($meja, $meja->seats->values()->map(function ($seat, int $index) {
+            return [
+                'id' => (int) $seat->id_grup_member,
+                'poin' => [8, -2, -3, -3][$index],
+            ];
+        })->all(), (int) $member->id);
+
+        $entry = $member->fresh()->poinEntries()->first();
+        $this->assertNotNull($entry);
+
+        $service->reshuffleMeja($turnamen);
+        $this->assertSame(8, (int) $member->fresh()->poin_akumulasi);
+        $this->assertSame(0, (int) $member->fresh()->poin_didapat);
+
+        $this->withHeaders($this->externalHeaders())
+            ->patchJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores/'.$entry->id, [
+                'poin' => 99,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Entri poin bukan dari seating aktif. Ambil ulang mahjong-groups setelah reshuffle.')
+            ->assertJsonPath('data.seating_ronde', 2);
+
+        $this->assertSame(8, (int) $entry->fresh()->poin);
+        $this->assertSame(8, (int) $member->fresh()->poin_akumulasi);
+        $this->assertSame(0, (int) $member->fresh()->poin_didapat);
+    }
+
+    public function test_external_api_rejects_stale_entry_patch_after_individual_reshuffle(): void
+    {
+        $turnamen = $this->prepareMahjongTournament(8);
+        $service = app(MahjongMatchmakingService::class);
+        $service->generateGroups($turnamen, 'random');
+
+        $grup = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+        $member = $grup->members->first();
+        $service->addGroupPointEntries($grup, $grup->members->values()->map(function (GrupMember $seat, int $index) {
+            return [
+                'id' => $seat->id,
+                'poin' => [8, -2, -3, -3][$index],
+            ];
+        })->all(), (int) $member->id);
+
+        $entry = $member->fresh()->poinEntries()->first();
+        $this->assertNotNull($entry);
+
+        $service->reshuffleGroups($turnamen, 'random');
+
+        $this->withHeaders($this->externalHeaders())
+            ->patchJson('/api/v1/external/tournaments/'.$turnamen->id.'/mahjong-scores/'.$entry->id, [
+                'poin' => 99,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Entri poin bukan dari grup aktif. Ambil ulang mahjong-groups setelah reshuffle.');
+
+        $this->assertSame(8, (int) $entry->fresh()->poin);
+    }
+
+    public function test_external_mahjong_groups_require_and_filter_by_kategori(): void
+    {
+        $teamTurnamen = $this->prepareMahjongTeamTournament(16);
+        $katA = $teamTurnamen->ensureDefaultKategori();
+        $katB = app(TurnamenKategoriService::class)->create($teamTurnamen, [
+            'nama' => 'Kategori B',
+            'harga' => 100000,
+            'maks_peserta' => 16,
+        ]);
+        $katB->update(['status' => 'ongoing']);
+
+        for ($i = 1; $i <= 16; $i++) {
+            $pemain = Pemain::create([
+                'nama' => "Other Cat Team {$i}",
+                'gender' => $i % 2 ? 'male' : 'female',
+                'no_hp' => '+62826'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT).$i,
+                'rating' => 2.5,
+            ]);
+
+            TurnamenPeserta::create([
+                'id_turnamen' => $teamTurnamen->id,
+                'id_kategori' => $katB->id,
+                'id_pemain1' => $pemain->id,
+                'status' => 'approved',
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+            ]);
+        }
+
+        $teamService = app(MahjongTeamMatchmakingService::class);
+        $teamService->generateTeams($teamTurnamen, 'random', $katA->id);
+        $teamService->generateTeams($teamTurnamen, 'random', $katB->id);
+
+        $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$teamTurnamen->id.'/mahjong-groups')
+            ->assertStatus(422)
+            ->assertJsonPath(
+                'message',
+                'Parameter id_kategori wajib diisi karena turnamen memiliki lebih dari satu kategori.'
+            );
+
+        $responseA = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$teamTurnamen->id.'/mahjong-groups?id_kategori='.$katA->id)
+            ->assertOk()
+            ->assertJsonPath('data.turnamen.id_kategori', $katA->id);
+        $groupsA = $responseA->json('data.groups');
+        $this->assertNotEmpty($groupsA);
+        $this->assertTrue(collect($groupsA)->every(function ($group) use ($katA) {
+            return (int) $group['id_kategori'] === (int) $katA->id;
+        }));
+        $this->assertSame(
+            collect($groupsA)->pluck('id')->sort()->values()->all(),
+            collect($responseA->json('data.turnamen.active_meja_ids'))->sort()->values()->all()
+        );
+
+        $groupsB = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$teamTurnamen->id.'/mahjong-groups?id_kategori='.$katB->id)
+            ->assertOk()
+            ->assertJsonPath('data.turnamen.id_kategori', $katB->id)
+            ->json('data.groups');
+        $this->assertNotEmpty($groupsB);
+        $this->assertTrue(collect($groupsB)->every(function ($group) use ($katB) {
+            return (int) $group['id_kategori'] === (int) $katB->id;
+        }));
+        $this->assertEmpty(array_intersect(
+            collect($groupsA)->pluck('id')->all(),
+            collect($groupsB)->pluck('id')->all()
+        ));
+
+        $individual = $this->prepareMahjongTournament(8);
+        $indA = $individual->ensureDefaultKategori();
+        $indB = app(TurnamenKategoriService::class)->create($individual, [
+            'nama' => 'Individu B',
+            'harga' => 100000,
+            'maks_peserta' => 8,
+        ]);
+        $indB->update(['status' => 'ongoing']);
+
+        for ($i = 1; $i <= 8; $i++) {
+            $pemain = Pemain::create([
+                'nama' => "Other Cat MJ {$i}",
+                'gender' => $i % 2 ? 'male' : 'female',
+                'no_hp' => '+62827'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT).$i,
+                'rating' => 2.5,
+            ]);
+
+            TurnamenPeserta::create([
+                'id_turnamen' => $individual->id,
+                'id_kategori' => $indB->id,
+                'id_pemain1' => $pemain->id,
+                'status' => 'approved',
+                'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+            ]);
+        }
+
+        $individualService = app(MahjongMatchmakingService::class);
+        $individualService->generateGroups($individual, 'random', $indA->id);
+        $individualService->generateGroups($individual, 'random', $indB->id);
+
+        $indGroupsA = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$individual->id.'/mahjong-groups?id_kategori='.$indA->id)
+            ->assertOk()
+            ->json('data.groups');
+        $indGroupsB = $this->withHeaders($this->externalHeaders())
+            ->getJson('/api/v1/external/tournaments/'.$individual->id.'/mahjong-groups?id_kategori='.$indB->id)
+            ->assertOk()
+            ->json('data.groups');
+
+        $this->assertNotEmpty($indGroupsA);
+        $this->assertNotEmpty($indGroupsB);
+        $this->assertTrue(collect($indGroupsA)->every(function ($group) use ($indA) {
+            return (int) $group['id_kategori'] === (int) $indA->id;
+        }));
+        $this->assertTrue(collect($indGroupsB)->every(function ($group) use ($indB) {
+            return (int) $group['id_kategori'] === (int) $indB->id;
+        }));
+        $this->assertEmpty(array_intersect(
+            collect($indGroupsA)->pluck('id')->all(),
+            collect($indGroupsB)->pluck('id')->all()
+        ));
     }
 
     protected function prepareMahjongTournament(int $playerCount): Turnamen
