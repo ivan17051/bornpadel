@@ -9,9 +9,11 @@ use App\Models\Pemain;
 use App\Models\Turnamen;
 use App\Models\TurnamenMeja;
 use App\Models\TurnamenMejaSeat;
+use App\Models\TurnamenPemenang;
 use App\Models\TurnamenPeserta;
 use App\Models\User;
 use App\Services\MahjongTeamMatchmakingService;
+use App\Services\TournamentWinnersService;
 use App\Services\TurnamenKategoriService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
@@ -154,6 +156,48 @@ class MahjongTeamMatchmakingTest extends TestCase
             ->assertJsonPath('data.is_champion', true);
 
         $this->assertTrue($service->canComplete($turnamen->fresh()));
+
+        $champion = Grup::query()
+            ->where('id_turnamen', $turnamen->id)
+            ->where('is_aktif', true)
+            ->with('members')
+            ->first();
+        $this->assertNotNull($champion);
+        $this->assertCount(4, $champion->members);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.matchmaking.complete-tournament'), [
+                'id_turnamen' => $turnamen->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $kategori = $turnamen->fresh()->defaultKategori();
+        $this->assertSame('completed', $kategori->status);
+        $this->assertSame('completed', $turnamen->fresh()->status);
+
+        $winnerRows = TurnamenPemenang::query()
+            ->where('id_kategori', $kategori->id)
+            ->orderBy('id')
+            ->get();
+        $this->assertCount(4, $winnerRows);
+        $this->assertTrue($winnerRows->every(function (TurnamenPemenang $row) {
+            return (int) $row->peringkat === 1;
+        }));
+        $this->assertEqualsCanonicalizing(
+            $champion->members->pluck('id_pemain')->map(function ($id) {
+                return (int) $id;
+            })->all(),
+            $winnerRows->pluck('id_pemain')->map(function ($id) {
+                return (int) $id;
+            })->all()
+        );
+
+        $payload = app(TournamentWinnersService::class)->getWinners($turnamen->fresh(), $kategori->id);
+        $this->assertTrue($payload['has_winners']);
+        $this->assertSame($champion->nama, $payload['first']['label']);
+        $this->assertCount(4, $payload['first']['players']);
+        $this->assertSame($champion->nama, $turnamen->fresh()->champion_label);
     }
 
     public function test_generate_rejects_wrong_player_count(): void

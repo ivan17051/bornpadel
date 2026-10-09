@@ -88,6 +88,15 @@
                 'cardClass' => 'card border-0 shadow-sm mt-4',
             ])
         @elseif ($turnamen && $turnamen->isMahjongTeam())
+            @if (! empty($winners) && ! empty($winners['has_winners']))
+                @include('components.partials.bracket-podium-styles')
+                @include('components.partials.bracket-podium', [
+                    'first' => $winners['first'],
+                    'second' => $winners['second'],
+                    'third' => $winners['third'],
+                ])
+            @endif
+
             <x-mahjong-team-leaderboard
                 :standings="$standings"
                 :turnamen="$turnamen"

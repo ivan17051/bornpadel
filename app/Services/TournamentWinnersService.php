@@ -2,9 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\Pemain;
+use App\Models\GrupMember;
 use App\Models\Turnamen;
 use App\Models\TurnamenKategori;
+use Illuminate\Support\Collection;
 
 class TournamentWinnersService
 {
@@ -25,7 +26,7 @@ class TournamentWinnersService
             return $this->emptyPayload();
         }
 
-        if ($turnamen->isMahjong()) {
+        if ($turnamen->isMahjong() || $turnamen->isMahjongTeam()) {
             return $this->fromMahjong($turnamen, $kategori);
         }
 
@@ -44,27 +45,94 @@ class TournamentWinnersService
 
     protected function fromMahjong(Turnamen $turnamen, TurnamenKategori $kategori): array
     {
-        $rows = $kategori->pemenang()->with('pemain')->orderBy('peringkat')->get();
+        $rows = $kategori->pemenang()->with('pemain')->orderBy('peringkat')->orderBy('id')->get();
 
         if ($rows->isEmpty()) {
             return $this->emptyPayload();
         }
 
+        $teamNames = $turnamen->isMahjongTeam()
+            ? $this->teamNamesForWinnerRows($kategori, $rows)
+            : [];
         $payload = $this->emptyPayload();
 
-        foreach ($rows as $row) {
-            $slot = $this->slotForRank((int) $row->peringkat);
+        foreach ($rows->groupBy('peringkat') as $rank => $rankRows) {
+            $slot = $this->slotForRank((int) $rank);
 
-            if (! $slot || ! $row->pemain) {
+            if (! $slot) {
                 continue;
             }
 
-            $payload[$slot] = $this->formatPemainEntry($row->pemain);
+            $players = [];
+            $labels = [];
+
+            foreach ($rankRows as $row) {
+                if (! $row->pemain) {
+                    continue;
+                }
+
+                $players[] = [
+                    'id' => (int) $row->pemain->id,
+                    'nama' => $row->pemain->nama,
+                    'foto_url' => $this->photoService->url($row->pemain->foto),
+                ];
+
+                $pesertaId = $row->id_turnamen_peserta ? (int) $row->id_turnamen_peserta : null;
+                if ($pesertaId && ! empty($teamNames[$pesertaId])) {
+                    $labels[] = $teamNames[$pesertaId];
+                }
+            }
+
+            if ($players === []) {
+                continue;
+            }
+
+            $uniqueTeamNames = array_values(array_unique($labels));
+            $label = count($uniqueTeamNames) === 1
+                ? $uniqueTeamNames[0]
+                : (count($players) === 1
+                    ? $players[0]['nama']
+                    : implode(' / ', array_column($players, 'nama')));
+
+            $payload[$slot] = [
+                'label' => $label,
+                'players' => $players,
+            ];
         }
 
         $payload['has_winners'] = $payload['first'] || $payload['second'] || $payload['third'];
 
         return $payload;
+    }
+
+    /**
+     * @param  Collection<int, \App\Models\TurnamenPemenang>  $rows
+     * @return array<int, string>
+     */
+    protected function teamNamesForWinnerRows(TurnamenKategori $kategori, Collection $rows): array
+    {
+        $pesertaIds = $rows->pluck('id_turnamen_peserta')->filter()->map(function ($id) {
+            return (int) $id;
+        })->unique()->values();
+
+        if ($pesertaIds->isEmpty()) {
+            return [];
+        }
+
+        return GrupMember::query()
+            ->whereIn('id_turnamen_peserta', $pesertaIds->all())
+            ->whereHas('grup', function ($query) use ($kategori) {
+                $query->where('id_kategori', $kategori->id);
+            })
+            ->with('grup')
+            ->get()
+            ->filter(function (GrupMember $member) {
+                return (string) optional($member->grup)->nama !== '';
+            })
+            ->mapWithKeys(function (GrupMember $member) {
+                return [(int) $member->id_turnamen_peserta => $member->grup->nama];
+            })
+            ->all();
     }
 
     protected function fromKnockout(Turnamen $turnamen, TurnamenKategori $kategori): array
@@ -108,18 +176,6 @@ class TournamentWinnersService
             2 => 'second',
             3 => 'third',
         ][$rank] ?? null;
-    }
-
-    protected function formatPemainEntry(Pemain $pemain): array
-    {
-        return [
-            'label' => $pemain->nama,
-            'players' => [[
-                'id' => (int) $pemain->id,
-                'nama' => $pemain->nama,
-                'foto_url' => $this->photoService->url($pemain->foto),
-            ]],
-        ];
     }
 
     /**

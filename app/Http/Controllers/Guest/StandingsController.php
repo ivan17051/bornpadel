@@ -63,7 +63,7 @@ class StandingsController extends Controller
             ? $friendlyService->getPublicMatchSessions($turnamen, $kategoriId)
             : collect();
 
-        $winners = $turnamen && $turnamen->isMahjong()
+        $winners = $turnamen && ($turnamen->isMahjong() || $turnamen->isMahjongTeam())
             && (($kategori && $kategori->status === 'completed') || $turnamen->status === 'completed')
             ? $winnersService->getWinners($turnamen, $kategoriId)
             : null;

@@ -509,10 +509,26 @@ class Turnamen extends Model
             return null;
         }
 
-        if ($this->isMahjong()) {
+        if ($this->isMahjong() || $this->isMahjongTeam()) {
             $juara = $this->relationLoaded('pemenang')
                 ? $this->pemenang->firstWhere('peringkat', 1)
                 : $this->pemenang()->where('peringkat', 1)->with('pemain')->first();
+
+            if ($this->isMahjongTeam() && $juara && $juara->id_turnamen_peserta) {
+                $teamName = GrupMember::query()
+                    ->where('id_turnamen_peserta', $juara->id_turnamen_peserta)
+                    ->with('grup')
+                    ->get()
+                    ->map(function (GrupMember $member) {
+                        return optional($member->grup)->nama;
+                    })
+                    ->filter()
+                    ->first();
+
+                if ($teamName) {
+                    return $teamName;
+                }
+            }
 
             return optional(optional($juara)->pemain)->nama;
         }
