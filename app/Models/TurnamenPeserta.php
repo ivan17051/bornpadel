@@ -267,17 +267,40 @@ class TurnamenPeserta extends Model
             'rejected' => 'Rejected',
         ];
 
-        return $labels[$this->status] ?? ucfirst((string) $this->status);
+        return $labels[$this->verificationStatus()] ?? 'Pending';
     }
 
     public function isPaid(): bool
     {
-        return $this->payment_status === 'paid';
+        return $this->effectivePaymentStatus() === 'paid';
     }
 
     public function getPaymentStatusLabelAttribute(): string
     {
         return $this->isPaid() ? 'Paid' : 'Unpaid';
+    }
+
+    public function verificationStatus(): string
+    {
+        return static::normalizeRegistrationState(
+            $this->status,
+            $this->payment_status,
+            (bool) $this->bukti_bayar
+        )['status'];
+    }
+
+    public function effectivePaymentStatus(): string
+    {
+        return static::normalizeRegistrationState(
+            $this->status,
+            $this->payment_status,
+            (bool) $this->bukti_bayar
+        )['payment_status'];
+    }
+
+    public function canBeApproved(): bool
+    {
+        return in_array($this->verificationStatus(), ['pending', 'rejected'], true);
     }
 
     /**

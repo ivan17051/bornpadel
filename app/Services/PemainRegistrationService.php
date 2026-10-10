@@ -348,9 +348,9 @@ class PemainRegistrationService
                         'label' => $entry->display_name,
                         'pemain1' => optional($entry->pemain1)->nama,
                         'pemain2' => optional(optional($partner)->pemain1)->nama,
-                        'status' => $entry->status,
+                        'status' => $entry->verificationStatus(),
                         'status_label' => $entry->status_label,
-                        'payment_status' => $entry->payment_status,
+                        'payment_status' => $entry->effectivePaymentStatus(),
                         'payment_status_label' => $entry->payment_status_label,
                     ];
                 });
@@ -397,9 +397,9 @@ class PemainRegistrationService
                 'display' => $partnerName
                     ? trim((optional($peserta->pemain1)->nama ?? '') . ' / ' . $partnerName)
                     : (optional($peserta->pemain1)->nama ?? '-'),
-                'status' => $peserta->status,
+                'status' => $peserta->verificationStatus(),
                 'status_label' => $peserta->status_label,
-                'payment_status' => $peserta->payment_status,
+                'payment_status' => $peserta->effectivePaymentStatus(),
                 'payment_status_label' => $peserta->payment_status_label,
                 'is_paired' => $peserta->isPaired(),
                 'group_id' => $group ? (int) $group->id : null,

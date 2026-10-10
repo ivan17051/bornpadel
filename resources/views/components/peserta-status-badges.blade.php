@@ -7,19 +7,21 @@
 ])
 
 @php
-    $status = $status ?? optional($peserta)->status;
-    $paymentStatus = $paymentStatus ?? optional($peserta)->payment_status ?? 'unpaid';
+    $hasReceipt = (bool) optional($peserta)->bukti_bayar;
+    $state = \App\Models\TurnamenPeserta::normalizeRegistrationState(
+        $status ?? optional($peserta)->status,
+        $paymentStatus ?? optional($peserta)->payment_status,
+        $hasReceipt
+    );
+    $status = $state['status'];
+    $paymentStatus = $state['payment_status'];
     $statusLabels = [
         'pending' => 'Pending',
         'approved' => 'Approved',
         'rejected' => 'Rejected',
     ];
-    $statusLabel = $statusLabel
-        ?? optional($peserta)->status_label
-        ?? ($statusLabels[$status] ?? ucfirst((string) $status));
-    $paymentLabel = $paymentLabel
-        ?? optional($peserta)->payment_status_label
-        ?? ($paymentStatus === 'paid' ? 'Paid' : 'Unpaid');
+    $statusLabel = $statusLabels[$status] ?? 'Pending';
+    $paymentLabel = $paymentStatus === 'paid' ? 'Paid' : 'Unpaid';
 @endphp
 
 @if ($status)

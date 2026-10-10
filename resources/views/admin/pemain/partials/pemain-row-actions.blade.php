@@ -12,10 +12,14 @@
         $pemainEditParams['id_turnamen'] = $turnamen->id;
     }
 
-    $hasApprove = $turnamen && in_array($registrationStatus, ['pending', 'rejected'], true);
-    $hasReject = $turnamen && ! $turnamenOngoing && in_array($registrationStatus, ['pending', 'approved'], true);
-    $hasMarkPaid = $turnamen && $peserta && optional($peserta)->payment_status !== 'paid';
-    $hasMarkUnpaid = $turnamen && $peserta && optional($peserta)->payment_status === 'paid';
+    $hasApprove = $turnamen && ($peserta ? $peserta->canBeApproved() : in_array($registrationStatus, ['pending', 'rejected', 'unpaid', 'paid'], true));
+    $hasReject = $turnamen && ! $turnamenOngoing && in_array(
+        $peserta ? $peserta->verificationStatus() : $registrationStatus,
+        ['pending', 'approved'],
+        true
+    );
+    $hasMarkPaid = $turnamen && $peserta && ! $peserta->isPaid();
+    $hasMarkUnpaid = $turnamen && $peserta && $peserta->isPaid();
     $hasDelete = $turnamen && ! $turnamenOngoing;
     $canManagePartner = ($showPartnerActions ?? false) && $peserta;
     $hasSetPartner = $canManagePartner && ! $peserta->isPaired();

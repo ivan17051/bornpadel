@@ -14,11 +14,11 @@
 
     $representativePemain = $pemain1 ?? $pemain2;
     $missingSlot = ! $pemain1 ? 1 : (! $pemain2 ? 2 : null);
-    $hasPairApprove = $turnamen && $representativePemain && in_array($registrationStatus, ['pending', 'rejected'], true);
+    $hasPairApprove = $turnamen && $representativePemain && ($peserta ? $peserta->canBeApproved() : in_array($registrationStatus, ['pending', 'rejected', 'unpaid', 'paid'], true));
     $hasPairReject = $turnamen && $representativePemain && ! $turnamenOngoing
-        && in_array($registrationStatus, ['pending', 'approved'], true);
-    $hasMarkPaid = $turnamen && $representativePemain && optional($peserta)->payment_status !== 'paid';
-    $hasMarkUnpaid = $turnamen && $representativePemain && optional($peserta)->payment_status === 'paid';
+        && in_array($peserta ? $peserta->verificationStatus() : $registrationStatus, ['pending', 'approved'], true);
+    $hasMarkPaid = $turnamen && $representativePemain && $peserta && ! $peserta->isPaid();
+    $hasMarkUnpaid = $turnamen && $representativePemain && $peserta && $peserta->isPaid();
     $hasDelete = $turnamen && ! $turnamenOngoing;
 @endphp
 

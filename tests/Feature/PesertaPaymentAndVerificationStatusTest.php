@@ -115,6 +115,30 @@ class PesertaPaymentAndVerificationStatusTest extends TestCase
         $this->assertSame('paid', $approved['payment_status']);
     }
 
+    public function test_legacy_unpaid_status_shows_pending_and_can_be_approved(): void
+    {
+        $peserta = new TurnamenPeserta([
+            'status' => 'unpaid',
+            'payment_status' => 'paid',
+        ]);
+
+        $this->assertSame('pending', $peserta->verificationStatus());
+        $this->assertTrue($peserta->canBeApproved());
+        $this->assertTrue($peserta->isPaid());
+        $this->assertSame('Pending', $peserta->status_label);
+        $this->assertSame('Paid', $peserta->payment_status_label);
+
+        $html = view('components.peserta-status-badges', [
+            'peserta' => $peserta,
+            'attributes' => new \Illuminate\View\ComponentAttributeBag(),
+        ])->render();
+        $this->assertStringContainsString('Pending', $html);
+        $this->assertStringContainsString('Paid', $html);
+        $this->assertStringContainsString('status-badge-pending', $html);
+        $this->assertStringContainsString('status-badge-paid', $html);
+        $this->assertStringNotContainsString('status-badge-unpaid', $html);
+    }
+
     public function test_uploading_receipt_marks_paid_without_approving(): void
     {
         $turnamen = $this->createOpenTournament();

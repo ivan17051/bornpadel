@@ -281,7 +281,7 @@
                                 $pesertaRow = $turnamen ? $item->turnamenPesertaAsPemain1->first() : null;
                                 $partnerPemain = $showPartnerColumn ? optional($pesertaRow)->partner_pemain : null;
                                 $registrationStatus = optional($pesertaRow)->status;
-                                $canBulkApprove = $showBulkActions && in_array($registrationStatus, ['pending', 'rejected'], true);
+                                $canBulkApprove = $showBulkActions && $pesertaRow && $pesertaRow->canBeApproved();
                                 $friendlyGroup = $showFriendlyGroups
                                     ? optional(optional($pesertaRow)->grupPendaftaranMember)->grupPendaftaran
                                     : null;

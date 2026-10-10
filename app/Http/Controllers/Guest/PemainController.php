@@ -23,9 +23,9 @@ class PemainController extends Controller
             ->map(function (TurnamenPeserta $peserta) {
                 return [
                     'turnamen' => $peserta->turnamen,
-                    'status' => $peserta->status,
+                    'status' => $peserta->verificationStatus(),
                     'status_label' => $peserta->status_label,
-                    'payment_status' => $peserta->payment_status,
+                    'payment_status' => $peserta->effectivePaymentStatus(),
                     'payment_status_label' => $peserta->payment_status_label,
                     'partner' => $peserta->partner_pemain,
                     'registered_at' => $peserta->created_at,
