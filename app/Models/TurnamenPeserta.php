@@ -303,6 +303,27 @@ class TurnamenPeserta extends Model
         return in_array($this->verificationStatus(), ['pending', 'rejected'], true);
     }
 
+    public static function verificationStatusSortRank(?string $status): int
+    {
+        $normalized = static::normalizeRegistrationState($status, null, false)['status'];
+
+        return [
+            'pending' => 0,
+            'approved' => 1,
+            'rejected' => 2,
+        ][$normalized] ?? 3;
+    }
+
+    public static function verificationStatusOrderSql(string $column): string
+    {
+        return "CASE
+            WHEN {$column} IN ('pending', 'unpaid', 'paid') THEN 0
+            WHEN {$column} = 'approved' THEN 1
+            WHEN {$column} = 'rejected' THEN 2
+            ELSE 3
+        END";
+    }
+
     /**
      * Split legacy combined status values (unpaid/paid) from verification.
      *

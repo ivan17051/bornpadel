@@ -115,6 +115,46 @@ class PesertaPaymentAndVerificationStatusTest extends TestCase
         $this->assertSame('paid', $approved['payment_status']);
     }
 
+    public function test_registered_players_are_grouped_pending_approved_rejected(): void
+    {
+        $admin = $this->makeAdmin();
+        $turnamen = $this->createOpenTournament();
+
+        $rejected = $this->createPeserta($turnamen, 'ZZ Rejected Player', 'rejected');
+        $pending = $this->createPeserta($turnamen, 'AA Pending Player', 'pending');
+        $approved = $this->createPeserta($turnamen, 'MM Approved Player', 'approved');
+
+        $html = $this->actingAs($admin)
+            ->get(route('admin.pemain.index', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $pendingPos = strpos($html, 'AA Pending Player');
+        $approvedPos = strpos($html, 'MM Approved Player');
+        $rejectedPos = strpos($html, 'ZZ Rejected Player');
+
+        $this->assertNotFalse($pendingPos);
+        $this->assertNotFalse($approvedPos);
+        $this->assertNotFalse($rejectedPos);
+        $this->assertTrue($pendingPos < $approvedPos);
+        $this->assertTrue($approvedPos < $rejectedPos);
+        $this->assertStringContainsString('Ditolak', $html);
+
+        $public = $this->get(route('guest.participants', ['id_turnamen' => $turnamen->id]))
+            ->assertOk()
+            ->getContent();
+
+        $publicPending = strpos($public, 'AA Pending Player');
+        $publicApproved = strpos($public, 'MM Approved Player');
+        $publicRejected = strpos($public, 'ZZ Rejected Player');
+
+        $this->assertNotFalse($publicPending);
+        $this->assertNotFalse($publicApproved);
+        $this->assertNotFalse($publicRejected);
+        $this->assertTrue($publicPending < $publicApproved);
+        $this->assertTrue($publicApproved < $publicRejected);
+    }
+
     public function test_legacy_unpaid_status_shows_pending_and_can_be_approved(): void
     {
         $peserta = new TurnamenPeserta([
@@ -166,6 +206,24 @@ class PesertaPaymentAndVerificationStatusTest extends TestCase
         $this->assertNotEmpty($peserta->bukti_bayar);
 
         app(\App\Services\PaymentReceiptService::class)->delete($peserta->bukti_bayar);
+    }
+
+    protected function createPeserta(Turnamen $turnamen, string $nama, string $status): TurnamenPeserta
+    {
+        $pemain = Pemain::create([
+            'nama' => $nama,
+            'gender' => 'male',
+            'no_hp' => '+62813'.str_pad((string) random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+            'rating' => 3,
+        ]);
+
+        return TurnamenPeserta::create([
+            'id_turnamen' => $turnamen->id,
+            'id_pemain1' => $pemain->id,
+            'status' => $status,
+            'payment_status' => 'unpaid',
+            'sumber' => TurnamenPeserta::SUMBER_INTERNAL,
+        ]);
     }
 
     protected function createOpenTournament(): Turnamen

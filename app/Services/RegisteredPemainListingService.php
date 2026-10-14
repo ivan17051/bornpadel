@@ -152,7 +152,7 @@ class RegisteredPemainListingService
             if ($turnamen->allowsGroupRegistration()) {
                 $this->applyFriendlyGroupDefaultSort($query, $turnamen, $kategoriId);
             } else {
-                $query->latest();
+                $this->applyDefaultVerificationSort($query, $kategoriId);
             }
 
             return;
@@ -164,7 +164,8 @@ class RegisteredPemainListingService
                     $join->on('m_pemain.id', '=', 'tp_sort.id_pemain1')
                         ->where('tp_sort.id_kategori', '=', $kategoriId);
                 })
-                ->orderBy('tp_sort.status', $dir);
+                ->orderByRaw(TurnamenPeserta::verificationStatusOrderSql('tp_sort.status').($dir === 'desc' ? ' DESC' : ''))
+                ->orderBy('m_pemain.nama');
 
             return;
         }
@@ -210,10 +211,22 @@ class RegisteredPemainListingService
             })
             ->leftJoin('turnamen_grup_pendaftaran_member as tgm', 'tgm.id_peserta', '=', 'tp_fg.id')
             ->leftJoin('turnamen_grup_pendaftaran as tgp', 'tgp.id', '=', 'tgm.id_grup_pendaftaran')
+            ->orderByRaw(TurnamenPeserta::verificationStatusOrderSql('tp_fg.status'))
             ->orderByRaw('CASE WHEN tgp.id IS NULL THEN 1 ELSE 0 END')
             ->orderBy('tgp.nama')
             ->orderBy('tgm.urutan')
             ->orderBy('m_pemain.nama');
+    }
+
+    protected function applyDefaultVerificationSort(Builder $query, int $kategoriId): void
+    {
+        $query->select('m_pemain.*')
+            ->join('turnamen_peserta as tp_status', function ($join) use ($kategoriId) {
+                $join->on('m_pemain.id', '=', 'tp_status.id_pemain1')
+                    ->where('tp_status.id_kategori', '=', $kategoriId);
+            })
+            ->orderByRaw(TurnamenPeserta::verificationStatusOrderSql('tp_status.status'))
+            ->orderByDesc('m_pemain.id');
     }
 
     protected function applyPesertaPairSort(Builder $query, Request $request): void
@@ -233,7 +246,8 @@ class RegisteredPemainListingService
         ];
 
         if (! in_array($sort, $allowed, true)) {
-            $query->latest('turnamen_peserta.id');
+            $query->orderByRaw(TurnamenPeserta::verificationStatusOrderSql('turnamen_peserta.status'))
+                ->orderByDesc('turnamen_peserta.id');
 
             return;
         }
@@ -264,7 +278,8 @@ class RegisteredPemainListingService
             return;
         }
 
-        $query->orderBy('turnamen_peserta.status', $dir);
+        $query->orderByRaw(TurnamenPeserta::verificationStatusOrderSql('turnamen_peserta.status').($dir === 'desc' ? ' DESC' : ''))
+            ->orderByDesc('turnamen_peserta.id');
     }
 
     protected function applyRegistrationFilters($query, Request $request): void

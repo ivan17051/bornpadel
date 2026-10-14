@@ -224,11 +224,27 @@
                         $turnamenOngoing = $turnamen && $turnamen->status === 'ongoing';
                     @endphp
                     @if (! empty($isDoubleView))
+                        @php $prevStatusSection = '__unset__'; @endphp
                         @forelse ($peserta as $entry)
                             @php
                                 $pemain1 = $entry->pemain1;
                                 $pemain2 = $entry->pemain2;
+                                $statusSection = $entry->verificationStatus();
                             @endphp
+                            @if ($statusSection !== $prevStatusSection)
+                                <tr class="table-secondary">
+                                    <td colspan="9" class="small fw-semibold py-2">
+                                        @if ($statusSection === 'approved')
+                                            <i class="bi bi-check-circle me-1"></i>Approved
+                                        @elseif ($statusSection === 'rejected')
+                                            <i class="bi bi-x-circle me-1"></i>Ditolak
+                                        @else
+                                            <i class="bi bi-hourglass-split me-1"></i>Pending
+                                        @endif
+                                    </td>
+                                </tr>
+                                @php $prevStatusSection = $statusSection; @endphp
+                            @endif
                             <tr data-peserta-id="{{ $entry->id }}">
                                 <td>{{ $peserta->firstItem() + $loop->index }}</td>
                                 <td>@include('admin.pemain.partials.pemain-cell', ['pemain' => $pemain1, 'turnamen' => $turnamen])</td>
@@ -275,40 +291,56 @@
                         @php
                             $prevFriendlyGroupKey = '__unset__';
                             $friendlyColspan = 8 + ($showBulkActions ? 1 : 0) + ($showPartnerColumn ? 1 : 0);
+                            $statusSectionLabels = [
+                                'pending' => 'Pending',
+                                'approved' => 'Approved',
+                                'rejected' => 'Ditolak',
+                            ];
+                            $statusSectionIcons = [
+                                'pending' => 'bi-hourglass-split',
+                                'approved' => 'bi-check-circle',
+                                'rejected' => 'bi-x-circle',
+                            ];
                         @endphp
                         @forelse ($pemain as $item)
                             @php
                                 $pesertaRow = $turnamen ? $item->turnamenPesertaAsPemain1->first() : null;
                                 $partnerPemain = $showPartnerColumn ? optional($pesertaRow)->partner_pemain : null;
                                 $registrationStatus = optional($pesertaRow)->status;
+                                $verificationStatus = $pesertaRow ? $pesertaRow->verificationStatus() : 'pending';
                                 $canBulkApprove = $showBulkActions && $pesertaRow && $pesertaRow->canBeApproved();
                                 $friendlyGroup = $showFriendlyGroups
                                     ? optional(optional($pesertaRow)->grupPendaftaranMember)->grupPendaftaran
                                     : null;
-                                $friendlyGroupKey = $friendlyGroup ? 'g:' . $friendlyGroup->id : 'solo';
+                                $statusLabel = $statusSectionLabels[$verificationStatus] ?? 'Pending';
+                                $statusIcon = $statusSectionIcons[$verificationStatus] ?? 'bi-hourglass-split';
+                                $friendlyGroupKey = $verificationStatus . '|' . ($friendlyGroup ? 'g:' . $friendlyGroup->id : 'solo');
                             @endphp
-                            @if ($showFriendlyGroups && $friendlyGroupKey !== $prevFriendlyGroupKey)
+                            @if ($friendlyGroupKey !== $prevFriendlyGroupKey)
                                 <tr class="table-secondary">
                                     <td colspan="{{ $friendlyColspan }}" class="small fw-semibold py-2">
                                         <div class="d-flex flex-wrap align-items-center gap-2">
                                             <span>
-                                                <i class="bi bi-people me-1"></i>
-                                                <span class="friendly-reg-group-name" @if ($friendlyGroup) data-group-id="{{ $friendlyGroup->id }}" @endif>
-                                                    {{ $friendlyGroup ? $friendlyGroup->nama : 'Individu / Belum berkelompok' }}
-                                                </span>
-                                                @if ($friendlyGroup)
-                                                    @php
-                                                        $groupTargetMeta = $friendlyRegistrationGroupTargets->firstWhere('id', (int) $friendlyGroup->id);
-                                                        $groupCount = $groupTargetMeta['count'] ?? null;
-                                                    @endphp
-                                                    @if ($groupCount !== null)
-                                                        <span class="badge text-bg-light text-dark border ms-1">
-                                                            {{ $groupCount }}/{{ $friendlyPlayersPerGroup }}
-                                                        </span>
+                                                <i class="bi {{ $statusIcon }} me-1"></i>{{ $statusLabel }}
+                                                @if ($showFriendlyGroups)
+                                                    <span class="text-muted fw-normal">—</span>
+                                                    <span class="friendly-reg-group-name" @if ($friendlyGroup) data-group-id="{{ $friendlyGroup->id }}" @endif>
+                                                        {{ $friendlyGroup ? $friendlyGroup->nama : 'Individu / Belum berkelompok' }}
+                                                    </span>
+                                                    @if ($friendlyGroup && $verificationStatus !== 'rejected')
+                                                        @php
+                                                            $groupTargetMeta = $friendlyRegistrationGroupTargets->firstWhere('id', (int) $friendlyGroup->id);
+                                                            $groupCount = $groupTargetMeta['count'] ?? null;
+                                                        @endphp
+                                                        @if ($groupCount !== null)
+                                                            <span class="badge text-bg-light text-dark border ms-1">
+                                                                {{ $groupCount }}/{{ $friendlyPlayersPerGroup }}
+                                                            </span>
+                                                        @endif
                                                     @endif
                                                 @endif
                                             </span>
-                                            @if ($canEditRegistrationGroups && $friendlyGroup)
+                                            @if ($canEditRegistrationGroups && $friendlyGroup && $verificationStatus !== 'rejected')
                                                 <button type="button"
                                                         class="btn btn-sm btn-outline-secondary friendly-reg-rename-open ms-auto"
                                                         data-group-id="{{ $friendlyGroup->id }}"

@@ -339,6 +339,7 @@ class PemainRegistrationService
                 ->forKategori($kategoriId)
                 ->whereHas('pasanganAsPeserta1')
                 ->with(['pemain1', 'pasanganAsPeserta1.peserta2.pemain1'])
+                ->orderByRaw(TurnamenPeserta::verificationStatusOrderSql('status'))
                 ->orderBy('id')
                 ->get()
                 ->map(function (TurnamenPeserta $entry) {
@@ -367,22 +368,26 @@ class PemainRegistrationService
 
         $pesertaList = TurnamenPeserta::query()
             ->forKategori($kategoriId)
-            ->where('status', '!=', 'rejected')
             ->with($relations)
+            ->orderByRaw(TurnamenPeserta::verificationStatusOrderSql('status'))
             ->orderBy('id')
             ->get();
 
-        if ($showGroups) {
-            $pesertaList = $pesertaList->sortBy(function (TurnamenPeserta $peserta) {
-                $group = optional($peserta->grupPendaftaranMember)->grupPendaftaran;
-                $grouped = $group ? '0' : '1';
-                $groupName = mb_strtolower((string) optional($group)->nama);
-                $urutan = str_pad((string) ((int) optional($peserta->grupPendaftaranMember)->urutan), 8, '0', STR_PAD_LEFT);
-                $playerName = mb_strtolower((string) optional($peserta->pemain1)->nama);
+        $pesertaList = $pesertaList->sortBy(function (TurnamenPeserta $peserta) use ($showGroups) {
+            $statusRank = TurnamenPeserta::verificationStatusSortRank($peserta->status);
+            $playerName = mb_strtolower((string) optional($peserta->pemain1)->nama);
 
-                return $grouped.'|'.$groupName.'|'.$urutan.'|'.$playerName;
-            })->values();
-        }
+            if (! $showGroups) {
+                return sprintf('%d|%s', $statusRank, $playerName);
+            }
+
+            $group = optional($peserta->grupPendaftaranMember)->grupPendaftaran;
+            $grouped = $group ? '0' : '1';
+            $groupName = mb_strtolower((string) optional($group)->nama);
+            $urutan = str_pad((string) ((int) optional($peserta->grupPendaftaranMember)->urutan), 8, '0', STR_PAD_LEFT);
+
+            return $statusRank.'|'.$grouped.'|'.$groupName.'|'.$urutan.'|'.$playerName;
+        })->values();
 
         $items = $pesertaList->map(function (TurnamenPeserta $peserta) use ($showGroups) {
             $partnerName = optional($peserta->partner_pemain)->nama;

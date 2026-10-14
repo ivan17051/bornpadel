@@ -90,7 +90,21 @@
                     </div>
                 @elseif ($participantType === 'pairs')
                     <div class="list-group list-group-flush">
+                        @php $prevPairStatus = '__unset__'; @endphp
                         @foreach ($participants as $index => $item)
+                            @php $pairStatus = $item['status'] ?? 'pending'; @endphp
+                            @if ($pairStatus !== $prevPairStatus)
+                                <div class="list-group-item bg-light small fw-semibold py-2">
+                                    @if ($pairStatus === 'approved')
+                                        <i class="bi bi-check-circle me-1"></i>Approved
+                                    @elseif ($pairStatus === 'rejected')
+                                        <i class="bi bi-x-circle me-1"></i>Ditolak
+                                    @else
+                                        <i class="bi bi-hourglass-split me-1"></i>Pending
+                                    @endif
+                                </div>
+                                @php $prevPairStatus = $pairStatus; @endphp
+                            @endif
                             <div class="list-group-item d-flex justify-content-between align-items-center gap-3">
                                 <div>
                                     <span class="text-muted small me-2">#{{ $index + 1 }}</span>
@@ -111,6 +125,11 @@
                         $showGroups = $turnamen->allowsGroupRegistration();
                         $prevGroupKey = '__unset__';
                         $colspan = 3 + ($participantType === 'double_individual' ? 1 : 0);
+                        $statusSectionLabels = [
+                            'pending' => 'Pending',
+                            'approved' => 'Approved',
+                            'rejected' => 'Ditolak',
+                        ];
                     @endphp
                     <div class="table-responsive">
                         <table class="table table-hover mb-0 align-middle">
@@ -126,17 +145,30 @@
                             </thead>
                             <tbody>
                                 @foreach ($participants as $index => $item)
-                                    @if ($showGroups)
-                                        @php $groupKey = ! empty($item['group_id']) ? 'g:'.$item['group_id'] : 'solo'; @endphp
-                                        @if ($groupKey !== $prevGroupKey)
-                                            <tr class="table-secondary">
-                                                <td colspan="{{ $colspan }}" class="small fw-semibold py-2">
-                                                    <i class="bi bi-people me-1"></i>
+                                    @php
+                                        $itemStatus = $item['status'] ?? 'pending';
+                                        $groupKey = $itemStatus.'|'.($showGroups
+                                            ? (! empty($item['group_id']) ? 'g:'.$item['group_id'] : 'solo')
+                                            : 'all');
+                                    @endphp
+                                    @if ($groupKey !== $prevGroupKey)
+                                        <tr class="table-secondary">
+                                            <td colspan="{{ $colspan }}" class="small fw-semibold py-2">
+                                                @if ($itemStatus === 'approved')
+                                                    <i class="bi bi-check-circle me-1"></i>
+                                                @elseif ($itemStatus === 'rejected')
+                                                    <i class="bi bi-x-circle me-1"></i>
+                                                @else
+                                                    <i class="bi bi-hourglass-split me-1"></i>
+                                                @endif
+                                                {{ $statusSectionLabels[$itemStatus] ?? 'Pending' }}
+                                                @if ($showGroups)
+                                                    <span class="text-muted fw-normal">—</span>
                                                     {{ $item['group_nama'] ?: 'Individu / Belum berkelompok' }}
-                                                </td>
-                                            </tr>
-                                            @php $prevGroupKey = $groupKey; @endphp
-                                        @endif
+                                                @endif
+                                            </td>
+                                        </tr>
+                                        @php $prevGroupKey = $groupKey; @endphp
                                     @endif
                                     <tr>
                                         <td>{{ $index + 1 }}</td>
