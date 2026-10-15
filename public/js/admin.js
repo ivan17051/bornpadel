@@ -2793,6 +2793,7 @@ const BornPadelAdmin = (function () {
         let activeMahjongGroupPointsUrl = null;
         let activeMahjongGroupPointsMethod = 'POST';
         let activeMahjongWinnerMemberId = null;
+        let activeMahjongWinnerManual = false;
         let activeMahjongEditRow = null;
 
         function parseMahjongPoinInput(raw) {
@@ -2822,6 +2823,30 @@ const BornPadelAdmin = (function () {
                         : 'bi bi-trophy mahjong-winner-icon me-1';
                 }
             });
+        }
+
+        function syncMahjongWinnerFromHighestScore() {
+            if (!mahjongGroupPointsFields || activeMahjongWinnerManual) {
+                return;
+            }
+
+            const scores = Array.from(mahjongGroupPointsFields.querySelectorAll('.mahjong-group-poin-input'))
+                .map((input) => ({
+                    id: parseInt(input.dataset.memberId, 10),
+                    poin: parseMahjongPoinInput(input.value),
+                }))
+                .filter((row) => row.id && !Number.isNaN(row.poin));
+
+            if (scores.length === 0) {
+                return;
+            }
+
+            const highest = Math.max.apply(null, scores.map((row) => row.poin));
+            const leaders = scores.filter((row) => row.poin === highest);
+
+            if (leaders.length === 1) {
+                setMahjongWinnerSelection(leaders[0].id);
+            }
         }
 
         if (mahjongGroupPointsModalEl && typeof bootstrap !== 'undefined') {
@@ -2857,6 +2882,7 @@ const BornPadelAdmin = (function () {
             activeMahjongGroupPointsMethod = method;
             activeMahjongEditRow = editRow || null;
             activeMahjongWinnerMemberId = null;
+            activeMahjongWinnerManual = false;
 
             const titlePrefix = isEdit && roundLabel
                 ? `Edit Poin — ${groupName} · Ronde ${roundLabel}`
@@ -2867,8 +2893,8 @@ const BornPadelAdmin = (function () {
             }
             if (mahjongGroupPointsHelp) {
                 mahjongGroupPointsHelp.textContent = isEdit
-                    ? `Ubah poin ronde ${roundLabel || ''} di ${groupName}. Kolom kosong disimpan sebagai 0. Opsional: klik nama pemain untuk menandai pemenang ronde.`
-                    : `Opsional: klik nama pemain untuk menandai pemenang ronde, lalu isi poin di ${groupName}. Kolom yang dikosongkan disimpan sebagai 0.`;
+                    ? `Ubah poin ronde ${roundLabel || ''} di ${groupName}. Kolom kosong disimpan sebagai 0. Pemenang dipilih otomatis dari poin tertinggi; klik nama pemain untuk mengganti.`
+                    : `Isi poin di ${groupName}. Pemenang dipilih otomatis dari poin tertinggi; klik nama pemain untuk mengganti. Kolom yang dikosongkan disimpan sebagai 0.`;
             }
 
             mahjongGroupPointsFields.innerHTML = members.map((member) => {
@@ -2910,6 +2936,8 @@ const BornPadelAdmin = (function () {
                 || null;
             if (winnerId) {
                 setMahjongWinnerSelection(winnerId);
+            } else {
+                syncMahjongWinnerFromHighestScore();
             }
 
             const firstInput = mahjongGroupPointsFields.querySelector('.mahjong-group-poin-input');
@@ -2944,7 +2972,15 @@ const BornPadelAdmin = (function () {
                     return;
                 }
                 event.preventDefault();
+                activeMahjongWinnerManual = true;
                 setMahjongWinnerSelection(pickBtn.dataset.memberId);
+            });
+
+            mahjongGroupPointsFields.addEventListener('input', (event) => {
+                if (!event.target.classList.contains('mahjong-group-poin-input')) {
+                    return;
+                }
+                syncMahjongWinnerFromHighestScore();
             });
         }
 
@@ -3000,6 +3036,7 @@ const BornPadelAdmin = (function () {
                     }
                     mahjongGroupPointsModal?.hide();
                     activeMahjongWinnerMemberId = null;
+                    activeMahjongWinnerManual = false;
                     activeMahjongEditRow = null;
                     showToast(data.message);
                 } catch (e) {

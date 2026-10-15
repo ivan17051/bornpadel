@@ -1429,7 +1429,7 @@
                     </div>
                     <div class="modal-body">
                         <p class="text-muted small mb-3" id="mahjong-group-points-help">
-                            Opsional: klik nama pemain untuk menandai pemenang ronde, isi poin keempat pemain, lalu simpan.
+                            Isi poin keempat pemain. Pemenang dipilih otomatis dari poin tertinggi; klik nama pemain untuk mengganti.
                         </p>
                         <div id="mahjong-group-points-fields" class="d-grid gap-3"></div>
                     </div>
